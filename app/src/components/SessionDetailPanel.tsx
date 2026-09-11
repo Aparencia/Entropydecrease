@@ -12,9 +12,9 @@
  *              已精修屏跳过），session:refined 事件驱动重新拉详情（屏卡 rendered 回填），
  *              refine-skipped 徽标提示（模型未下载降级链）。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { useSessionDetailData } from "../hooks/useSessionDetailData";
 import SessionScreenCards from "./session-detail/SessionScreenCards";
 import ImageGallery from "../components/ImageGallery";
 import NotePreviewView from "../components/NotePreviewView";
@@ -22,16 +22,10 @@ import ProofreadPanel from "../components/ProofreadPanel";
 import SecondPassPanel from "../components/SecondPassPanel";
 import WebArticleView from "../components/WebArticleView";
 import SpeakerSwitchCard from "../components/SpeakerSwitchCard";
-import type { GlossaryTerm, QualityReport, SessionDetail, SessionOcrBlock } from "../types";
+import type { SessionDetail } from "../types";
 import { fmtMs } from "../utils/fmt";
 
-/** 精修进度载荷（Rust RefineProgress；v0.11.5 事件驱动屏卡回填） */
-interface RefineProgressPayload {
-  done: number;
-  total: number;
-  currentKind: string;
-}
-
+/** 通用小按钮基础样式（视图切换组与精修工具条复用） */
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -68,20 +62,12 @@ interface Props {
 export default function SessionDetailPanel({ detail, fusing, degradedBanner, onToNote, onRemove, onRefreshDetail, autoRefineTaskId, onAutoTaskConsumed, onRefineTaskStarted }: Props) {
   // v0.5.0 M7（REQ-052）+ v0.6.0 M6（REQ-081）：两视图（v0.11.5 产物视图下线）
   const [viewMode, setViewMode] = useState<"raw" | "preview">("raw");
-  // M6（REQ-076）：质量报告（可信度总览卡片）
-  const [quality, setQuality] = useState<QualityReport | null>(null);
-  // v0.11.5（spec 8️⃣）：术语表（词汇表移出笔记 → 会话详情直供；null=加载中）
-  const [glossary, setGlossary] = useState<GlossaryTerm[] | null>(null);
-  // v0.7.3（REQ-160）：屏卡配图 baseUrl（图集同款：convertFileSrc 拼本地路径）
-  const [baseUrl, setBaseUrl] = useState("");
-  // v0.11.5（spec 5️⃣）：课后精修状态（精修中/完成/跳过——面板层徽标，自 ArtifactView 迁移）
-  const [refining, setRefining] = useState(false);
-  const [refineMsg, setRefineMsg] = useState("");
-  // 懒触发防重（每会话只触发一次；sessionId 变化重置）
-  const autoRefinedRef = useRef<Set<number>>(new Set());
-  const onRefreshDetailRef = useRef(onRefreshDetail);
-  onRefreshDetailRef.current = onRefreshDetail;
   const sessionId = detail.session.id;
+  // v0.5.0 M7：会话切换回到原料视图（裁决 D1：viewMode 状态留面板；数据面重置见 useSessionDetailData）
+  useEffect(() => { setViewMode("raw"); }, [sessionId]);
+  // 数据面（质量/术语/baseUrl/屏→OCR 分组）+ 精修链路（懒触发/事件监听/手动入口/深链快照）
+  const { quality, glossary, baseUrl, ocrBlocksByScreen, refining, refineMsg, deepTaskId, setDeepTaskId, startRefine } =
+    useSessionDetailData({ detail, viewMode, onRefreshDetail });
   // REQ-282（v0.19.6）：标题行内改名（详情头 ✎；Enter 保存/Esc 取消/失焦保存——
   // 改名后 title_kind=manual，首句/AI 自动升级不再覆写）
   const [renameMode, setRenameMode] = useState(false);
@@ -95,98 +81,17 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
   const [showProofread, setShowProofread] = useState(false);
   useEffect(() => setShowProofread(false), [sessionId]);
 
-  // M7 修复：屏→OCR 块分组预构建（原 screens.map 内逐屏 filter 为 O(n×m)）——
-  // 排序后双指针一次遍历归组；屏区间不重叠，与原 filter 语义一致
-  const ocrBlocksByScreen = useMemo(() => {
-    const map = new Map<number, SessionOcrBlock[]>();
-    for (const s of detail.screens) map.set(s.first_seen_ms, []);
-    const screens = [...detail.screens].sort((a, b) => a.first_seen_ms - b.first_seen_ms);
-    const blocks = [...detail.ocr_blocks].sort((a, b) => a.timestamp_ms - b.timestamp_ms);
-    let si = 0;
-    for (const b of blocks) {
-      // 块时间戳单调递增——跳过已结束的屏（last_seen_ms < ts）
-      while (si < screens.length && screens[si].last_seen_ms < b.timestamp_ms) si++;
-      if (si < screens.length && b.timestamp_ms >= screens[si].first_seen_ms) {
-        map.get(screens[si].first_seen_ms)?.push(b);
-      }
-    }
-    return map;
-  }, [detail]);
-
-  // 质量报告 + 术语表随详情加载（v0.11.5：大纲随产物视图下线；失败不阻断详情展示）
-  useEffect(() => {
-    setQuality(null);
-    setGlossary(null);
-    setViewMode("raw");
-    void invoke<QualityReport>("session_quality_report", { id: sessionId })
-      .then(setQuality)
-      .catch(() => undefined);
-    void invoke<GlossaryTerm[]>("session_glossary", { id: sessionId })
-      .then(setGlossary)
-      .catch(() => setGlossary([]));
-    void invoke<string>("session_images_base_url", { sessionId })
-      .then(setBaseUrl)
-      .catch(() => setBaseUrl(""));
-  }, [sessionId]);
-
-  // v0.11.5（spec 5️⃣）：课后精修懒自动化——原料视图首次进入自动触发
-  // （每会话仅一次：autoRefinedRef 防重；停止后触发通道已覆盖刚停止的会话——
-  // 双通道共享 run_refine 幂等过滤，不会重复推理）
-  useEffect(() => {
-    if (viewMode !== "raw") return;
-    if (autoRefinedRef.current.has(sessionId)) return;
-    autoRefinedRef.current.add(sessionId);
-    void invoke<string>("auto_refine_session", { sessionId })
-      .then((msg) => {
-        // no-pending=无待精修结构区域（静默）；started=后台精修启动（事件驱动刷新）；
-        // 其他（模型未下载等）= 降级提示徽标
-        if (msg !== "no-pending" && msg !== "started") setRefineMsg(msg);
-      })
-      .catch(() => undefined);
-  }, [viewMode, sessionId]);
-
   // v0.16.1：工作台深链——autoTaskId 到达即切预览视图（精修卡所在视图——原默认 raw）。
-  // 面板内持有深链快照（deepTaskId）供 NotePreviewView/AiRefineCard 消费：App 侧
-  // focus 清空发生在本面板 effect 之后，若直接透传 prop 会在卡片挂载前被置空
-  // （竞态——工作台永不展开）；快照 + 会话切换清除保证"只消费一次、不跨会话遗留"。
-  const [deepTaskId, setDeepTaskId] = useState<number | null>(null);
-  useEffect(() => { setDeepTaskId(null); }, [sessionId]);
+  // 深链快照（deepTaskId）由 useSessionDetailData 持有：App 侧 focus 清空发生在本面板
+  // effect 之后，若直接透传 prop 会在卡片挂载前被置空（竞态——工作台永不展开）；
+  // 快照 + 会话切换清除保证"只消费一次、不跨会话遗留"。切换 effect 按裁决 D1 留面板。
   useEffect(() => {
     if (autoRefineTaskId != null) {
       setDeepTaskId(autoRefineTaskId);
       setViewMode("preview");
       onAutoTaskConsumed?.();
     }
-  }, [autoRefineTaskId, onAutoTaskConsumed]);
-
-  // v0.11.5（spec 5️⃣）：精修事件监听（自 ArtifactView 迁移）——
-  // refining 进度 → refined 重新拉详情（屏卡 rendered 回填）→ skipped/failed 徽标
-  useEffect(() => {
-    const unlisteners: Promise<() => void>[] = [
-      listen<RefineProgressPayload>("session:refining", (e) => {
-        setRefining(true);
-        setRefineMsg(`精修中：${e.payload.currentKind} ${e.payload.done}/${e.payload.total}`);
-      }),
-      listen<RefineProgressPayload>("session:refined", (e) => {
-        setRefining(false);
-        setRefineMsg(`精修完成：${e.payload.done} 区域已升级为模型版`);
-        // 事件驱动屏卡实时回填：重新拉详情（父层受控 detail）
-        onRefreshDetailRef.current(sessionId);
-      }),
-      listen<string>("session:refine-skipped", (e) => {
-        setRefining(false);
-        setRefineMsg(e.payload);
-      }),
-      listen<string>("session:refine-failed", (e) => {
-        setRefining(false);
-        setRefineMsg(e.payload);
-      }),
-    ];
-    return () => {
-      unlisteners.forEach((p) => void p.then((fn) => fn()));
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [autoRefineTaskId, onAutoTaskConsumed, setDeepTaskId]);
 
   /** 改名提交（Enter/失焦）：空标题=放弃退出；成功=退出并重拉详情 */
   const commitRename = async () => {
@@ -378,24 +283,7 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
         {/* v0.11.5（spec 5️⃣）：课后精修入口迁移到面板层（与懒触发同命令，幂等防重） */}
         <button
           style={{ ...btn, borderRadius: 6, border: "1px solid #0d9488", background: "#f0fdfa", color: "#0f766e", marginLeft: "auto" }}
-          onClick={() => {
-            setRefining(true);
-            setRefineMsg("精修启动中…");
-            void invoke<string>("auto_refine_session", { sessionId })
-              .then((msg) => {
-                if (msg === "no-pending") {
-                  setRefining(false);
-                  setRefineMsg("无待精修结构区域（表格/公式）");
-                } else if (msg !== "started") {
-                  setRefining(false);
-                  setRefineMsg(msg);
-                }
-              })
-              .catch((e) => {
-                setRefining(false);
-                setRefineMsg(`精修失败: ${e}`);
-              });
-          }}
+          onClick={() => startRefine()}
           disabled={refining}
         >
           {refining ? "精修中…" : "🔬 课后精修"}
