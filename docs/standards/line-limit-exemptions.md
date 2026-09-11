@@ -15,21 +15,21 @@
 
 | 文件 | 行数 | 说明 | 拆分计划 |
 |---|---|---|---|
-| app/src-tauri/src/lib.rs | 1025 | 超硬限（>600 行），不允许豁免 | **拆分计划（超硬限必须拆）**：command 注册清单拆至 app_commands.rs；v0.13.7 优先执行 |
-| app/src-tauri/src/types.rs | 1017 | 超硬限（>600 行），不允许豁免 | 若再增长：笔记与 OCR 块类型拆至 types_note.rs / types_ocr.rs（既有登记计划） |
-| app/src-tauri/src/live_session_frame.rs | 974 | 超硬限（>600 行），不允许豁免 | 若再增长：按 Ctx 聚合方案拆至 live_session_frame_scan.rs |
-| app/src-tauri/src/commands_ai_refine.rs | 751 | 超硬限（>600 行），不允许豁免 | 若再增长：门控/拦截拆至 commands_ai_refine_gate.rs |
-| app/src/pages/ClassroomPage.tsx | 724 | 超硬限（>600 行），不允许豁免 | 若再增长：将实时捕获卡片拆出 LiveCaptureCard（状态与事件监听下沉）——超硬限必须拆 |
-| app/src-tauri/src/db_goals.rs | 707 | 超硬限（>600 行），不允许豁免 | 若再增长：毕业报告取数拆至 db_goals_graduation.rs |
-| app/src-tauri/src/commands_goals.rs | 673 | 超硬限（>600 行），不允许豁免 | 若再增长：里程碑命令组拆至 commands_goals_milestones.rs |
-| app/src-tauri/src/ai_refine_task.rs | 670 | 超硬限（>600 行），不允许豁免 | 若再增长：refine_slices_concurrent 拆至 ai_refine_task_workers.rs |
-| app/src/components/SessionDetailPanel.tsx | 656 | 超硬限（>600 行），不允许豁免 | **超硬限必须拆**：web 早返回与精修区拆至 SessionWebView.tsx / SessionPass2Section.tsx |
-| app/src/components/NoteListView.tsx | 654 | 超硬限（>600 行），不允许豁免 | **超硬限必须拆**：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
-| app/src-tauri/src/note_filter.rs | 642 | 超硬限（>600 行），不允许豁免 | 若再增长：净化链拆至 note_filter_purify.rs |
-| app/src-tauri/src/artifact_templates.rs | 632 | 超硬限（>600 行），不允许豁免 | 若再增长：会议/访谈模板拆至 artifact_templates_meeting.rs |
-| app/src-tauri/src/video_profile.rs | 628 | 超硬限（>600 行），不允许豁免 | 若再增长：检测投票与记忆偏好拆至 video_profile_detect.rs |
-| app/src/components/SessionListPanel.tsx | 604 | 超硬限（>600 行），不允许豁免 | **超硬限必须拆**：批量操作栏与选择模式拆至 SessionSelectionToolbar.tsx（列表行已拆 SessionListRow.tsx） |
-| app/src/pages/NotesPage.tsx | 602 | 超硬限（>600 行），不允许豁免 | **超硬限必须拆**：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts（既有登记计划兑现） |
+| app/src-tauri/src/lib.rs | 1025 | 超硬限（>600 行），不允许豁免 —— Tauri 装配层（setup 初始化 + 决策链路 + command 注册 + 模块声明）；全部为声明与装配，拆分会破坏注册可读性；三维复审 #8 移除 opener 插件注册、新增 engine_worker 模块注册后再增；v0.13.1~5 知识体系模块/命令继续增——**注意：HEAD 即已 684 超 600 硬限（v0.12.x~v0.13.x 增长），本版 +19（v0.13.6 模块与命令注册），超限为预存债务** | **拆分计划（超硬限必须拆）**：command 注册清单拆至 app_commands.rs；v0.13.7 优先执行 |
+| app/src-tauri/src/types.rs | 1017 | 超硬限（>600 行），不允许豁免 —— 全局共享类型域 + 批 7 五命令结果契约（+59；登记值 958 过期快照——实测纠偏） | 若再增长：笔记与 OCR 块类型拆至 types_note.rs / types_ocr.rs（既有登记计划） |
+| app/src-tauri/src/live_session_frame.rs | 974 | 超硬限（>600 行），不允许豁免 —— 屏幕采样线程（采样循环/暂停隔离/播放器检测/tier 重评/视频档案重评）单单体函数——TD-24-A 拆分方案已登记（SessionFrameCtx 聚合 + 段落方法提取），本轮评估：与 lib.rs 同批后置 | 若再增长：按 Ctx 聚合方案拆至 live_session_frame_scan.rs |
+| app/src-tauri/src/commands_ai_refine.rs | 751 | 超硬限（>600 行），不允许豁免 —— v0.8.0 M2（REQ-141/145）+ F1/F2/F3：AI 精修命令域（成本预估/异步任务编排/状态/结果/采纳落库/任务历史/配额去重门控/成本硬拦截 + 任务注册表容量守卫）；任务执行已拆至 ai_refine_task.rs；L4 修复（落库失败日志）微增 | 若再增长：门控/拦截拆至 commands_ai_refine_gate.rs |
+| app/src/pages/ClassroomPage.tsx | 724 | 超硬限（>600 行），不允许豁免 —— 装配层页面：左栏配置区（就绪清单/窗口选择/实时捕获/视频导入/OCR 设备/词表/素材）+ 右栏内容区；v0.15 左栏列状态再增；v0.19.2/3（REQ-271/273 + 审查即修：状态机看门狗/预同步/文案收口，+43，实测 745）——**超 600 硬限为预存债务（TD-2026-08-30-A：v0.14 前已越线）持续累增，拆分计划（LiveCaptureCard）顺延待执行** | 若再增长：将实时捕获卡片拆出 LiveCaptureCard（状态与事件监听下沉）——超硬限必须拆 |
+| app/src-tauri/src/db_goals.rs | 707 | 超硬限（>600 行），不允许豁免 —— v0.18.0（REQ-248~250）：goals 三表 DDL + 实体 CRUD/绑定/结算钩子内聚；行映射与事务建目标共享 add_milestone 族；v0.18.1（REQ-255/256）毕业报告快照表与报告取数（结算快照/复习统计/成果物清单）再增 | 若再增长：毕业报告取数拆至 db_goals_graduation.rs |
+| app/src-tauri/src/commands_goals.rs | 673 | 超硬限（>600 行），不允许豁免 —— v0.18.0（REQ-248~250）：学习目标命令域（15 命令 + inner 纯编排 + 访谈校验/埋点/宣言组装/进度收集）——命令薄壳与 inner 同域（commands_knowledge_core 先例）；列表/详情/进度三视图共用 collect_signals/goal_card_metrics；v0.18.1 生命周期命令已拆至 commands_goals_lifecycle.rs | 若再增长：里程碑命令组拆至 commands_goals_milestones.rs |
+| app/src-tauri/src/ai_refine_task.rs | 670 | 超硬限（>600 行），不允许豁免 —— v0.8.0 F2-B4 拆分产物：精修任务执行域（任务编排/并发切片 worker 池/单片重试/部分成功/审计/落库）——并发编排与状态流转内聚 | 若再增长：refine_slices_concurrent 拆至 ai_refine_task_workers.rs |
+| app/src/components/SessionDetailPanel.tsx | 656 | 超硬限（>600 行），不允许豁免 —— 会话详情面板（原料/预览/离线精修/校对/web 早返回/术语图集）；v0.20 系列 +52 后**超 600 硬限**（前置 v0.19.x 已越线，预存债务随 TD-2026-09-06-G 登记）——2026-09-06 实测纠偏（登记值 371 过期） | **超硬限必须拆**：web 早返回与精修区拆至 SessionWebView.tsx / SessionPass2Section.tsx |
+| app/src/components/NoteListView.tsx | 654 | 超硬限（>600 行），不允许豁免 —— v0.20.12 批 7 接线 + 审查修复轮 4（refreshToken 组序重拉）净增（646→654）——**超 600 硬限随 TD-2026-09-09-A 登记（值刷新）** | **超硬限必须拆**：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
+| app/src-tauri/src/note_filter.rs | 642 | 超硬限（>600 行），不允许豁免 —— v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证）；AI 部分已按登记计划拆至 note_filter_ai.rs | 若再增长：净化链拆至 note_filter_purify.rs |
+| app/src-tauri/src/artifact_templates.rs | 632 | 超硬限（>600 行），不允许豁免 —— v0.5.0 M7（REQ-052）：五档案模板函数（讲义/步骤卡/摘要/对话纪要/会议纪要）内聚于同一模板域，各模板共享原料注入签名；v0.9.0 M5 叙事变体再增 | 若再增长：会议/访谈模板拆至 artifact_templates_meeting.rs |
+| app/src-tauri/src/video_profile.rs | 628 | 超硬限（>600 行），不允许豁免 —— v0.5.0 M1（REQ-043）：档案域（类型/检测投票/记忆偏好/JSON IO）内聚；档案常量数据已拆至 video_profile_data.rs；v0.9.0 M1 记忆库 kind 映射迁移 + v0.11.5 Task 5 四象限记忆后置判定（apply_profile_memory）再增；v0.13.6（REQ-222）领域记忆独立通道（DomainMemoryEntry/remember_domain/lookup_domain）+ platform_form 字段再增 | 若再增长：检测投票与记忆偏好拆至 video_profile_detect.rs |
+| app/src/components/SessionListPanel.tsx | 604 | 超硬限（>600 行），不允许豁免 —— v0.20.9 批 4（REQ-313）列表交互重写（选择模式/行右键/行内改名/批量栏）+ 审查修复轮 3（全选可见行基准/pending）净增——2026-09-09 实测纠偏（登记值 491 过期）；**超 600 硬限随 TD-2026-09-09-D 登记** | **超硬限必须拆**：批量操作栏与选择模式拆至 SessionSelectionToolbar.tsx（列表行已拆 SessionListRow.tsx） |
+| app/src/pages/NotesPage.tsx | 602 | 超硬限（>600 行），不允许豁免 —— 审查修复轮 3/4（refreshToken 透传/选区动作编排承接）净增越 600 硬限（599→602）——随 TD-2026-09-09-D 登记 | **超硬限必须拆**：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts（既有登记计划兑现） |
 
 ## 301–600 档（须登记）
 
