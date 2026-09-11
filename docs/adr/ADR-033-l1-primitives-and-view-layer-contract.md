@@ -119,7 +119,8 @@ ADR-032 交付了 token 层（色阶 / 字阶 / z-index 标尺 / 图标），但
   规格 §8.6.1 第 3 条已按此改写。
 - **本批 `@keyframes` 的先后（口径订正）**：本批**第一个** `@keyframes` 是 `EmptyState.css` 的 **`ed-empty-in`**
   （提交 `0e5e78ab`，00:06:10），`Loading.css` 的 `ed-skeleton-shimmer` / `ed-probe-swing` 在其后（`174b1893`，00:06:41）。
-  `Loading.css:50` 与其报告写的「全仓第一个 `@keyframes`」**与事实相反**，此处以正确口径记录（该文件的措辞由 T11 自行处置）。
+  `Loading.css` 原写的「全仓第一个 `@keyframes`」**与事实相反**，已由 T11 在 `44de78d5` 就地订正
+  （该文件现写明不宣称任何"首个/第一"）—— 此处保留正确口径，避免后续批次再据错误断言推理。
 
 ### 6. 退场期指针事件门控（`[data-phase="exit"]` ⇒ `pointer-events: none`）
 
