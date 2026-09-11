@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **本次范围仅「口径 + 登记表 + 守卫」**：`0-C1` **不拆任何文件**。15 个 >600 文件的拆分是 `0-C2`（前端 5 个）与 `0-C3`（Rust 10 个）两份独立计划，本计划交付的是它们的**测量仪器与验收依据**。
-- **测量口径（唯一有效）**：行数 = 文件**全部行数**（含空行），等价于 `[System.IO.File]::ReadAllLines(path, UTF8).Count` 或字节 `0x0A` 计数。**禁止**用 `Get-Content`（本机 PowerShell 5.1 + 码页 `gb2312` 会按 GBK 解码、吞掉换行、最多少算 45 行/文件）与 `Measure-Object -Line`（只数非空行）。
+- **测量口径（唯一有效）**：行数 = 文件**全部行数**（含空行），以 `[System.IO.File]::ReadAllLines(path, UTF8).Count` 为准（即 `scripts/line-limits.mjs` 的 `countLines()`）。**不要用** `Get-Content`（本机 PowerShell 5.1 + 码页 `gb2312` 会按 GBK 解码、吞掉换行、最多少算 45 行/文件）· `Measure-Object -Line`（只数非空行）· **字节 `0x0A` 计数**（对末尾不带换行的文件会**少算 1**；本仓实测有 8 个这样的源文件，含 `NotesPage.tsx` 602/601）。
 - **硬限范围为实测 15 个**（用户 2026-09-11 裁决）：前端 5 个 + Rust 10 个。规格原文的「4 个」只扫了前端且漏掉 `SessionListPanel.tsx`，本计划一并更正。
 - 单文件 ≤300 行（AGENTS.md §3）—— **本计划新增的脚本自身也必须满足**；若 `line-limits.mjs` 超过 300 行，必须拆分而不是登记。
 - 零新增依赖（`package.json` 的 `dependencies`/`devDependencies` 不得变化）。
@@ -83,8 +83,9 @@
 改为：
 ```
 1. **模块化**：单文件 ≤300 行（>600 行必须硬拆；300-600 行登记豁免清单）；纯逻辑与副作用物理分离；显式依赖注入。
-   **行数口径（唯一有效）**：文件**全部行数**（含空行），等价于 `[System.IO.File]::ReadAllLines(path, UTF8).Count` 或字节 `0x0A` 计数。
-   **禁止**用 `Get-Content` 数行（本机 PowerShell 5.1 + 码页 `gb2312` 会按 GBK 解码、吞换行、**少算**）与 `Measure-Object -Line`（**只数非空行**）。判定一律以 `node scripts/line-limits.mjs` 为准。
+   **行数口径（唯一有效）**：文件**全部行数**（含空行），以 `[System.IO.File]::ReadAllLines(path, UTF8).Count` 为准 —— 即 `scripts/line-limits.mjs` 的 `countLines()`。
+   ⚠️ **不要用**：`Get-Content`（本机 PowerShell 5.1 + 码页 `gb2312` 会按 GBK 解码、吞换行、**少算最多 45 行**）· `Measure-Object -Line`（**只数非空行**）· **字节 `0x0A` 计数**（对**末尾不带换行**的文件会少算 1；本仓实测有 8 个这样的源文件，含 `NotesPage.tsx`）。
+   判定一律以 `node scripts/line-limits.mjs` 为准。
 ```
 
 - [ ] **Step 2: 改 AGENTS.md §11**
