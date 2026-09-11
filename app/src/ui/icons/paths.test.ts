@@ -31,7 +31,7 @@ describe("图标几何契约", () => {
     }
   });
 
-  it("元素只用白名单内的四种标签", () => {
+  it("元素只用白名单内的三种标签", () => {
     for (const name of ICON_NAMES) {
       for (const el of ICON_PATHS[name].elements) {
         expect(ICON_ELEMENT_TAGS, `${name} 含越界标签 ${el.tag}`).toContain(el.tag);

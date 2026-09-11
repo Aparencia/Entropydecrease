@@ -7,11 +7,11 @@
  * 组件只有一个。
  *
  * 副作用：无（纯类型 + 常量）。
- * 边界：几何只允许四种 SVG 元素（见 `ICON_ELEMENT_TAGS`）——**不含任何颜色字段**，
+ * 边界：几何只允许三种 SVG 元素（见 `ICON_ELEMENT_TAGS`）——**不含任何颜色字段**，
  * 颜色一律由 `currentColor` 决定。新增元素类型必须先在此登记并同步契约测试。
  */
 
-/** 几何白名单：只用这四种，足够表达全部图标且便于穷举校验 */
+/** 几何白名单：只用这三种，足够表达全部图标且便于穷举校验 */
 export const ICON_ELEMENT_TAGS = ["path", "circle", "rect"] as const;
 
 export type IconElementTag = (typeof ICON_ELEMENT_TAGS)[number];

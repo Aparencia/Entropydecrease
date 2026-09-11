@@ -38,7 +38,9 @@ function collectFiles(dir: string, out: string[] = []): string[] {
 
 function filesWithInlineSvg(): string[] {
   return collectFiles(SRC)
-    .filter((f) => !f.startsWith(ICONS_DIR))
+    // 排除图标层自身（它当然要能写 svg）。比较**必须带上分隔符**：裸的 `startsWith(ICONS_DIR)`
+    // 会把 `ui/icons-legacy/` 这类同前缀的兄弟目录一并静默豁免 —— 守卫会悄悄失效（实测已复现）。
+    .filter((f) => !f.startsWith(ICONS_DIR + sep))
     .filter((f) => readFileSync(f, "utf8").includes("<svg"))
     .map((f) => relative(SRC, f).split(sep).join("/"))
     .sort();
