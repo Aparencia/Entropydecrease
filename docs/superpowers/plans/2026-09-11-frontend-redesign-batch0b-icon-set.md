@@ -678,8 +678,10 @@ git commit -m "feat(ui): 首付 24 个自绘图标几何（域 9 + 动作 15）"
 - Modify: `app/src/ui/icons/index.ts`（确认导出面完整）
 
 **Interfaces:**
-- Consumes: Task 1/2 的 `Icon` / `ICON_PATHS` / `ICON_NAMES`
+- Consumes: 无（本守卫只读磁盘，**不 import 图标模块** —— 它检查的是「有没有人绕开图标层」，不是图标本身）
 - Produces: 无新导出；本任务交付**约束**（防退化）
+
+> **行尾与 ESM 注意**：本仓库无 `.gitattributes` 且 `core.autocrlf=true` —— **不要用 `git stash`**，它会把源码变成 CRLF 并使 Vite 拒绝转换（批 0-A 实际踩到过）。测试文件是 ESM，**不得用 `__dirname`**（未定义），必须用 `dirname(fileURLToPath(import.meta.url))`（批 0-A 的 `tokens.drift.test.ts` 已是此写法）。
 
 - [ ] **Step 1: 建立内联 svg 的现状基线**
 
@@ -700,7 +702,8 @@ Get-ChildItem -Recurse -File src -Include *.tsx,*.ts |
 
 ```ts
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -715,7 +718,7 @@ import { describe, expect, it } from "vitest";
  * 与图标层无关）。清单里的文件在批 4 迁完后应从名单删除，届时本测试的名单会自然缩短。
  */
 
-const SRC = join(__dirname, "..", "..");
+const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const ICONS_DIR = join(SRC, "ui", "icons");
 
 /** 改造前就存在的内联 svg 文件（相对 `app/src`，正斜杠）—— 只允许减少 */
