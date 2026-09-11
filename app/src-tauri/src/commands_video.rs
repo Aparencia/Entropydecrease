@@ -2,7 +2,7 @@
 //!
 //! @ai-context: 本层只做参数校验、调用纯逻辑（video_profile）、错误映射（AGENTS.md §6）。
 //! @ai-context: 混合检测闭环：detect（信号投票 + 记忆偏好）→ 前端展示"检测为：网课（可改）"
-//!              → 用户确认/修改 → remember 写记忆偏好（同窗口标题下次直接生效）。
+//!              → 用户确认/修改 → remember_form / remember_domain 写记忆偏好（同窗口标题下次直接生效）。
 //! @ai-context: 记忆偏好 JSON 持久化（应用数据目录，AppState 持有路径与内存态单点，
 //!              与词表同模式：锁内 read-modify-write 防 TOCTOU）。
 

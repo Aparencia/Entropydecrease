@@ -161,7 +161,7 @@ impl Default for ProfileSpec {
 impl ProfileKind {
     /// 旧 13 类 → 新 10 形态（多对一收敛映射；Unknown → None 诚实未知）。
     ///
-    /// @ai-context: whiteboard 归讲授（画面档=高由 default_tier 表达）；
+    /// @ai-context: whiteboard 归讲授（画面价值差异由 REQ-188 档位轴表达）；
     ///              podcast 归音频；follow-along/game-tutorial 归实操；
     ///              interview 归对话；v0.13.6：meeting 回归独立会议形态、
     ///              live 回归独立直播形态（不再折叠进对话/音频）。
