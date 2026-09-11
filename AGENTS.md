@@ -38,6 +38,9 @@
 生成/重构任何代码必须同时满足：
 
 1. **模块化**：单文件 ≤300 行（>600 行必须硬拆；300-600 行登记豁免清单）；纯逻辑与副作用物理分离；显式依赖注入。
+   **行数口径（唯一有效）**：文件**全部行数**（含空行），以 `[System.IO.File]::ReadAllLines(path, UTF8).Count` 为准 —— 即 `scripts/line-limits.mjs` 的 `countLines()`。
+   ⚠️ **不要用**：`Get-Content`（本机 PowerShell 5.1 + 码页 `gb2312` 会按 GBK 解码、吞换行、**少算最多 45 行**）· `Measure-Object -Line`（**只数非空行**）· **字节 `0x0A` 计数**（对**末尾不带换行**的文件会少算 1；本仓实测有 8 个这样的源文件，含 `NotesPage.tsx`）。
+   判定一律以 `node scripts/line-limits.mjs` 为准。
 2. **强类型契约**：业务术语贯穿全栈；禁止 `any`/无类型；入参出参必须定义类型（TS interface / Rust struct）。
 3. **上下文注释**：注释解释 Why 不解释 What；公共函数/模块必须含 `@ai-context` 业务背景注释；标注副作用与边界条件；Magic Number/Hack 必须说明原因。
 4. **防御性编程**：网络/DB/AI/系统调用必须有超时、重试、降级（Fallback）；本地优先架构下所有云端能力必须有本地兜底路径。
@@ -118,6 +121,6 @@ npm run build        # 前端构建
 
 - 提交信息遵循 Conventional Commits；版本号由第一阶段起手动维护 SemVer
 - AI 功能必须支持离线降级（本地优先原则）
-- 单文件 ≤300 行；源码文件含 `@ai-context` 业务背景注释
+- 单文件 ≤300 行（口径同上，以 `node scripts/line-limits.mjs` 为准）；源码文件含 `@ai-context` 业务背景注释
 - 重构/拆分遵循自底向上（原子→业务→系统），公共 API 保持兼容
 - 任何技术栈/架构级变更先写 ADR（`docs/adr/`）再动手
