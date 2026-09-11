@@ -15,13 +15,12 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { Note, NoteGroup, TagColor } from "../types";
+import type { Note } from "../types";
 import { resolveNoteColor } from "../utils/colorPalette";
 // v0.14 A：编辑器容器切换为 RichEditorView（CM 富编辑：图片内联/撤销/草稿恢复）；
 // NoteEditView 保留为 CM 初始化失败的降级路径（RichEditorView 内部回退）
 import RichEditorView from "../components/RichEditorView";
-import NoteListView, { parseTags } from "../components/NoteListView";
-import type { SortMode } from "../components/NoteListView";
+import NoteListView from "../components/NoteListView";
 import GroupSidebar from "../components/GroupSidebar";
 import FeedFragmentList from "../components/FeedFragmentList";
 import NoteReadingView from "../components/NoteReadingView";
@@ -37,10 +36,10 @@ import ColumnResizer from "../components/ColumnResizer";
 import ColumnBar from "../components/ColumnBar";
 import { useColumnLayout } from "../hooks/useColumnLayout";
 import { useNoteAttention } from "../components/useNoteAttention";
-import { useDbRefresh } from "../hooks/useDbRefresh";
 import { useNotesSealedFilter } from "../hooks/useNotesSealedFilter";
 import { useNotesPageEditing } from "../hooks/useNotesPageEditing";
 import { useNotesBatchActions } from "../hooks/useNotesBatchActions";
+import { useNotesListData } from "../hooks/useNotesListData";
 
 interface Props {
   focusNoteId?: number | null;
@@ -64,88 +63,49 @@ interface Props {
 type MiddleView = "notes" | "inbox";
 
 export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, onOpenReview, onOpenSessions, onOpenSystem, onCreateSystem }: Props) {
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [keyword, setKeyword] = useState("");
-  const [tagFilter, setTagFilter] = useState<string | null>(null);
-  const [sortMode, setSortMode] = useState<SortMode>("updated-desc");
+  // ── 页面态（选中 / 中部形态 / 组过滤 / 覆盖层）──
+  const [selected, setSelected] = useState<Note | null>(null);
   // v0.11.0：组过滤（null=全部；仅过滤——不触发展开）
   const [groupFilter, setGroupFilter] = useState<number | null>(null);
   // v0.12.2：中部视图（收件箱 ↔ 笔记列表原位切换）
   const [view, setView] = useState<MiddleView>("notes");
-  const [selected, setSelected] = useState<Note | null>(null);
-  const [status, setStatus] = useState("");
   // v0.19.1：阅读态命中词搜索请求（来自引用跳转；key 递增可重触发）
   const [readerSearch, setReaderSearch] = useState<{ noteId: number; search: string; key: number } | null>(null);
-  // M3：编辑态（Ctrl+E / ESC / 编辑器命令式出口）——见 useNotesPageEditing；
-  // selectedRef 由页面持有并注入（handleTaskToggle/handleNoteChanged/ESC 三处共享一份）
-  const selectedRef = useRef(selected);
-  useEffect(() => { selectedRef.current = selected; }, [selected]);
-  const { editing, setEditing, editorRef } = useNotesPageEditing({
-    selectedRef,
-    // 退出刷新经 hook 内 ref 镜像取最新闭包（防 []-deps 监听持有旧 keyword/tagFilter）
-    onExited: () => void handleNoteChanged(),
-  });
   // v0.17.0：编辑态 AI 能力对话框（精修/知识补充统一入口——REQ-246）
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [aiContent, setAiContent] = useState("");
   // v0.10.1：图片点击放大预览
   const [previewImg, setPreviewImg] = useState<{ src: string; title?: string } | null>(null);
-  // v0.12.2：侧栏刷新令牌（捕获/升降/结算后计数与组列表重载）
-  const [refreshToken, setRefreshToken] = useState(0);
-  // v0.14 B：视觉系统数据——组列表（组色继承）与标签色映射
-  const [groups, setGroups] = useState<NoteGroup[]>([]);
-  const [tagColors, setTagColors] = useState<Record<string, string>>({});
-  const seqRef = useRef(0);
+
+  // ── 数据层（列表 / 过滤态 / 组与标签色 / 刷新链路）——见 useNotesListData；
+  // selectedRef 由页面持有并注入（handleTaskToggle/handleNoteChanged/ESC 共享一份）──
+  const selectedRef = useRef(selected);
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
+  const list = useNotesListData({ selectedRef, setSelected });
+  // v0.20.3（REQ-301）：SE 情绪 tag（#树洞）默认排除（设置可显）——见 useNotesSealedFilter
+  const { filterSealed } = useNotesSealedFilter(list.refreshToken);
+  // M3：编辑态（Ctrl+E / ESC / 编辑器命令式出口）——见 useNotesPageEditing
+  const { editing, setEditing, editorRef } = useNotesPageEditing({
+    selectedRef,
+    // 退出刷新经 hook 内 ref 镜像取最新闭包（防 []-deps 监听持有旧 keyword/tagFilter）
+    onExited: list.handleNoteChanged,
+  });
+  // REQ-316（批 7）+ v0.12.8：单删/批量删/空组清理留痕 toast——见 useNotesBatchActions
+  const { toast, showToast, notifyCleanNotice, runDelete, runBatchDelete } = useNotesBatchActions({
+    selectedId: selected?.id ?? null,
+    onCleared: () => setSelected(null),
+    onReload: () => void list.load(list.keyword, list.tagFilter, list.sortMode),
+    onStatus: list.setStatus,
+  });
   // v0.15：三栏列状态（可拖拽 + 宽度记忆 + 窄窗自动折叠；默认值=历史固定宽度）
   const groupsCol = useColumnLayout("notes-groups", { default: 240, min: 180, max: 320, autoFoldBelow: 860 });
   const listCol = useColumnLayout("notes-list", { default: 320, min: 240, max: 420, autoFoldBelow: 700 });
   const outlineCol = useColumnLayout("notes-outline", { default: 180, min: 140, max: 260, autoFoldBelow: 1100 });
 
-  // v0.14 B：颜色数据加载（refreshToken 驱动——组色/标签色设置后经 onChanged 刷新）
-  useEffect(() => {
-    void (async () => {
-      try {
-        const [gs, tcs] = await Promise.all([
-          invoke<NoteGroup[]>("list_note_groups", { terrain: null }),
-          invoke<TagColor[]>("list_tag_colors"),
-        ]);
-        setGroups(gs);
-        // tcs 空值防御（旧 mock/异常后端返回 null——不崩列表）
-        setTagColors(Object.fromEntries((tcs ?? []).map((t) => [t.tag, t.color])));
-      } catch (e) {
-        console.warn("[NotesPage] 颜色数据加载失败", e);
-      }
-    })();
-  }, [refreshToken]);
   // L2：收集异步流程中的 setTimeout——effect cleanup 统一清理防卸载后触发
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   // A6：注意力跟踪
   useNoteAttention(selected?.id ?? null, selected?.title ?? "");
-
-  // ── 加载笔记列表 ──
-  const load = useCallback(async (kw: string, tag: string | null, sort: SortMode) => {
-    const seq = ++seqRef.current;
-    try {
-      if (tag) {
-        const list = await invoke<Note[]>("search_notes", { keyword: "", tag });
-        if (seqRef.current === seq) setNotes(list);
-      } else if (kw) {
-        const list = await invoke<Note[]>("search_notes", { keyword: kw, tag: null as string | null });
-        if (seqRef.current === seq) setNotes(list);
-      } else {
-        const list = await invoke<Note[]>("list_notes", { sortMode: sort });
-        if (seqRef.current === seq) setNotes(list);
-      }
-    } catch (e) {
-      if (seqRef.current === seq) setStatus(`加载失败: ${e}`);
-    }
-  }, []);
-
-  // 搜索防抖
-  useEffect(() => {
-    const timer = setTimeout(() => void load(keyword, tagFilter, sortMode), 300);
-    return () => clearTimeout(timer);
-  }, [keyword, tagFilter, sortMode, load]);
 
   // L2：卸载时清理所有登记的延迟定时器
   useEffect(() => {
@@ -160,15 +120,15 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
     if (targetId == null) return;
     let disposed = false;
     (async () => {
-      setKeyword("");
-      setTagFilter(null);
+      list.setKeyword("");
+      list.setTagFilter(null);
       setView("notes");
-      const seq = ++seqRef.current;
+      const seq = ++list.seqRef.current;
       try {
-        const list = await invoke<Note[]>("list_notes", { sortMode: "updated-desc" });
-        if (disposed || seqRef.current !== seq) return;
-        setNotes(list);
-        const target = list.find((n) => n.id === targetId);
+        const rows = await invoke<Note[]>("list_notes", { sortMode: "updated-desc" });
+        if (disposed || list.seqRef.current !== seq) return;
+        list.setNotes(rows);
+        const target = rows.find((n) => n.id === targetId);
         if (target) {
           // v0.19.1 审查 M2：引用跳转=阅读+高亮主路径——先退出编辑态
           // （handleSelect 同款语义：NoteEditView 卸载自动保存 dirty 草稿，
@@ -186,7 +146,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
       } catch (e) {
         if (!disposed) {
           if (focusNoteSearch) setReaderSearch({ ...focusNoteSearch });
-          setStatus(`加载失败: ${e}`);
+          list.setStatus(`加载失败: ${e}`);
         }
       }
     })();
@@ -198,32 +158,19 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
     if (focusGroupId == null) return;
     setGroupFilter(focusGroupId);
     setView("notes");
-    setKeyword("");
-    setTagFilter(null);
+    list.setKeyword("");
+    list.setTagFilter(null);
   }, [focusGroupId]);
 
   // ── 操作 ──
-  const refreshAll = useCallback(() => {
-    setRefreshToken((t) => t + 1);
-    void load(keyword, tagFilter, sortMode);
-  }, [keyword, tagFilter, sortMode, load]);
-
-  // REQ-316（批 7）+ v0.12.8：单删/批量删/空组清理留痕 toast——见 useNotesBatchActions
-  const { toast, showToast, notifyCleanNotice, runDelete, runBatchDelete } = useNotesBatchActions({
-    selectedId: selected?.id ?? null,
-    onCleared: () => setSelected(null),
-    onReload: () => void load(keyword, tagFilter, sortMode),
-    onStatus: setStatus,
-  });
-
   const runPinToggle = async (note: Note) => {
     try {
       const newPin = note.pin ? 0 : 1;
       await invoke<boolean>("update_note_pin", { id: note.id, pin: newPin });
       setSelected((prev) => (prev?.id === note.id ? { ...prev, pin: newPin } : prev));
-      void load(keyword, tagFilter, sortMode);
+      void list.load(list.keyword, list.tagFilter, list.sortMode);
     } catch (e) {
-      setStatus(`置顶操作失败: ${e}`);
+      list.setStatus(`置顶操作失败: ${e}`);
     }
   };
 
@@ -238,36 +185,10 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
     });
   };
 
-  // H3：AI 补充/撤销/版本回滚后刷新——列表重载 + 选中笔记取库内最新内容
-  const handleNoteChanged = useCallback(async () => {
-    void load(keyword, tagFilter, sortMode);
-    const cur = selectedRef.current;
-    if (!cur) return;
-    try {
-      const fresh = await invoke<Note | null>("get_note", { id: cur.id });
-      if (fresh) setSelected(fresh);
-    } catch (e) {
-      console.warn(`[NotesPage] 刷新笔记 ${cur.id} 失败`, e);
-    }
-  }, [keyword, tagFilter, sortMode, load]);
-
   // 批 8（REQ-317）：选区行动类编排 hook 收敛（转问题/模型卡预填态）
   const { modelDialog, openModelCard, closeModelCard, handleSelectionAction, onModelCardCreated } = useNoteSelectionActions({
-    noteId: selected?.id ?? null, onChanged: handleNoteChanged, notify: showToast,
+    noteId: selected?.id ?? null, onChanged: list.handleNoteChanged, notify: showToast,
   });
-
-  // REQ-278（v0.19.4 §5）：data:notes-changed / data:note-groups-changed 常驻订阅
-  // ——覆盖"别处改动"（任务采纳/AI 落库/他页转化）。回调复用既有刷新职责：
-  // refreshToken 递增重载组侧栏/色数据（refreshAll 的 refreshToken 通道）+
-  // handleNoteChanged（列表重载 + 右栏选中对象回读），列表 load 仅执行一次；
-  // 防抖在 useDbRefresh 内合并事件风暴，与页面本地即时刷新天然错峰。常驻订阅
-  // 理由：隐藏期（display:none 保留挂载）事件不漏收——切回即最新（REQ 根治点）
-  const handleExternalDbChange = useCallback(() => {
-    setRefreshToken((t) => t + 1);
-    void handleNoteChanged();
-  }, [handleNoteChanged]);
-
-  useDbRefresh(["notes", "note-groups"], handleExternalDbChange);
 
   // v0.17.0：AI 能力入口——阅读态使用直接进入编辑态（用户裁决）+ 内容快照
   // （编辑态取编辑器当前内容=未保存所见即所修；阅读态用已存笔记内容——快照
@@ -289,11 +210,11 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
         // 切回笔记视图 + 全部笔记过滤——新笔记立即可见（闭环）
         setView("notes");
         setGroupFilter(null);
-        setKeyword("");
-        setTagFilter(null);
-        void load("", null, sortMode);
+        list.setKeyword("");
+        list.setTagFilter(null);
+        void list.load("", null, list.sortMode);
       })
-      .catch((e) => setStatus(`新建失败: ${e}`));
+      .catch((e) => list.setStatus(`新建失败: ${e}`));
   };
 
   // 列表选中（v0.10.1 F1：切笔记先退出编辑态——NoteEditView 卸载自动保存
@@ -303,41 +224,30 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
     setEditing(false);
   };
 
-  // ── 收集所有标签 ──
-  const allTags = useMemo(() => {
-    const set = new Set<string>();
-    notes.forEach((n) => parseTags(n).forEach((t) => set.add(t)));
-    return Array.from(set).sort();
-  }, [notes]);
-
-  // v0.20.3（REQ-301）：SE 情绪 tag（#树洞）默认排除（设置可显）——判定/开关在
-  // useNotesSealedFilter（refreshToken 由页面注入，与颜色数据同一令牌）
-  const { filterSealed } = useNotesSealedFilter(refreshToken);
-
   // v0.11.0：组过滤在客户端生效（列表已全量加载；组切换零请求）
   // v0.20.3（REQ-301）+2026-09-06 审查（TD-E）：SE 封存默认不可见——#树洞
   // tag 精确匹配（防“树洞XX”子串误滤）；除显式显隐开关外任何视图态均排除
   const visibleNotes = useMemo(() => {
-    const list = groupFilter === null ? notes : notes.filter((n) => n.group_id === groupFilter);
-    return filterSealed(list);
-  }, [notes, groupFilter, filterSealed]);
+    const filtered = groupFilter === null ? list.notes : list.notes.filter((n) => n.group_id === groupFilter);
+    return filterSealed(filtered);
+  }, [list.notes, groupFilter, filterSealed]);
 
   // v0.14 B：组映射（noteId → 组，resolveNoteColor 组继承档用）
-  const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
+  const groupMap = useMemo(() => new Map(list.groups.map((g) => [g.id, g])), [list.groups]);
   // v0.14 B：笔记色板 id 映射（四档优先级解析——笔记显式 > 组继承 > 标签 > 默认灰）
   const noteColors = useMemo(() => {
     const m: Record<number, string | null> = {};
     for (const n of visibleNotes) {
-      m[n.id] = resolveNoteColor(n, n.group_id != null ? groupMap.get(n.group_id) : null, tagColors);
+      m[n.id] = resolveNoteColor(n, n.group_id != null ? groupMap.get(n.group_id) : null, list.tagColors);
     }
     return m;
-  }, [visibleNotes, groupMap, tagColors]);
+  }, [visibleNotes, groupMap, list.tagColors]);
 
   // H3：辅助面板插槽——VersionPanel（知识补充已迁移至编辑态 🤖 AI 菜单——
   // v0.17.0 REQ-246：阅读态独立面板移除，用 AI 直接进入编辑态）
   const auxPanels = selected ? (
     <>
-      <VersionPanel key={`version-${selected.id}`} noteId={selected.id} onChanged={() => void handleNoteChanged()} />
+      <VersionPanel key={`version-${selected.id}`} noteId={selected.id} onChanged={() => void list.handleNoteChanged()} />
     </>
   ) : null;
 
@@ -351,7 +261,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
           width={groupsCol.width}
           groupFilter={groupFilter}
           onGroupFilterChange={(id) => { setGroupFilter(id); setView("notes"); }}
-          onChanged={refreshAll}
+          onChanged={list.refreshAll}
           // v0.20.10：复习=顶层页深链（ⓘ「复习本组」转页预选）——无本地 Overlay
           onOpenReview={(groupId, name) => onOpenReview?.(groupId, name)}
           selectedNoteId={selected?.id ?? null}
@@ -359,7 +269,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
           // 并存矛盾（审查修复）
           onOpenInbox={() => { setGroupFilter(null); setView("inbox"); }}
           inboxActive={view === "inbox"}
-          refreshToken={refreshToken}
+          refreshToken={list.refreshToken}
           onOpenSystem={(id) => onOpenSystem?.(id)}
           onCollapse={() => groupsCol.setManualFolded(true)}
           onCleanNotice={notifyCleanNotice}
@@ -373,7 +283,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
       ) : view === "inbox" ? (
         <FeedFragmentList
           width={listCol.width}
-          onChanged={refreshAll}
+          onChanged={list.refreshAll}
           onCleanNotice={notifyCleanNotice}
           onPromoted={(note) => {
             // 右侧自动打开新笔记（闭环可见）；碎片已从收件箱移除（列表已刷新）
@@ -381,10 +291,10 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
             setEditing(false);
             // 搜索/标签态同步清空（审查修复：原只 load("") 不更新 keyword/tagFilter，
             // 防抖 effect 会用旧搜索词重新覆盖列表——新笔记在「全部笔记」可见）
-            setKeyword("");
-            setTagFilter(null);
+            list.setKeyword("");
+            list.setTagFilter(null);
             setGroupFilter(null);
-            void load("", null, sortMode);
+            void list.load("", null, list.sortMode);
           }}
           onCollapse={() => listCol.setManualFolded(true)}
         />
@@ -392,35 +302,35 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
         <NoteListView
           width={listCol.width}
           notes={visibleNotes}
-          groups={groups}
+          groups={list.groups}
           groupFilter={groupFilter}
           onGroupFilterChange={setGroupFilter}
-          keyword={keyword}
-          tagFilter={tagFilter}
-          sortMode={sortMode}
-          allTags={allTags}
+          keyword={list.keyword}
+          tagFilter={list.tagFilter}
+          sortMode={list.sortMode}
+          allTags={list.allTags}
           selectedId={selected?.id ?? null}
-          status={status}
-          onKeywordChange={(kw) => { setKeyword(kw); setTagFilter(null); }}
-          onTagFilterChange={(tag) => { setTagFilter(tag); if (tag) setKeyword(""); }}
-          onSortModeChange={setSortMode}
+          status={list.status}
+          onKeywordChange={(kw) => { list.setKeyword(kw); list.setTagFilter(null); }}
+          onTagFilterChange={(tag) => { list.setTagFilter(tag); if (tag) list.setKeyword(""); }}
+          onSortModeChange={list.setSortMode}
           onSelect={handleSelect}
           onCreate={handleCreate}
-          onRefresh={() => void load(keyword, tagFilter, sortMode)}
+          onRefresh={() => void list.load(list.keyword, list.tagFilter, list.sortMode)}
           onOpenSession={(id) => onOpenSessions?.(id)}
           onBatchDelete={runBatchDelete}
           noteColors={noteColors}
-          tagColors={tagColors}
+          tagColors={list.tagColors}
           // v0.16.1：笔记行右键菜单动作（复用既有处理——置顶/编辑/删除/归组刷新）
           onNotePinToggle={(n) => void runPinToggle(n)}
           onNoteEdit={(n) => { handleSelect(n); setEditing(true); }}
           onNoteDelete={(n) => void runDelete(n.id)}
-          onNoteMoved={() => { refreshAll(); void handleNoteChanged(); }}
+          onNoteMoved={() => { list.refreshAll(); void list.handleNoteChanged(); }}
           onCleanNotice={notifyCleanNotice}
           onCollapse={() => listCol.setManualFolded(true)}
           // 批 6 审查 P2-10：侧栏手排/置顶/回自动（useGroupOrders→refreshAll）后
           // 重拉组序行——树组头与组侧栏同序（原挂载单拉，旧序/已删序行残留）
-          refreshToken={refreshToken}
+          refreshToken={list.refreshToken}
         />
       )}
       <ColumnResizer onResize={listCol.resizeBy} onReset={listCol.resetWidth} />
@@ -445,7 +355,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
                 onCancel={() => {
                   // v0.13.6：完成编辑 → 列表重载 + 选中笔记重取（右栏立即显示新标题/正文）
                   setEditing(false);
-                  void handleNoteChanged();
+                  void list.handleNoteChanged();
                 }}
                 // v0.14 A：编辑态图片点击放大（与阅读态同一入口）
                 onImageOpen={(src, title) => setPreviewImg({ src, title })}
@@ -459,9 +369,9 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
                 key={`hdr-${selected.id}`}
                 note={selected}
                 resolvedColor={noteColors[selected.id] ?? null}
-                groups={groups}
-                onChanged={() => void handleNoteChanged()}
-                onError={(m) => setStatus(m)}
+                groups={list.groups}
+                onChanged={() => void list.handleNoteChanged()}
+                onError={(m) => list.setStatus(m)}
                 onGotoKnowledgeSystem={onCreateSystem}
                 onOpenAi={openAiDialog}
                 onOpenModelCard={openModelCard}
@@ -471,7 +381,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
             onEdit={() => setEditing(true)}
             onPinToggle={() => void runPinToggle(selected)}
             onDelete={() => void runDelete(selected.id)}
-            onTagClick={(t) => { setTagFilter(t); setKeyword(""); setView("notes"); }}
+            onTagClick={(t) => { list.setTagFilter(t); list.setKeyword(""); setView("notes"); }}
             onOpenSession={(id) => onOpenSessions?.(id)}
             onTaskToggle={handleTaskToggle}
             onImageOpen={(src, title) => setPreviewImg({ src, title })}
@@ -491,7 +401,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
           noteId={selected.id}
           noteContent={aiContent}
           onClose={() => setAiDialogOpen(false)}
-          onUpdated={() => void handleNoteChanged()}
+          onUpdated={() => void list.handleNoteChanged()}
         />
       )}
       {/* 批 8（REQ-317）：模型卡对话框槽（header 入口与选区菜单共用生成链） */}
