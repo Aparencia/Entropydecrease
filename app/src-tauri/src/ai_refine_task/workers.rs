@@ -25,7 +25,7 @@ use crate::ai_task::{AiTaskFailure, AiTaskState};
 use crate::commands::AppState;
 use crate::commands_ai_refine::set_task;
 
-use super::{emit_refine_stream, RefineStreamFrame};
+use super::RefineStreamFrame;use super::stream::emit_refine_stream;
 
 /// 单片失败重试次数（幂等片——同片重跑不产生副作用）。
 const SLICE_RETRY: usize = 1;

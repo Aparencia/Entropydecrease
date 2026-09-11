@@ -9,8 +9,6 @@
 //!              线程内再开 worker——网络调用阻塞 worker 线程，互不干扰；
 //!              AiClient 为 Clone+Send，跨线程共享安全）。
 
-use tauri::Emitter;
-
 use crate::ai_chat::AiTurn;
 use crate::ai_client::AiClient;
 use crate::ai_mock::AiMockAdapter;
@@ -42,6 +40,10 @@ pub(crate) use self::skeleton::run_refine_task_skeleton;
 mod vision;
 use self::vision::load_session_vision_images;
 
+/// 流式帧推送子模块（唯一 emit 点与静默口径见 stream.rs 模块头）
+#[path = "ai_refine_task/stream.rs"]
+mod stream;
+
 /// 切片并发上限（REQ-145：并发 2-3——配额并发安全由 command 层启动前按
 /// 预估片数一次性消耗保证，此处 worker 数不超切片数）。v0.17.0：pub(crate)
 /// ——笔记级精修任务共用同一上限。
@@ -63,19 +65,6 @@ pub enum RefineStreamFrame {
     SliceFailed { slice_index: usize, reason: String },
     /// 任务终态（全部片合并完成）
     Done { slices: usize, failed_slices: usize },
-}
-
-/// 流式事件载荷（taskId 过滤——多任务并行时各订阅只收自己的帧）。
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct RefineStreamPayload {
-    task_id: u64,
-    frame: RefineStreamFrame,
-}
-
-/// 推送精修流帧（失败静默——流式是呈现增强，不得影响任务主链路）。
-fn emit_refine_stream(st: &AppState, task_id: u64, frame: RefineStreamFrame) {
-    let _ = st.app.emit("ai:refine-stream", RefineStreamPayload { task_id, frame });
 }
 
 /// 后台精修任务：规则草稿 → 切片 → 逐片精修（mock/云端）→ 合并 → diff。
