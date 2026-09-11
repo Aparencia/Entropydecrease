@@ -19,14 +19,12 @@ import { invoke } from "@tauri-apps/api/core";
 import AudioLevelMeter from "./AudioLevelMeter";
 import { AUTO_RESUME_HINTS } from "../hooks/liveCaptureState";
 import type { CaptureActionKind } from "../hooks/useLiveCaptureControl";
+import type { PrepareState } from "../hooks/useClassroomHints";
 import type { FloatSnapshot } from "../hooks/useFloatWindow";
 import type { DownloadProgress, PauseSource, StreamingModelStatus } from "../types";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
 const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
-
-/** P3：引擎预热状态（与 Rust PrepareStatus 的 camelCase 契约一致） */
-export type PrepareState = "idle" | "loading" | "ready" | "failed";
 
 /** 采集卡暂停状态行文案（按 reason 三态；沿用原横幅语义——媒体暂停含"自动继续"
  *  说明，前台切走含"回窗即继续"说明；徽标/右栏/浮窗用短文案 pauseReasonLabel） */
