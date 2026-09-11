@@ -37,3 +37,7 @@ export type { EmptyStateAction, EmptyStateProps } from "./EmptyState";
 
 export { Loading, Probe, Skeleton } from "./Loading";
 export type { LoadingProps, ProbeProps, SkeletonProps } from "./Loading";
+
+export { Toast } from "./Toast";
+export type { ToastAction, ToastKind, ToastProps } from "./Toast";
+

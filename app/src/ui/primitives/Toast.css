@@ -1,0 +1,61 @@
+/*
+ * Toast.css —— Toast 的唯一外观出口（批 0-D Task 9；规格 §5.3 / §8.4）。
+ *
+ * Why（为什么存在）：仓内现有 4 套自绘 toast 各自内联写死定位、圆角、阴影与配色（recon §3.2），
+ * 且**全部只有"进"、没有"出"**。本文件把外观收成一处，并给"出场"一个可被 CSS 驱动的落点：
+ * `[data-phase]` 三态 —— 时机由 `usePresence` 给（Toast.tsx），样子在这里。
+ *
+ * ⚠️ 本文件不得出现颜色字面量（色值只许在 ui/tokens.css 与生成器里），也不得写 `z-index`
+ *    （层级是 TS 标尺 ui/zIndex.ts 的职责，由 Toast.tsx 内联到节点上）。
+ * ⚠️ **不 animate height**（规格 §8.4 明文）：本文件的 transition **只允许**出现在 `opacity` 与
+ *    `transform` 上 —— 高度 / 内边距 / 位置过渡会触发重排，也会让多条 toast 的堆叠逐帧抖动。
+ *    机器判据在 `Toast.style.test.ts`（扫 transition 声明的属性名，附变异样本证明有区分度）。
+ * ⚠️ **等时长不变量**（同 Modal.css）：`usePresence` 以**首个** `transitionend` 收尾 ⇒ 同一元素上的
+ *    opacity 与 transform 必须等时长；进场 180ms、出场 140ms（**出场比进场快**，规格 §8.4）。
+ *
+ * 批 6 接缝：① 时长经 `var(--ed-dur-toast-in/out, …)` 消费 —— 批 6 的动效 token 真源落地后删掉
+ * motion.css 的变量块即生效，无需改本文件；② 多条并存时的堆叠只需宿主按序给
+ * `--ed-toast-stack-offset`（默认 0px），不动 DOM 结构、不做 height 过渡（本原语不排队，
+ * 见 `Toast.tsx` 的「新消息接管」契约）。
+ */
+
+.ed-toast {
+  position: fixed;
+  right: 18px;
+  /* 18px 与现状 4 套 toast 的落点一致（recon §3.2）—— 批 4 迁移时位置不得移动；
+     堆叠偏移留给批 6 的宿主按序赋值（见文件头接缝②），默认展开为 0px */
+  bottom: calc(18px + var(--ed-toast-stack-offset, 0px));
+  display: flex;
+  align-items: center;
+  gap: var(--ed-space-8, 8px);
+  box-sizing: border-box;
+  max-width: 420px;
+  padding: var(--ed-space-8, 8px) var(--ed-space-12, 12px);
+  background: var(--ed-bg-raised);
+  border: 1px solid var(--ed-border);
+  border-left: 3px solid var(--ed-border-strong); /* 三档 kind 各自覆盖左边框色（下一段） */
+  border-radius: var(--ed-radius-panel, 8px);
+  box-shadow: var(--ed-shadow-2);
+  transition: opacity var(--ed-dur-toast-in, 180ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)),
+    transform var(--ed-dur-toast-in, 180ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
+}
+
+/* 三档语义色**只作边框色**（文字色由 Toast.tsx 经 `Text` 的 tone 给，色值仍是 token）；
+   `--ed-stamp` 在本文件里绝不出现在任何 background 声明中（规格 §4.1「绝不用于按钮」） */
+.ed-toast--info { border-left-color: var(--ed-ink-3); }
+.ed-toast--ok { border-left-color: var(--ed-ok); }
+.ed-toast--err { border-left-color: var(--ed-stamp); }
+
+.ed-toast[data-phase="enter"] { opacity: 0; transform: translateY(8px); } /* 位移 8px = 规格 §8.4 上限 */
+.ed-toast[data-phase="entered"] { opacity: 1; transform: translateY(0); }
+.ed-toast[data-phase="exit"] {
+  opacity: 0;
+  transform: translateY(4px); /* 出场位移只留一半：出场更短更快，4px 是它的配套量 */
+  transition-duration: var(--ed-dur-toast-out, 140ms);
+}
+
+/* 行动槽（撤销 / 重试）：靠右排；视觉权威仍全在 `.ed-btn` 的四态里，本类只做定位 */
+.ed-toast-action {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
