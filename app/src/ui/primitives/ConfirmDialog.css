@@ -1,0 +1,58 @@
+/*
+ * ConfirmDialog.css —— 危险确认的外观出口（批 0-D Task 8；规格 §5.3 / §4.1）。
+ *
+ * Why（为什么存在）：规格 §5.3 要求高危不可逆动作的确认框**框内列明级联影响与保留项**，而现状 23 处
+ * 确认调用（recon §3.2/§10）全是 `window.confirm` / `confirm()` 那种一行字的命令式弹窗 ——
+ * 连「保留项」这个概念都无处安放。本文件给那套清单与印章标记一个落点。
+ *
+ * ⚠️ 本文件不得出现颜色字面量（色值只许在 ui/tokens.css 与 token 生成器里）。
+ * ⚠️ **容器与层级不是本文件的职责**：遮罩、居中、进出场全在 `Modal`（本原语只消费它的 footer 槽），
+ *    故本文件既不写层级也不写定位 —— 自己写一套就等于第二套弹层实现。
+ * ⚠️ **危险色绝不作底色**（规格 §4.1「绝不用于按钮」；控制方裁决③）：`--ed-stamp` 在本文件里
+ *    只作**文字色与描边**（印章标记），危险信号的承载物是「印章 + 清单」而不是红底按钮。
+ *    守卫见 `ConfirmDialog.test.tsx` 与 Task 14 Step 1 第 4 条（同向：background 声明出现该 token 即红）。
+ */
+
+.ed-confirm {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--ed-space-8, 8px) var(--ed-space-12, 12px);
+  align-items: start;
+}
+
+/* 印章标记：装饰性（`aria-hidden`），全站唯一的非中性色只用在这里，且只作文字与描边 */
+.ed-confirm-seal {
+  display: inline-block;
+  padding: 0 var(--ed-space-4, 4px);
+  border: 1px solid var(--ed-stamp);
+  border-radius: var(--ed-radius-stamp, 3px);
+  color: var(--ed-stamp);
+  font-family: var(--ed-font-ui, "Inter", "Segoe UI Variable", "Microsoft YaHei UI", system-ui, sans-serif);
+  font-size: var(--ed-type-6-size, 11.5px);
+  line-height: var(--ed-type-6-line, 16px);
+  font-weight: var(--ed-type-6-weight, 500);
+}
+
+/* 级联影响清单：跨两列（行序 = 印章 + 说明 → 清单） */
+.ed-confirm-impacts {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ed-space-4, 4px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ed-confirm-impacts > li {
+  display: flex;
+  gap: var(--ed-space-8, 8px);
+}
+.ed-confirm-impacts > li::before {
+  content: "·";
+  color: var(--ed-ink-3);
+}
+/* 保留项：正向语气 —— 前缀换「›」并用 --ed-ok（规格 §5.3 的「笔记 7 篇保留」要一眼可辨） */
+.ed-confirm-impacts > li.ed-confirm-keep::before {
+  content: "›";
+  color: var(--ed-ok);
+}
