@@ -3,7 +3,7 @@
 //! @ai-context: 由 types.rs 门面 `#[path]` 声明 + `pub use` 再导出 ⇒ crate::types::X 引用路径逐字不变。
 
 use serde::{Deserialize, Serialize};
-use super::{SessionOcrBlock, SessionScreen};
+use super::types_ocr::{SessionOcrBlock, SessionScreen};
 
 // ────────────────────────────────────────────────────────────
 // 会话领域类型（REQ-010，ADR-004）

@@ -60,11 +60,11 @@
 | app/src/components/KnowledgeCanvasView.tsx | 466 | v0.13.8 画布主视图（RF 装配/拖拽防抖保存/视口持久化/自动排列）；v0.13.9 根卡 + 接线方向动态化；v0.14.1 布局/连线下拉 + 偏好读写（+72 行）+ 审查修复（布局 effect 原子化拆分建边 effect/prefsLoaded 控件门控/hasCore 统一 +31 行）——RF 状态与持久化编排内聚（元素构建已拆至 canvasElements/layout* 纯函数） | 若再增长：偏好读写与下拉拆至 useCanvasPrefs.ts；位置持久化拆至 useCanvasPositions.ts |
 | app/src-tauri/src/streaming_asr_tests.rs | 462 | 流式 ASR 测试域（端点处理/静音判定/段切分回归）单模块 #[path] 挂载 | 若再增长：端点处理组拆至 streaming_endpoint_tests.rs |
 | app/src-tauri/src/structure_note_tests.rs | 458 | v0.7.6（REQ-177~181）：结构渲染层单测域（章节插入位置/命名窗口/词汇表排序上限锚点/零回归护栏/JSON 往返）单模块 #[path] 挂载 | 若再增长：词汇表组拆至 structure_note_glossary_tests.rs |
-| app/src/components/NoteListView.tsx | 450 | 超硬限（>600 行），不允许豁免 —— v0.20.12 批 7 接线 + 审查修复轮 4（refreshToken 组序重拉）净增（646→654）——**超 600 硬限随 TD-2026-09-09-A 登记（值刷新）** | **超硬限必须拆**：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
 | app/src-tauri/src/db_note_group_clean_tests.rs | 447 | REQ-316（批 7）测试域：判定表（自动/系列/手动/改判/五类残留/影响面外/级联卫生）+ 写路径集成 16 例，单模块 #[path] 挂载 | 若再增长：写路径集成组拆至 db_note_group_clean_flow_tests.rs |
 | app/src-tauri/src/commands_session.rs | 443 | v0.6.0 M6 + v0.7.6 审查硬拆后回归：会话命令域（CRUD/质量报告/课程分组/段搜索）内聚；笔记转换管线已拆至 commands_session_note.rs；M2 修复（search_ocr_blocks 传 data_dir 参数） | 若再增长：course/search 拆至 commands_session_extra.rs |
 | app/src-tauri/src/symbol_normalize.rs | 443 | v0.6.0 M1（REQ-060）：口语符号映射域（映射表/上下文守卫/中文数字解析）内聚；数字解析与守卫共享字符判定 | 若再增长：parse_chinese_number/replace_number_runs 拆至 symbol_numbers.rs |
 | app/src-tauri/src/commands_goals_plan.rs | 442 | 规划＝单次同步调用 + spawn_blocking（10-30s 交互等待可接受，（自动摘取，待细化） | 若再增长：按职责拆分 |
+| app/src/components/NoteListView.tsx | 442 | 超硬限（>600 行），不允许豁免 —— v0.20.12 批 7 接线 + 审查修复轮 4（refreshToken 组序重拉）净增（646→654）——**超 600 硬限随 TD-2026-09-09-A 登记（值刷新）** | **超硬限必须拆**：拖拽/移动接线拆至 useNoteOrders.ts（既有登记计划兑现） |
 | app/src/App.tsx | 439 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 | app/src-tauri/src/screens.rs | 437 | v0.7.3（REQ-155/156/160）：画面要点屏构建编排（分组/聚类/图匹配 IO）+ 可消费块过滤扩展——编排与纯函数分层（纯函数在 screen_merge.rs） | 若再增长：filter_usable_blocks 拆至 screen_filter.rs |
 | app/src/pages/KnowledgePage.tsx | 437 | v0.13.8 画布接线越线（原 296）：中栏「画布」标签 + 树/画布双入口 + v0.15 左列/详情列状态迁移（useColumnLayout + 折叠窄条 + 宽度 prop）——页面编排层内聚（数据获取/选中态/标签态为页面本地状态），子组件已全部下沉（Tree/Canvas/DetailPanel/Wizard/ConceptCardRow/Sample） | 若再增长：中栏视图块（树/画布/概念/模型 + 标签栏）拆至 KnowledgeMiddlePane.tsx，SystemCard 拆至 SystemSidebarCard.tsx |
