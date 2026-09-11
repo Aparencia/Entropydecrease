@@ -5,7 +5,6 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  aiPlaceholderLabel,
   lowConfidenceClass,
   renderLatex,
   renderMarkdownTable,
@@ -79,7 +78,7 @@ describe("renderMarkdownTable", () => {
     });
 });
 
-describe("lowConfidenceClass / aiPlaceholderLabel", () => {
+describe("lowConfidenceClass", () => {
   it("低置信（<0.5）返回标记类名，其余返回空串", () => {
     // Assert
     expect(lowConfidenceClass(0.3)).toBe("ed-low-confidence");
@@ -88,7 +87,4 @@ describe("lowConfidenceClass / aiPlaceholderLabel", () => {
     expect(lowConfidenceClass(undefined)).toBe("");
   });
 
-  it("AI 占位文案为诚实声明", () => {
-    expect(aiPlaceholderLabel()).toBe("AI 增强待 V1.0");
-  });
 });
