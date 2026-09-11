@@ -25,6 +25,8 @@ import { emptySelection, rangeSelection, toggleSelection } from "../utils/noteSe
 import { dropNotesIntoOrder, shiftNoteOrder } from "../utils/noteOrder";
 // 批 0-C2：展示节/可见序纯函数层（含 scope 键与裸折叠键派生——纯逻辑与副作用分离）
 import { buildSections, buildVisibleOrder, isTreeMode, manualBaseIds, scopeKey } from "../utils/noteSectionModel";
+// 批 0-C2：序行 store（笔记手排序行 + 组手排序行）——兑现既有登记拆分计划
+import { useNoteOrders } from "../hooks/useNoteOrders";
 import NoteListRow from "./NoteListRow";
 import NoteTreeSection from "./NoteTreeSection";
 import NoteRowContextMenu from "./NoteRowContextMenu";
@@ -101,10 +103,9 @@ export default function NoteListView({
 
   // 组折叠态
   const [groupFolds, setGroupFolds] = useState<Record<string, boolean>>({});
-  // 手动排序 map（scope → 有序 ids）
-  const [manualOrders, setManualOrders] = useState<Record<string, number[]>>({});
-  // REQ-315：组手动序行（group_id → seq；树组头排序消费——组置顶/手排在树面生效）
-  const [groupOrderRows, setGroupOrderRows] = useState<Map<number, number>>(new Map());
+
+  // 序行 store（笔记手排序行 + 组手排序行）——装载/保存路径下沉 hooks/useNoteOrders
+  const { manualOrders, groupOrderRows, saveOrder, resetOrder } = useNoteOrders(refreshToken);
 
   const visibleIdsRef = useRef<number[]>([]);
   // L5：行落点并发锁（防陈旧快照互覆）
@@ -140,35 +141,8 @@ export default function NoteListView({
     return () => window.removeEventListener("keydown", onKey);
   }, [batchMenu, contextMenu, selectionMode, selection.size, exitBatch]);
 
-  // 手动序装载（REQ-287：notes 行）+ REQ-315：组序行（树组头排序）。
-  // Why 依赖 refreshToken：侧栏上移/下移/回自动/手排↺（useGroupOrders→onChanged→
-  // NotesPage refreshToken++）只经父层令牌通知——挂载单拉会在树面残留旧组序/
-  // 复位后残留已删序行（审查 P2-10）；与父层 refreshAll 同频重载，零去抖必要
-  // （重载=读操作，量级毫秒级；本组件自持的保存路径 saveOrder 仍内联 loadOrders）
-  const loadOrders = useCallback(() => {
-    invoke<[string, number, number][]>("note_order_list")
-      .then((rows) => {
-        const map: Record<string, number[]> = {};
-        for (const [scope, id] of rows) {
-          (map[scope] ??= []).push(id);
-        }
-        setManualOrders(map);
-      })
-      .catch((e) => console.warn("[notes] 手动排序读取失败（自动排序兜底）:", e));
-    invoke<[number, number][]>("note_group_order_list")
-      .then((rows) => setGroupOrderRows(new Map(rows.map(([gid, seq]) => [gid, seq]))))
-      .catch((e) => console.warn("[notes] 组排序读取失败（自动排序兜底）:", e));
-  }, []);
-  useEffect(() => { loadOrders(); }, [loadOrders, refreshToken]);
-
-  const saveOrder = useCallback(async (scope: string, ids: number[]) => {
-    await invoke("note_order_save", { scope, noteIds: ids });
-    loadOrders();
-  }, [loadOrders]);
-  const resetOrder = useCallback(async (scope: string) => {
-    await invoke("note_order_clear", { scope });
-    loadOrders();
-  }, [loadOrders]);
+  // 手动序装载（REQ-287：notes 行）+ REQ-315：组序行（树组头排序）——见 hooks/useNoteOrders
+  // （依赖 refreshToken 的理由随实现搬至该 hook 头注释：审查 P2-10 的令牌重拉）
 
   // ── 分组树数据（同 v0.15 结构）——可见序统一从本结构生成 ──
   // Why 不再有分桶 memo：旧 `grouped` 是死载荷——仅被当作 treeMode 的第二真值，
