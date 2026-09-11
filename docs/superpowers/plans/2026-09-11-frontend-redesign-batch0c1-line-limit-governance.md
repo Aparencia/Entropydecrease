@@ -717,6 +717,22 @@ git commit -m "ci: 行数红线接入提交门禁与 CI"
 
 ---
 
+### ★★ Task 4 带回的系统性发现：**本地门禁在本机从未武装**（`7476fd0b`）
+
+实施者实测：**本克隆此前从未安装 husky** —— `core.hooksPath` **为空**、无 `.git/hooks/pre-commit`、无 `node_modules`。
+⇒ **`.husky/pre-commit`（`npx lint-staged`）与 `.husky/commit-msg`（commitlint）在本机对所有提交都是静默失效的** —— 不只是 Task 4 之前，而是**历史上每一次提交**，**包括本批 Task 0–3 的交付提交**。
+**旁证（控制方）**：本会话我提交了 40+ 次，**从未见过任何 lint-staged 或 commitlint 输出** —— 与"钩子从未运行"完全一致。
+
+**它第一次探针提交因此意外成功**（hook 输出 0 字节），已按指令 `git reset --soft HEAD~1` 撤回；随后 `npm install --no-save --no-package-lock` + `npm run prepare` **武装门禁**，才取得真实拦截证据（`(c) 超过 300 行但未登记：app/src/__probe-lines.ts（320 行）`、`husky - pre-commit script failed`、`commit-exit=1`、HEAD 未动）。副作用是两项**非 tracked 环境变更**：`node_modules/`（433 包、**未生成 `package-lock.json`**）与 `.git/config` 的 `core.hooksPath=.husky/_`。
+
+**控制方裁决**：**保留武装**（这正是 Task 4 的目的；两项变更都不进 git，工作树仍只 `?? docs/tech-debt/`）。
+**⇒ 必须一并记住的三件事**：
+1. **本批（乃至 0-A/0-B）至今没有任何自动化门禁跑过**：本地门禁此前失效、CI 又因 **67 个提交未推送**而未触发。所有校验都是**人工/子代理跑出来的**（有证据），但**从未被强制**。⇒ 建议推送到 `dev` 以激活 CI（属用户决策）。
+2. **提交信息规范（AGENTS.md §5，subject ≤50 字等）此前也未被 commitlint 校验**；现已武装，**后续提交会真被拦**。
+3. **新克隆若未 `npm install`，门禁默认静默失效** —— 没有任何机制会提醒。这是本批发现的**环境依赖**，已写入 `7476fd0b` 的提交信息；Task 5 应把它一并回写进 `v0.22.md`（属"工具链真相"的一部分）。
+
+---
+
 ### Task 5: 回写与批次验收
 
 **Files:**
