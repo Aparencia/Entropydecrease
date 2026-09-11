@@ -3,7 +3,7 @@
 //! @ai-context: artifact_blocks 表的读写（会话 1:1 产物，块有序）。
 //!              块引用原料不复制（refs_json 携带 segment/ocr 标识），
 //!              原料可回看、可重算（G1 派生视图地基，V1.0 ADR-006 落地）。
-//! @ai-context: 本模块只做数据读写，无业务规则；模板函数在 artifact_templates.rs。
+//! @ai-context: 本模块只做数据读写，无业务规则。
 
 use rusqlite::params;
 

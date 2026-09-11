@@ -105,7 +105,7 @@ fn template_follows_form_independently() {
     assert_eq!(template_for_form(ContentForm::Exercise), ArtifactTemplate::LectureNotes);
     assert_eq!(template_for_form(ContentForm::Coding), ArtifactTemplate::LectureNotes);
     assert_eq!(template_for_form(ContentForm::Audio), ArtifactTemplate::Summary);
-    // v0.13.6 新形态：会议→既有会议纪要模板；直播/影视→摘要（叙事线变体由 narrative_detect 触发）
+    // v0.13.6 新形态：会议→既有会议纪要模板；直播/影视→摘要（叙事线变体已随产物模板下线）
     assert_eq!(template_for_form(ContentForm::Meeting), ArtifactTemplate::MeetingNotes);
     assert_eq!(template_for_form(ContentForm::Live), ArtifactTemplate::Summary);
     assert_eq!(template_for_form(ContentForm::Narrative), ArtifactTemplate::Summary);

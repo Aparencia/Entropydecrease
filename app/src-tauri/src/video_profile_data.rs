@@ -230,7 +230,7 @@ pub fn builtin_profiles() -> Vec<VideoProfile> {
             disable_asr: false,
         },
         // REQ-121（T3）编程实战：OCR+ASR 双通道——代码画面高频（full_every=2），
-        // 示例代码提取（code_blocks 产物）由另一代理的提取模块 + 本库模板消费
+        // 示例代码提取（代码块产物）由提取模块消费（产物模板层已随产物视图下线）
         VideoProfile {
             kind: ProfileKind::Coding,
             detect_signals: DetectSignals {

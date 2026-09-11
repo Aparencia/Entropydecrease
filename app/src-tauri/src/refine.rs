@@ -82,8 +82,7 @@ pub fn build_refine_candidates(
 
 /// 幂等过滤（纯函数，v0.11.5）：产物中已有同类型同 frame_ms 结构块 → 剔除候选。
 ///
-/// @ai-context: 结构块（Table/Formula）只由精修产出（规则版模板不产生——
-///              artifact_templates::build_artifact 无结构块）——产物块即幂等标记：
+/// @ai-context: 结构块（Table/Formula）只由精修产出——产物块即幂等标记：
 ///              已精修区域不再重复推理（停止后自动触发 + 详情进入懒触发双通道防重）。
 /// @ai-context: 产物缺失（None）→ 全量保留（首跑语义）。
 pub fn filter_refined_candidates(

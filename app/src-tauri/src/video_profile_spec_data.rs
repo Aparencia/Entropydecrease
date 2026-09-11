@@ -177,7 +177,7 @@ pub fn postprocess_for_form(form: ContentForm) -> PostprocessRules {
             speaker_detect: false,
             glossary: false,
         },
-        // 影视：叙事线+要点（narrative_detect 变体见 artifact_templates）——
+        // 影视：叙事线+要点——
         // 非教学不术语表/不步骤卡；章节闭（叙事结构非线性）
         ContentForm::Narrative => PostprocessRules {
             chapter_detect: false,

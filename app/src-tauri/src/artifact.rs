@@ -3,8 +3,7 @@
 //! @ai-context: 一种原料，五种模板——ArtifactBlock 为产物体系最小单元：
 //!              块**引用**原料不复制（refs 携带 segment/ocr_block 标识 + 时间戳），
 //!              原料可回看、可重算（G1 派生视图地基）。
-//! @ai-context: 纯数据定义 + JSON 序列化（serde），无副作用；
-//!              五档案模板函数在 artifact_templates.rs（独立文件保持 ≤300 行）。
+//! @ai-context: 纯数据定义 + JSON 序列化（serde），无副作用。
 //! @ai-context: source 标记来源：local（本地规则）/ ai_enhanced（V1.0 AI 补缝）/
 //!              placeholder（占位：AI 增强待 V1.0 或诚实降级标记）。
 
@@ -126,13 +125,6 @@ pub struct ArtifactBlock {
     /// 块顺序（产物视图渲染序）
     pub order: u32,
     pub source: BlockSource,
-}
-
-impl ArtifactBlock {
-    /// 构建块辅助（id 由落库回填）。
-    pub fn new(kind: ArtifactKind, order: u32, payload: BlockPayload) -> Self {
-        Self { id: 0, kind, refs: BlockRefs::default(), payload, order, source: BlockSource::Local }
-    }
 }
 
 /// 会话产物（1:1 会话；块有序）。

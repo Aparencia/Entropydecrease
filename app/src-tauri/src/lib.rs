@@ -100,7 +100,6 @@ mod asr_pass2;
 mod asr_rescore;
 mod analysis;
 mod artifact;
-mod artifact_templates;
 mod audio_event_filter;
 // pub：bin/cer_bench.rs（REQ-101 CER 微基准工具）引用 AudioPreprocessor
 // （审查 H1 修复：私有模块使 bin 无法编译，完整 cargo test 失败）
@@ -174,7 +173,6 @@ mod commands_ai_settings;
 // v0.11.6 M1（BYOK 多端点）：AI Provider 管理命令——预设/列表/增删改/密钥/默认/测试
 mod commands_ai_providers;
 mod commands_analysis;
-mod commands_artifacts;
 mod commands_audio;
 mod commands_asr_confusion;
 mod commands_asr_pass2;
@@ -490,8 +488,6 @@ mod video_profile_platform_map;
 mod video_profile_platform_map_data;
 // v0.9.0 M4（REQ-191）：平台信号适配（bilibili/local 轻量适配 + OCR 标签通用化）
 mod platform_adapter;
-// v0.9.0 M5（REQ-193）：叙事结构检测（故事线/结构化条目/直接教学 模板变体）
-mod narrative_detect;
 mod vocab;
 mod watermark_filter;
 // v0.7.0 窗口过滤增强：站点首页判定/可捕获性纯逻辑（2026-08 用户需求）

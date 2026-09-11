@@ -8,6 +8,11 @@ use crate::artifact::{
 use crate::db::Db;
 use crate::types::NewSession;
 
+/// 测试夹具：本地规则块（id 由落库回填，构建阶段为 0）。
+fn block(kind: ArtifactKind, order: u32, payload: BlockPayload) -> ArtifactBlock {
+    ArtifactBlock { id: 0, kind, refs: BlockRefs::default(), payload, order, source: BlockSource::Local }
+}
+
 fn mem_db() -> Db {
     Db::open(":memory:").expect("open in-memory db")
 }
@@ -17,7 +22,7 @@ fn artifact(session_id: i64) -> SessionArtifact {
         session_id,
         profile: "lecture".into(),
         blocks: vec![
-            ArtifactBlock::new(ArtifactKind::Paragraph, 0, BlockPayload::Text("第一段".into())),
+            block(ArtifactKind::Paragraph, 0, BlockPayload::Text("第一段".into())),
             ArtifactBlock {
                 kind: ArtifactKind::KeyImage,
                 refs: BlockRefs { segment_id: None, ocr_block_id: None, frame_ms: Some(5000) },
@@ -26,7 +31,7 @@ fn artifact(session_id: i64) -> SessionArtifact {
                 source: BlockSource::Local,
                 id: 0,
             },
-            ArtifactBlock::new(ArtifactKind::Summary, 2, BlockPayload::Text("小结".into())),
+            block(ArtifactKind::Summary, 2, BlockPayload::Text("小结".into())),
         ],
     }
 }
@@ -65,7 +70,7 @@ fn replace_artifact_overwrites() {
     let second = SessionArtifact {
         session_id: session.id,
         profile: "lecture".into(),
-        blocks: vec![ArtifactBlock::new(ArtifactKind::Paragraph, 0, BlockPayload::Text("新版".into()))],
+        blocks: vec![block(ArtifactKind::Paragraph, 0, BlockPayload::Text("新版".into()))],
     };
     db.replace_artifact(&second).unwrap();
     // Assert：覆盖（1 块，非 3 块）

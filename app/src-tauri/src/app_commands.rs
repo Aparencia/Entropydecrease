@@ -349,10 +349,6 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         // 数据备份/恢复（REQ-107，v0.7.0 M1：TRUST-1——备份/恢复入口）
         crate::commands_backup::backup_create,
         crate::commands_backup::backup_restore,
-        // 会话产物（REQ-052/053，v0.5.0 M7：模板构建/读取/落笔记）
-        crate::commands_artifacts::build_session_artifact,
-        crate::commands_artifacts::get_session_artifact,
-        crate::commands_artifacts::artifact_to_note,
         // 补缝式 AI 前置（REQ-055，v0.5.0 M8：判定器/协议/mock/护栏骨架）
         crate::commands_ai::scan_ai_candidates,
         crate::commands_ai::ai_enhance_mock,

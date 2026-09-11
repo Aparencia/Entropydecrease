@@ -5,12 +5,17 @@
 
 use super::*;
 
+/// 测试夹具：本地规则块（id 由落库回填，构建阶段为 0）。
+fn block(kind: ArtifactKind, order: u32, payload: BlockPayload) -> ArtifactBlock {
+    ArtifactBlock { id: 0, kind, refs: BlockRefs::default(), payload, order, source: BlockSource::Local }
+}
+
 #[test]
 fn block_json_roundtrip_preserves_all_fields() {
     // Arrange：各载荷类型块
     let blocks = vec![
-        ArtifactBlock::new(ArtifactKind::Paragraph, 0, BlockPayload::Text("段落内容".into())),
-        ArtifactBlock::new(ArtifactKind::KeyImage, 1, BlockPayload::Image("full/1000.webp".into())),
+        block(ArtifactKind::Paragraph, 0, BlockPayload::Text("段落内容".into())),
+        block(ArtifactKind::KeyImage, 1, BlockPayload::Image("full/1000.webp".into())),
         ArtifactBlock {
             kind: ArtifactKind::Table,
             refs: BlockRefs { segment_id: Some(3), ocr_block_id: Some(7), frame_ms: Some(5000) },
@@ -23,17 +28,17 @@ fn block_json_roundtrip_preserves_all_fields() {
             source: BlockSource::Local,
             id: 42,
         },
-        ArtifactBlock::new(ArtifactKind::Formula, 3, BlockPayload::Formula(FormulaBlock {
+        block(ArtifactKind::Formula, 3, BlockPayload::Formula(FormulaBlock {
             latex: "x^2".into(),
             source_text: "x2".into(),
             confidence: 0.9,
         })),
-        ArtifactBlock::new(
+        block(
             ArtifactKind::TermAnchor,
             4,
             BlockPayload::Term { term: "熵".into(), definition: Some("系统无序度".into()) },
         ),
-        ArtifactBlock::new(
+        block(
             ArtifactKind::StepCard,
             5,
             BlockPayload::Step {
@@ -45,12 +50,12 @@ fn block_json_roundtrip_preserves_all_fields() {
                 reason: None,
             },
         ),
-        ArtifactBlock::new(
+        block(
             ArtifactKind::QAPair,
             6,
             BlockPayload::QA { question: "什么是 X？".into(), answer: "X 是…".into() },
         ),
-        ArtifactBlock::new(
+        block(
             ArtifactKind::CodeBlock,
             7,
             BlockPayload::Code {
@@ -77,8 +82,8 @@ fn session_artifact_roundtrip() {
         session_id: 9,
         profile: "lecture".into(),
         blocks: vec![
-            ArtifactBlock::new(ArtifactKind::Summary, 0, BlockPayload::Text("小结".into())),
-            ArtifactBlock::new(ArtifactKind::Paragraph, 1, BlockPayload::Text("正文".into())),
+            block(ArtifactKind::Summary, 0, BlockPayload::Text("小结".into())),
+            block(ArtifactKind::Paragraph, 1, BlockPayload::Text("正文".into())),
         ],
     };
     // Act
@@ -96,7 +101,7 @@ fn block_source_variants_serialize() {
         (BlockSource::AiEnhanced, "ai-enhanced"),
         (BlockSource::Placeholder, "placeholder"),
     ] {
-        let b = ArtifactBlock { source, ..ArtifactBlock::new(ArtifactKind::Paragraph, 0, BlockPayload::Text("x".into())) };
+        let b = ArtifactBlock { source, ..block(ArtifactKind::Paragraph, 0, BlockPayload::Text("x".into())) };
         let raw = serde_json::to_string(&b).unwrap();
         // Assert：来源永远可辨认（kebab-case 契约）
         assert!(raw.contains(&format!("\"source\":\"{}\"", expect)), "{}", raw);
@@ -106,7 +111,7 @@ fn block_source_variants_serialize() {
 #[test]
 fn block_kind_serializes_kebab_case() {
     // Act：QAPair → qa-pair（kebab-case）
-    let b = ArtifactBlock::new(ArtifactKind::QAPair, 0, BlockPayload::Text("x".into()));
+    let b = block(ArtifactKind::QAPair, 0, BlockPayload::Text("x".into()));
     let raw = serde_json::to_string(&b).unwrap();
     // Assert
     eprintln!("serialized: {}", raw);
@@ -118,7 +123,7 @@ fn block_refs_partial_fill() {
     // Arrange：仅 frame_ms（图片块典型引用）
     let b = ArtifactBlock {
         refs: BlockRefs { segment_id: None, ocr_block_id: None, frame_ms: Some(12345) },
-        ..ArtifactBlock::new(ArtifactKind::KeyImage, 0, BlockPayload::Image("f".into()))
+        ..block(ArtifactKind::KeyImage, 0, BlockPayload::Image("f".into()))
     };
     // Act
     let raw = serde_json::to_string(&b).unwrap();
