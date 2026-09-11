@@ -55,7 +55,7 @@
 **Interfaces:**
 - Consumes: 批 0-A 的 `SCALE_TOKENS`（`app/src/ui/tokens.ts` 再导出），字段 `iconGrid: number` · `iconStroke: number` · `iconSizes: readonly number[]`
 - Produces（后续任务与批 4 依赖，签名必须一致）：
-  - `IconName` —— 由 `ICON_PATHS` 的键派生的字面量联合
+  - `IconName` —— 由分组数据 `GROUPS` 的键派生的字面量联合（**不是**由 `ICON_PATHS` 派生：后者是宽类型查找表，从它派生会得到 `string`）
   - `IconSize = 16 | 20 | 24`
   - `IconElement = { tag: "path"; d: string } | { tag: "circle"; cx: number; cy: number; r: number } | { tag: "rect"; x: number; y: number; w: number; h: number; rx?: number }`
   - `IconGeometry = { readonly elements: readonly IconElement[] }`
@@ -500,7 +500,7 @@ Expected: FAIL —— 名单缺 23 个（当前只有 `notes`）
 > export const XXX_ICON_PATHS = { … } satisfies Record<string, IconGeometry>;
 > ```
 > - **不得写宽注解** `: Readonly<Record<string, IconGeometry>>` —— 它会把该分组的键退化为 `string`，而联合里混入 `string` 会让**整条 `IconName` 塌回 `string`**（T1 修复轮明确指出的风险）
-> - **也不得加 `as const`** —— `as const` 使 `elements` 变 `readonly`，与 `satisfies` 的上下文类型（可变 `Record`）冲突 → **TS1360 编译失败**（T1 修复轮实测；评审最初给的 `as const satisfies` 组合就是错的）
+> - **也不得加 `as const`** —— **此处理由已更正**：经 TS 5.8.3 实测，`as const satisfies Record<string, IconGeometry>` **并不报错**（`IconGeometry.elements` 本就是 `readonly IconElement[]`，只读性不冲突），原先「会 TS1360」的说法**是错的、已撤回**。禁用它的理由改为：**它不带来任何额外约束** —— `satisfies` 已保留字面量键并校验形状，`as const` 只是把同一份只读类型再推一遍；一份计划里并存两种写法会让人误以为二者有语义差别。**统一写不带 `as const` 的形式。**
 > - `satisfies` 自身已保留字面量键 —— 这就是全部所需，不需要额外手法
 >
 > 并在 `paths.test.ts` 顶部加**类型层反向断言**（把「有人加回宽注解」从静默退化变成编译错）：
@@ -508,8 +508,21 @@ Expected: FAIL —— 名单缺 23 个（当前只有 `notes`）
 > // 类型层断言：若 IconName 塌回 string，本行编译失败（tsc --noEmit 覆盖测试文件）
 > type _IconNameIsNarrow = string extends IconName ? never : true;
 > const _iconNameIsNarrow: _IconNameIsNarrow = true;
+> void _iconNameIsNarrow; // ⚠️ 必须读一次：本仓库开了 `noUnusedLocals`，TS 只豁免**参数**的下划线前缀，缺这行会变成 TS6133
 > ```
 > 注意 `paths.ts` 里的 `GROUPS` **照旧用 `as const`**（那里没有 `satisfies` 约束，不冲突）。
+
+> **⚠️ 同时必须修掉 T1 遗留的「空转测试」缺陷（T1 任务评审的 Important 发现）**
+>
+> T1 交付的网格契约测试**对当时的数据完全空转**：坐标断言被 `el.tag === "circle"` / `"rect"` 守卫，而 T1 的注册表里只有 `path` 元素 ⇒ 两个分支**一次都没执行过**；且它**完全不检查 `path` 的 `d` 坐标**。本任务首次引入 circle/rect，必须把它改成真正有约束力的四条：
+>
+> 1. **圆四向校验**：`cx-r`、`cx+r`、`cy-r`、`cy+r` **全部**落在 `[0,24]`。原写法只查 `cx-r` 与 `cy+r`，漏掉**右溢出与上溢出**。
+>    （**更正**：本计划早先举例说 `{cx:100, cy:12, r:10}` 会漏过 —— **该例举反了**，`cx-r = 90` 不在网格内、原写法会拦住；真实漏检方向是 `cx+r > 24` 与 `cy-r < 0`，例如 `{cx:20, cy:12, r:10}`。）
+> 2. **`d` 必须以 `M x y` 起始，且起点落在 `[0,24]²`**
+> 3. **`d` 中全部数值 token 的 `|n| ≤ 24`** —— ⚠️ **不得**写成「全部数值 ≥ 0」：相对命令（`a`/`l`/`v`/`h`）的负增量是合法语法，本批数据里实测有 **32 处**负数（如 `review` 的 `-15.5`、`refresh` 的 `-6.4`）。探针实测全部数值**最大绝对值 = 21**，故 `|n| ≤ 24` 可通过且非空转。
+> 4. **各标签执行计数守卫**：累加 `path`/`circle`/`rect` 的实际访问次数并在末尾断言各自 > 0 —— 让「守卫把分支整条跳过」变成**可见的失败**，而不是一份永远全绿的空转测试。**这条是防复发的关键**，比前三条更重要。
+>
+> 上述四条**必须用变异探针逐条证伪过**才算完成：改坏数据 → 看测试确实失败 → 还原 → 确认 `git diff HEAD` 干净。
 
 把 `app/src/ui/icons/paths.domain.ts` 的 `DOMAIN_ICON_PATHS` 替换为：
 
@@ -577,7 +590,7 @@ export const DOMAIN_ICON_PATHS = {
       { tag: "path", d: "M18 15l.8 2.2 2.2.8-2.2.8L18 21l-.8-2.2-2.2-.8 2.2-.8z" },
     ],
   },
-};
+} satisfies Record<string, IconGeometry>;
 ```
 
 - [ ] **Step 4: 新建动作与对象图标（15 个）**
@@ -599,7 +612,7 @@ export const DOMAIN_ICON_PATHS = {
 
 import type { IconGeometry } from "./types";
 
-export const ACTION_ICON_PATHS: Readonly<Record<string, IconGeometry>> = {
+export const ACTION_ICON_PATHS = {
   /** 搜索：放大镜 */
   search: {
     elements: [
@@ -663,7 +676,7 @@ export const ACTION_ICON_PATHS: Readonly<Record<string, IconGeometry>> = {
       { tag: "path", d: "M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" },
     ],
   },
-};
+} satisfies Record<string, IconGeometry>;
 ```
 
 - [ ] **Step 5: 并入注册表**
@@ -852,7 +865,7 @@ git commit -m "test(ui): 内联 svg 棘轮守卫与图标导出面收口"
 **类型一致性**：`IconGeometry.elements` 的元素形态 ↔ `Icon.tsx` 的三分支渲染 ↔ `paths.test.ts` 的坐标检查三处一致（`path` 用 `d`；`circle` 用 `cx/cy/r`；`rect` 用 `x/y/w/h/rx?`）· `IconSize`（16|20|24）↔ `SCALE_TOKENS.iconSizes` 在测试里绑定 · `ICON_NAMES` 由 `Object.keys(ICON_PATHS)` 派生，故「名单断言」与「键集合断言」不会互相矛盾。
 
 **一处已被撤回的裁定（记录在案，勿重犯）**：初版计划把 `ICON_PATHS` 注解为 `Readonly<Record<string, IconGeometry>>`，导致 `IconName = keyof typeof ICON_PATHS` 实际是 **`string`**；我起初裁定「接受该偏差、留待批 4」，理由是「字面量联合需显式列出全部名字」。
-**该理由已被 T1 任务评审用 `tsc` 探针证伪**：只要分组数据保留**字面量键**（`as const satisfies Record<string, IconGeometry>`），即可**零列名**地派生联合 ——
+**该理由已被 T1 任务评审用 `tsc` 探针证伪**：只要分组数据保留**字面量键**（`satisfies Record<string, IconGeometry>` —— 字面量键由 `satisfies` 自身保留，无需 `as const`，见 Task 2 Step 3 的注解规则），即可**零列名**地派生联合 ——
 ```ts
 export type IconName = { [G in keyof typeof GROUPS]: keyof (typeof GROUPS)[G] }[keyof typeof GROUPS];
 ```
