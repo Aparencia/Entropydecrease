@@ -19,7 +19,6 @@
 | app/src-tauri/src/db_goals.rs | 707 | 超硬限（>600 行），不允许豁免 —— v0.18.0（REQ-248~250）：goals 三表 DDL + 实体 CRUD/绑定/结算钩子内聚；行映射与事务建目标共享 add_milestone 族；v0.18.1（REQ-255/256）毕业报告快照表与报告取数（结算快照/复习统计/成果物清单）再增 | 若再增长：毕业报告取数拆至 db_goals_graduation.rs |
 | app/src-tauri/src/commands_goals.rs | 673 | 超硬限（>600 行），不允许豁免 —— v0.18.0（REQ-248~250）：学习目标命令域（15 命令 + inner 纯编排 + 访谈校验/埋点/宣言组装/进度收集）——命令薄壳与 inner 同域（commands_knowledge_core 先例）；列表/详情/进度三视图共用 collect_signals/goal_card_metrics；v0.18.1 生命周期命令已拆至 commands_goals_lifecycle.rs | 若再增长：里程碑命令组拆至 commands_goals_milestones.rs |
 | app/src-tauri/src/ai_refine_task.rs | 670 | 超硬限（>600 行），不允许豁免 —— v0.8.0 F2-B4 拆分产物：精修任务执行域（任务编排/并发切片 worker 池/单片重试/部分成功/审计/落库）——并发编排与状态流转内聚 | 若再增长：refine_slices_concurrent 拆至 ai_refine_task_workers.rs |
-| app/src-tauri/src/note_filter.rs | 642 | 超硬限（>600 行），不允许豁免 —— v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证）；AI 部分已按登记计划拆至 note_filter_ai.rs | 若再增长：净化链拆至 note_filter_purify.rs |
 
 ## 301–600 档（须登记）
 
@@ -35,6 +34,7 @@
 | app/src/components/action-center/ActionCenterPanel.tsx | 537 | v0.20.5 行动中心独立页化：原 ActionCenterOverlay.tsx（509 行登记）更名迁移至 action-center/ 并去遮罩/关闭形态（refreshToken 切回重载）——编排内聚（TD-2026-09-06-G 预留目录兑现）；2026-09-06 实测登记 | 若再增长：队列/历史/SOP 三区拆至 action-center/ 子组件 |
 | app/src-tauri/src/commands_knowledge_core.rs | 529 | v0.13.1（REQ-202~205）：知识体系命令域（概念/模型/引用/审计——commands 9-18）内聚；源 commands_knowledge.rs（18 命令 + 校验）超限按规格 §四拆，本文件承接后半；commands 薄壳 + inner 纯函数 + @ai-context 注释内聚于命令域 | 若再增长：引用与审计拆至 commands_knowledge_links.rs |
 | app/src-tauri/src/live_frame_process.rs | 529 | v0.6.0 ADR-011 拆分产物：帧处理域（网格差异触发/两级判变/带外事件驱动/UI 面板抑制/字幕落库）内聚；process_frame 上下文参数 20+；H2 修复（OCR 热路径切超时变体）+ L2 修复（score 口径诚实化）行数微增 + v0.11.5 Task 2 新颖度变化区域接线再增 | 若再增长：handle_subtitle_frame 与 persist_voted_subtitle 拆至 live_subtitle_persist.rs |
+| app/src-tauri/src/note_filter.rs | 528 | **拆分进行中（批 0-C3 Task 8 S1/3）**：渲染层已拆至 note_filter_render.rs，本行行数每步由 `--write` 刷新 —— v0.6.0 M1（REQ-082/085）：笔记过滤域（过滤链 + AI 判定应用 + 画面要点净化）内聚于单一管线（双出口一致性由构造保证）；AI 部分已按登记计划拆至 note_filter_ai.rs | 拆分进行中：S2 净化纯函数族拆至 note_filter_purify.rs · S3 转写段过滤链拆至 note_filter_chain.rs（最终 ≤300 ⇒ 本条目整行移除） |
 | app/src-tauri/src/engine.rs | 526 | 引擎池句柄与同步 API（双 worker 编排 + ADR-009 设备状态 + M7 心跳/失败/缓存计数 + 有界等待变体）；三维复审 #5 超时排空机制（drain_asr/ocr_backlog）与 #3 ASR_FILE_TIMEOUT 文件级超时常量接入后，worker 主循环与请求协议按登记计划拆至 engine_worker.rs（见文末"已拆分"注记）回归本值 | 若再增长：排空机制与同步 API 变体拆至 engine_request.rs |
 | app/src-tauri/src/asr_merge.rs | 524 | v0.5.0 ADR-012 F4-1 语义合并域 + v0.7.0 M2 REQ-119 混排空格（spacing_for/merge_segments_with_spacing）；合并决策与切分共用标点常量 | 若再增长：split_sentences/split_timestamps 拆至 asr_merge_split.rs |
 | app/src/components/GroupSidebar.tsx | 519 | v0.20.12 批 7（REQ-316）拖拽归组/ⓘ 弹层移组清理留痕透传（509→519；登记值过期纠偏） | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
