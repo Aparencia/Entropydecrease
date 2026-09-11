@@ -114,7 +114,7 @@ pub fn postprocess_for_form(form: ContentForm) -> PostprocessRules {
             speaker_detect: false,
             glossary: false,
         },
-        // 解说：书面化+重点（叙事线模板变体见 artifact_templates）
+        // 解说：书面化+重点（叙事线模板变体已随产物模板下线）
         ContentForm::Explainer => PostprocessRules {
             chapter_detect: false,
             step_cards: false,

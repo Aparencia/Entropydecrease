@@ -1,11 +1,14 @@
 //! 产物块模型（REQ-052 / v0.5.0 M7，头脑风暴轮 5）。
 //!
-//! @ai-context: 一种原料，五种模板——ArtifactBlock 为产物体系最小单元：
+//! @ai-context: 一种原料，多种块——ArtifactBlock 为产物体系最小单元：
 //!              块**引用**原料不复制（refs 携带 segment/ocr_block 标识 + 时间戳），
 //!              原料可回看、可重算（G1 派生视图地基）。
 //! @ai-context: 纯数据定义 + JSON 序列化（serde），无副作用。
-//! @ai-context: source 标记来源：local（本地规则）/ ai_enhanced（V1.0 AI 补缝）/
-//!              placeholder（占位：AI 增强待 V1.0 或诚实降级标记）。
+//! @ai-context: `ArtifactKind` / `BlockPayload` / `BlockSource` 的变体是 `artifact_blocks`
+//!              表的 `kind` / `payload_json` / `source` **持久化格式契约**（含历史行）——
+//!              删除任一变体需配套数据迁移；它们只被测试构造，`dead_code` 不会提示。
+//! @ai-context: source 标记来源：local（本地规则，现行唯一写入值）/ ai_enhanced（历史数据来源标记：
+//!              补缝链已随批 1 删除，不再新写）/ placeholder（历史数据：重建失败诚实降级，不再新写）。
 
 use serde::{Deserialize, Serialize};
 
@@ -108,9 +111,10 @@ pub enum BlockPayload {
 pub enum BlockSource {
     /// 本地规则产物（默认）
     Local,
-    /// AI 补缝产物（V1.0 实装；0.5.0 仅协议/mock）
+    /// AI 补缝产物（**历史数据来源标记**：补缝链已随批 1 删除，现无写入路径；
+    /// 反序列化旧 `artifact_blocks.source` 行仍需要本变体）
     AiEnhanced,
-    /// 占位（AI 增强待 V1.0 / 重建失败诚实降级）
+    /// 占位（**历史数据**：重建失败诚实降级；现无写入路径）
     Placeholder,
 }
 

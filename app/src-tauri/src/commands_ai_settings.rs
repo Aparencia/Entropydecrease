@@ -3,6 +3,9 @@
 //! @ai-context: 系统层（AGENTS.md §6）——只做参数校验、调用业务模块
 //!              （ai_settings/ai_credentials/ai_balance/ai_client/
 //!              ai_guardrails）、错误映射。
+//!              ⚠️ 批 1 收口更正：旧单 provider 三命令删除后，本文件对
+//!              `ai_credentials` 已**无直接调用**——该模块经
+//!              `commands_ai_providers.rs` 的默认 Provider 解析路径仍在使用。
 //! @ai-context: 密钥解析优先级：环境变量 SILICONFLOW_API_KEY > 凭据库（DPAPI）；
 //!              密钥**永不回传前端**（视图只报存在性与来源——明文红线）。
 //! @ai-context: 授权红线：内容上传类调用（M2 精修/M3 补充）消费

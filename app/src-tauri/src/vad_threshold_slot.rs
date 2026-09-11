@@ -10,11 +10,11 @@
 
 use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
 
-/// VAD 当前阈值共享槽（AppState 持有；会话线程写、诊断读）。
+/// VAD 当前阈值共享槽（AppState 持有；**仅会话线程写**——诊断读端已随批 1 删除，见模块头）。
 #[derive(Debug, Default)]
 pub struct VadThresholdSlot {
     bits: AtomicU32,
-    /// 发布来源会话 id（0 = 无数据；诊断新鲜度判定）
+    /// 发布来源会话 id（0 = 无数据；原为诊断新鲜度判定用，当前无读取方）
     source_session: AtomicI64,
 }
 

@@ -104,8 +104,9 @@ impl ProfileMemory {
     /// 记录用户确认（四维形态优先版，REQ-188）：kind 存代表旧类（消费端兼容），
     /// form 存新形态（检测卡 v2 下次直接生效——同标题/同系列）。
     ///
-    /// @ai-context: form 为 None（Unknown 等无可映射形态）时仅记 kind——
-    ///              形态维度诚实未知，不猜默认；读取时 lookup_form 返回 None。
+    /// @ai-context: 本入口恒写 `Some(form)`；`form: None` 只可能来自旧 JSON（缺字段经
+    ///              serde 缺省），读取时由 `lookup_form` 走 `kind.to_form()` 兜底 ——
+    ///              批 1 删掉旧 `remember` 入口后，已无写端能产出 None。
     pub fn remember_form(&mut self, keyword: &str, form: crate::video_profile_spec::ContentForm) {
         let kind = crate::video_profile_spec_data::legacy_kind_for_form(form);
         self.remember_with_form(keyword, kind, Some(form));
