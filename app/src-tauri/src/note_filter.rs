@@ -33,7 +33,6 @@ use crate::purify_config::PurifyConfig;
 use crate::symbol_normalize::SymbolNormalizeConfig;
 use crate::types::{SessionOcrBlock, SessionScreen, SessionSegment};
 use crate::ui_junk::UiJunkList;
-use crate::verbal_normalize::{NormalizeConfig, NormalizeStrength};
 
 // ────────────────────────────────────────────────────────────
 // 拆分子模块（AGENTS.md §3：单文件 ≤300 行）——父模块**自己**用 #[path] 声明，
@@ -45,10 +44,19 @@ use crate::verbal_normalize::{NormalizeConfig, NormalizeStrength};
 #[path = "note_filter_render.rs"]
 mod render;
 
+/// 净化纯函数族 + 口头禅词表 + CJK 判定（过滤链与 note_filter_ai 共用）。
+#[path = "note_filter_purify.rs"]
+mod purify;
+
 /// 再导出：可见性与项 **1:1**（`pub` 项用 `pub use`、`pub(crate)` 项用
 /// `pub(crate) use`——后者写成 `pub use` 会触发 E0365，项本身不允许外泄）。
 pub use self::render::{refresh_screen_points, render_screen_points};
 pub(crate) use self::render::{apply_session_warning, rebuild_markdown};
+pub(crate) use self::purify::FILLER_WORDS;
+
+// 净化族（本步起 filter_note_transcript 仍在主文件 ⇒ 直接引入；S3 搬出后本行
+// 随之下线，否则触发 unused_imports）。
+use self::purify::{concat_transcript, is_filler_only, is_fragment, is_purified_empty, purify_segment};
 
 /// 净化环境（依赖注入聚合——净化配置 + 符号映射 + OCR 纠错表）。
 ///
@@ -66,18 +74,6 @@ pub struct PurifyEnv {
 /// 笔记规则版本（REQ-171：notes.rule_version 落库值——笔记可回答"用哪版规则
 /// 生成"；净化链每次规则变更递增；v0.7.6 结构渲染层接入 REQ-177~181）。
 pub const RULE_VERSION: &str = "note-rules-0.7.6";
-
-/// 口头禅词集（REQ-163 删除判定 + REQ-085 AI Filler 候选共用）。
-///
-/// @ai-context: v0.7.5 扩展（与 verbal_normalize 词表对齐——「大家知道吗/
-///              咱们/我们看」等口语高频词此前只在实时路径被清，笔记路径漏网）；
-///              短段全由这些词组成 → 规则级删除；"对"单字不删（回应语义，
-///              且碎片规则已按 ≤2 字处理——验收口径）。
-pub(crate) const FILLER_WORDS: &[&str] = &[
-    "嗯", "啊", "呃", "哦", "诶", "哎", "哈", "嗯嗯", "哈哈", "好的", "对", "那个", "这个",
-    "就是", "然后", "对吧", "是吧", "对不对", "对不对啊", "好不好", "就是说", "然后呢",
-    "你们知道吗", "大家知道吗", "大家注意", "大家看", "咱们", "我们看", "我们来看", "接下来呢",
-];
 
 /// 被过滤原因。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -411,104 +407,6 @@ fn filter_note_empty(title: &str) -> NoteFilterResult {
         body_source: BodySource::Empty,
         ocr_body: Vec::new(),
     }
-}
-
-/// 单段口语净化（纯函数）：结巴折叠 → 书面化（保守档 Light）→ 符号规范化 →
-/// 术语替换；返回净化后文本（统计计数由调用方入参累加）。
-///
-/// @ai-context: 顺序契约（会话31 实证驱动）：**折叠必须先于书面化**——verbal
-///              compress_repeats 会把"甲甲甲"先压成"甲甲"（2 连短语重复），
-///              折叠规则（≥3 连同字）随后不再命中，结巴残留（「甲甲甲」→「甲」
-///              验收不达标）；折叠在前则 3 连先收拢、书面化不再误动。
-fn purify_segment(
-    text: &str,
-    config: &PurifyConfig,
-    symbol_cfg: &SymbolNormalizeConfig,
-    stats: &mut FilterStats,
-) -> String {
-    let mut out = text.to_string();
-    let changed = |before: &str, after: &str| before != after;
-    let before = out.clone();
-    let mut fold_hit = false;
-    if config.stutter_fold {
-        let folded = crate::stutter_fold::fold_stutter(&out);
-        fold_hit = folded != out;
-        out = folded;
-    }
-    if config.verbal_normalize {
-        let vcfg = NormalizeConfig { strength: NormalizeStrength::Light };
-        out = crate::verbal_normalize::normalize(&out, &vcfg);
-    }
-    if config.symbol_normalize {
-        out = crate::symbol_normalize::normalize(&out, symbol_cfg);
-    }
-    let mut term_hit = false;
-    if config.term_replace {
-        let replaced = crate::stutter_fold::apply_term_replacements(&out);
-        term_hit = replaced != out;
-        out = replaced;
-    }
-    if changed(&before, &out) {
-        stats.verbal += 1;
-    }
-    if fold_hit {
-        stats.stutter += 1;
-    }
-    if term_hit {
-        stats.term_replace += 1;
-    }
-    out
-}
-
-/// 净化残留判定（纯函数）：空串 / 纯符号（无字母数字汉字）→ 无信息内容。
-fn is_purified_empty(text: &str) -> bool {
-    let t = text.trim();
-    t.is_empty() || t.chars().all(|c| !c.is_alphanumeric() && !is_cjk(c))
-}
-
-/// 口头禅短段判定（纯函数，REQ-163）：去首尾标点后 ≤filler_max_chars 字且
-/// 全部空白分隔 token ∈ 口头禅词表 → 删除候选。
-///
-/// @ai-context: "对不对？"→去"？"→"对不对" ✓；"对"单字 <2 不删（回应语义）；
-///              "3.14"数字不删（非口头禅词）；"你说得对"含"你说得"不删。
-fn is_filler_only(text: &str, config: &PurifyConfig) -> bool {
-    let stripped: String = text
-        .trim()
-        .trim_matches(|c: char| c.is_ascii_punctuation() || "。！？，、；：…·".contains(c))
-        .to_string();
-    let chars = stripped.chars().count();
-    if chars < 2 || chars > config.filler_max_chars {
-        return false;
-    }
-    let tokens: Vec<&str> = stripped.split_whitespace().collect();
-    !tokens.is_empty() && tokens.iter().all(|t| FILLER_WORDS.contains(t))
-}
-
-/// 保留段转写文本拼接（供 OCR 共现校验/纠错——画面词与讲述词互证）。
-fn concat_transcript(kept: &[SessionSegment]) -> String {
-    let mut out = String::new();
-    for s in kept {
-        out.push_str(&s.text);
-        out.push(' ');
-    }
-    out
-}
-
-/// 碎片段判定（纯函数）：≤2 字 / 时长 <500ms / 纯符号（阈值可配置 REQ-173）。
-///
-/// @ai-context: 纯符号 = 无字母数字汉字（"----/···"）；"3.14/2024" 含数字
-///              不算纯符号——误杀保护（数字内容不误删）。
-fn is_fragment(seg: &SessionSegment, config: &PurifyConfig) -> bool {
-    let text = seg.text.trim();
-    text.chars().count() <= config.fragment_max_chars
-        || seg.end_ms.saturating_sub(seg.start_ms) < config.fragment_min_duration_ms
-        || text.chars().all(|c| !c.is_alphanumeric() && !is_cjk(c))
-}
-
-/// CJK 统一表意文字区段（含扩展 A）。
-fn is_cjk(c: char) -> bool {
-    let u = c as u32;
-    (0x4E00..=0x9FFF).contains(&u) || (0x3400..=0x4DBF).contains(&u)
 }
 
 // ────────────────────────────────────────────────────────────
