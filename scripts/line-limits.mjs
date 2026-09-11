@@ -87,6 +87,95 @@ export function parseTable() {
   return rows;
 }
 
+/** 从现有登记表按路径抽出人工维护的两列（生成器保留它们） */
+function parseReasons() {
+  const abs = join(ROOT, TABLE_PATH);
+  const map = new Map();
+  if (!existsSync(abs)) return map;
+  for (const line of readFileSync(abs, 'utf8').split('\n')) {
+    const m = /^\|\s*`?([^|`]+?\.(?:rs|tsx?))`?\s*\|\s*\d+\s*\|\s*([^|]*)\|\s*([^|]*)\|/.exec(line);
+    if (m) map.set(m[1].trim(), { why: m[2].trim(), split: m[3].trim() });
+  }
+  return map;
+}
+
+/** 取该文件 `@ai-context` 的首行要点，作为自动补登时的理由 */
+function autoReason(absPath) {
+  const src = readFileSync(absPath, 'utf8');
+  // 捕获**整行**再清洗，而不是用 `[^\n*]+` 直接卡在 `*` 上 —— 本仓大量 `@ai-context` 行以
+  // `**加粗**` 开头（如 `@ai-context **域图标**几何（9 个）：…`），卡 `*` 会**一格都捕获不到**，
+  // 使 45 条自动理由全部退化成占位符。
+  const m = /@ai-context[：:]?\s*([^\n]+)/.exec(src);
+  if (!m) return '（待补理由：本条目由生成器补登）';
+  const text = m[1]
+    .replace(/\*\/\s*$/, '') // 单行块注释的收尾 `*/`
+    .replace(/\*\*/g, '') // 加粗标记
+    .trim();
+  return text ? `${text}（自动摘取，待细化）` : '（待补理由：本条目由生成器补登）';
+}
+
+/** 逐字保留「已拆分 / 登记移除记录」整节 */
+function parseHistory() {
+  const abs = join(ROOT, TABLE_PATH);
+  if (!existsSync(abs)) return '';
+  const src = readFileSync(abs, 'utf8');
+  const at = src.indexOf('## 已拆分');
+  return at < 0 ? '' : src.slice(at).trimEnd() + '\n';
+}
+
+function writeTable() {
+  const measured = scanTree();
+  const reasons = parseReasons();
+  // 并列时必须按路径断开：`scanTree` 的 Map 迭代序来自 readdirSync，**跨平台不一致**
+  // （Windows 与 Linux 的顺序可能不同）⇒ 只按行数排会让 `--write` 在不同平台产出不同字节。
+  const byLinesDesc = (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]);
+  const over = [...measured.entries()].filter(([, n]) => n > HARD_LIMIT).sort(byLinesDesc);
+  const band = [...measured.entries()].filter(([, n]) => n > SOFT_LIMIT && n <= HARD_LIMIT).sort(byLinesDesc);
+  // 单元格净化：文本里的半角 `|` 会撑破 Markdown 表格，并让下次 `parseReasons` 误切列。
+  // 换**全角** `｜` 而不是 `\|` —— 转义写法在下次读取时会被再次转义，破坏 `--write` 的幂等性。
+  const cell = (t, fallback) => {
+    const s = (t ?? '').replace(/\|/g, '｜').replace(/\s*\n\s*/g, ' ').trim();
+    return s || fallback;
+  };
+  const row = (p, n, why, split) => `| ${p} | ${n} | ${cell(why, '（待补理由）')} | ${cell(split, '若再增长：按职责拆分')} |`;
+
+  const lines = [
+    '# 单文件行数豁免登记（AGENTS.md §3：单文件 ≤300 行；301–600 行须登记本清单）',
+    '',
+    '> ⚠️ **本文件是生成物** —— 行数与条目成员关系由 `node scripts/line-limits.mjs --write` 生成，',
+    '> **不要手改数字、手加行或手删行**（会被 `node scripts/line-limits.mjs` 判为违规）。',
+    '> 「豁免理由」「拆分计划」两列由**人工**维护，生成器按路径保留；「已拆分 / 登记移除记录」节逐字保留。',
+    '>',
+    '> **测量口径（唯一有效）**：文件**全部行数**（含空行），等价于 `[System.IO.File]::ReadAllLines(path, UTF8).Count`。',
+    '> ⚠️ **禁用** `Get-Content` 数行（本机 PowerShell 5.1 + 码页 `gb2312` 会按 GBK 解码、吞换行、**少算**）与 `Measure-Object -Line`（**只数非空行**）。',
+    '>',
+    `> 规则：≤${SOFT_LIMIT} 行无需登记；${SOFT_LIMIT + 1}–${HARD_LIMIT} 行须登记；**>${HARD_LIMIT} 行必须硬拆，不允许豁免**。`,
+    '',
+    `## 超硬限（>${HARD_LIMIT} 行，必须硬拆，不允许豁免）`,
+    '',
+    '> 本表受棘轮守卫保护：**只允许减少**。每完成一个拆分，从 `scripts/line-limits.mjs` 的 `FROZEN_OVER_LIMIT` 删掉对应一行。',
+    '',
+    // ⚠️ 本表**保持 4 列**（与下一节同形），不要"顺手"简化成 3 列 —— `parseReasons` 用 4 列正则
+    // 按路径保留人工维护的两列，改成 3 列会让这些拆分计划在**下一次重生成时静默丢失**。
+    '| 文件 | 行数 | 说明 | 拆分计划 |',
+    '|---|---|---|---|',
+    ...over.map(([p, n]) => row(p, n, `超硬限（>${HARD_LIMIT} 行），不允许豁免`, reasons.get(p)?.split || `**超硬限必须拆**：拆到各文件 ≤${SOFT_LIMIT} 行`)),
+    '',
+    `## ${SOFT_LIMIT + 1}–${HARD_LIMIT} 档（须登记）`,
+    '',
+    '| 文件 | 行数 | 豁免理由 | 拆分计划 |',
+    '|---|---|---|---|',
+    ...band.map(([p, n]) => {
+      const r = reasons.get(p);
+      return row(p, n, r?.why || autoReason(join(ROOT, p)), r?.split);
+    }),
+    '',
+    parseHistory(),
+  ];
+  writeFileSync(join(ROOT, TABLE_PATH), lines.join('\n'), 'utf8');
+  console.log(`✅ 已重写 ${TABLE_PATH}：>${HARD_LIMIT} 硬限 ${over.length} · ${SOFT_LIMIT + 1}–${HARD_LIMIT} 档 ${band.length}`);
+}
+
 function check({ full }) {
   const measured = scanTree();
   // 规模自检：没有它，扫描域失效会让 (a)/(c) 静默通过、(d) 反把 117 条登记行报成"指向不存在的文件"。
@@ -156,5 +245,6 @@ function check({ full }) {
 // `import.meta.url` 在 Windows 上是 `file:///D:/.../a%20b.mjs`（三斜杠 + 空格转义成 %20），
 // 拼 `file://${process.argv[1]}` 得到的字符串**永远不相等** ⇒ 脚本会静默什么都不做（本计划初稿即有此错）。
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  check({ full: process.argv.includes('--full') });
+  if (process.argv.includes('--write')) writeTable();
+  else check({ full: process.argv.includes('--full') });
 }
