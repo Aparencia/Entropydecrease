@@ -17,14 +17,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note } from "../types";
 import { resolveNoteColor } from "../utils/colorPalette";
-import GroupSidebar from "../components/GroupSidebar";
 // 批 8（REQ-317）：模型卡对话框槽（拆件）与选区行动类编排（hook 收敛）
 import { useNoteSelectionActions } from "../hooks/useNoteSelectionActions";
-import NotesOverlays from "../components/notes/NotesOverlays";
-import NotesReadingColumn from "../components/notes/NotesReadingColumn";
+import NotesGroupsColumn from "../components/notes/NotesGroupsColumn";
 import NotesListColumn from "../components/notes/NotesListColumn";
-import ColumnResizer from "../components/ColumnResizer";
-import ColumnBar from "../components/ColumnBar";
+import NotesReadingColumn from "../components/notes/NotesReadingColumn";
+import NotesOverlays from "../components/notes/NotesOverlays";
 import { useColumnLayout } from "../hooks/useColumnLayout";
 import { useNoteAttention } from "../components/useNoteAttention";
 import { useNotesSealedFilter } from "../hooks/useNotesSealedFilter";
@@ -191,29 +189,21 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
-      {/* ── 左侧：组筛选侧栏（240px；v0.15 可拖拽/折叠为窄条）── */}
-      {groupsCol.folded ? (
-        <ColumnBar icon="📁" title="笔记组" onClick={groupsCol.expand} />
-      ) : (
-        <GroupSidebar
-          width={groupsCol.width}
-          groupFilter={groupFilter}
-          onGroupFilterChange={(id) => { setGroupFilter(id); setView("notes"); }}
-          onChanged={list.refreshAll}
-          // v0.20.10：复习=顶层页深链（ⓘ「复习本组」转页预选）——无本地 Overlay
-          onOpenReview={(groupId, name) => onOpenReview?.(groupId, name)}
-          selectedNoteId={selected?.id ?? null}
-          // 收件箱=全量碎片视图，与组过滤无关——清组过滤消除"组行高亮 + 收件箱"
-          // 并存矛盾（审查修复）
-          onOpenInbox={() => { setGroupFilter(null); setView("inbox"); }}
-          inboxActive={view === "inbox"}
-          refreshToken={list.refreshToken}
-          onOpenSystem={(id) => onOpenSystem?.(id)}
-          onCollapse={() => groupsCol.setManualFolded(true)}
-          onCleanNotice={notifyCleanNotice}
-        />
-      )}
-      <ColumnResizer onResize={groupsCol.resizeBy} onReset={groupsCol.resetWidth} />
+      {/* ── 左侧：组筛选侧栏（折叠窄条/列表切换 + 列拖拽手柄见
+          components/notes/NotesGroupsColumn）── */}
+      <NotesGroupsColumn
+        groupsCol={groupsCol}
+        groupFilter={groupFilter}
+        onGroupFilterChange={(id) => { setGroupFilter(id); setView("notes"); }}
+        onChanged={list.refreshAll}
+        onOpenReview={onOpenReview}
+        selectedNoteId={selected?.id ?? null}
+        onOpenInbox={() => { setGroupFilter(null); setView("inbox"); }}
+        inboxActive={view === "inbox"}
+        refreshToken={list.refreshToken}
+        onOpenSystem={onOpenSystem}
+        onCleanNotice={notifyCleanNotice}
+      />
 
       {/* ── 中部：收件箱视图 ↔ 笔记列表原位切换 + 列拖拽手柄（三形态切换见
           components/notes/NotesListColumn；手柄在折叠态也渲染）── */}

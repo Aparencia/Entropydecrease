@@ -152,7 +152,6 @@
 | app/src/types/goals.ts | 308 | 目标是学习循环的意图层对象（规格 §一）——可追踪/可毕业/可复盘（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/commands_knowledge_systems.rs | 306 | 本层只做参数校验、调用数据层、错误映射（AGENTS.md §6）；编排逻辑（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_session_refine.rs | 306 | 原料 session_segments 不可变（ADR-030 决策 5 可逆契约延续）——（自动摘取，待细化） | 若再增长：按职责拆分 |
-| app/src/pages/NotesPage.tsx | 305 | 超硬限（>600 行），不允许豁免 —— 审查修复轮 3/4（refreshToken 透传/选区动作编排承接）净增越 600 硬限（599→602）——随 TD-2026-09-09-D 登记 | **超硬限必须拆**：封存过滤族拆至 useNotesSealedFilter.ts / useNotesPageEditing.ts（既有登记计划兑现） |
 | app/src-tauri/src/note_diff.rs | 304 | 纯函数：按行（块）比较 before/after，三态标记 unchanged/（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src/components/SecondPassPanel.tsx | 303 | 会话结束后把 S4 落盘音频全窗重跑 SenseVoice（后端 second_pass_* 命令），（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/region_ocr.rs | 302 | 原始帧 → LayoutAnalyzer → 区域列表 → 逐区域裁剪（内存 crop + 边距）（自动摘取，待细化） | 若再增长：按职责拆分 |
