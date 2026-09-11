@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把 `app/src-tauri/src/app_commands.rs` 的 IPC 注册面从 **334 条降到 312 条**（删 **22** 条「有定义、有注册、前端生产代码零调用」的命令），连同它们的注册行、模块文档、专用私有 helper、**整模块级连带死代码**（`ai_judge` 模块 + `AiMockAdapter::enhance`，连带 **16 条 Rust 测试**）、`structuredBlocks.ts` 的过时占位死文案，并把 **ADR-010 修订为退役**；本批**纯减法**——不迁任何调用点、不改任何界面、不动 `app/src/ui/primitives/**`。
+**Goal:** 把 `app/src-tauri/src/app_commands.rs` 的 IPC 注册面从 **334 条降到 312 条**（删 **22** 条「有定义、有注册、前端生产代码零调用」的命令），连同它们的注册行、模块文档、专用私有 helper、**整模块级连带死代码**（`ai_judge` 模块 + `AiMockAdapter::enhance`，连带 **16 条 Rust 测试**〔**2026-09-12 更正**：连同 `ai_protocol.rs` 的 `AiEnhance*` 半边，实际连带 **26 条**（9+7+10）；批内另有 Task 3 的 −25〕）、`structuredBlocks.ts` 的过时占位死文案，并把 **ADR-010 修订为退役**；本批**纯减法**——不迁任何调用点、不改任何界面、不动 `app/src/ui/primitives/**`。
 
-**Architecture:** 删除面沿**已有的模块边界**切分（每条命令的 `#[tauri::command] fn` 在哪个文件、注册条目在 `app_commands.rs` 的哪一行，逐条给出 `文件:行`）。每个删除任务 = **一个文件（或一族同构命令）+ `app_commands.rs` 的注册行 + 行数豁免表刷新 + 一次显式路径提交**。删除后必须同时满足三条机器判据：① `scripts/check-command-registry.mjs` 三向一致且计数按预期下降（改 `app_commands.rs` 是**唯一会静默失败的面**：漏一条只有真机点到才报 `command … not found`）；② `cargo test --test app_lib_tests` 用例数**只按被删测试数下降**（2359 → 2343，仅在 Task 5）；③ `node scripts/line-limits.mjs --full` exit 0 —— 删除会让**已登记文件的行数变化**，因此**每个任务都必须同提交刷新 `docs/standards/line-limit-exemptions.md`**，否则 pre-commit 的 `--full` 会当场拦下提交。
+**Architecture:** 删除面沿**已有的模块边界**切分（每条命令的 `#[tauri::command] fn` 在哪个文件、注册条目在 `app_commands.rs` 的哪一行，逐条给出 `文件:行`）。每个删除任务 = **一个文件（或一族同构命令）+ `app_commands.rs` 的注册行 + 行数豁免表刷新 + 一次显式路径提交**。删除后必须同时满足三条机器判据：① `scripts/check-command-registry.mjs` 三向一致且计数按预期下降（改 `app_commands.rs` 是**唯一会静默失败的面**：漏一条只有真机点到才报 `command … not found`）；② `cargo test --test app_lib_tests` 用例数**只按被删测试数下降**（**2026-09-12 更正**：原写「2359 → 2343，仅在 Task 5」；实际 **2359 → 2334**（Task 3，−25）**→ 2308**（Task 4+5 合并为 `fd9dd8f9`，−26 = 9+7+10））；③ `node scripts/line-limits.mjs --full` exit 0 —— 删除会让**已登记文件的行数变化**，因此**每个任务都必须同提交刷新 `docs/standards/line-limit-exemptions.md`**，否则 pre-commit 的 `--full` 会当场拦下提交。
 
 **Tech Stack:** Tauri 2.11.5 + Rust 2021（`[lib] name = "app_lib"`，测试唯一入口 `cargo test --test app_lib_tests`）· React 19.1 + TypeScript 5.8（`strict`，禁 `any`）· Vitest 4 · Node 24（`scripts/*.mjs` 门禁）
 
@@ -46,7 +46,7 @@
   - `cd app && npx tsc --noEmit` → 0 错
   - `cd app && npx vitest run` → **基线见 Task 1 Step 1 的冻结值**；本批**只有 Task 9 允许下降 1 条**（删 `aiPlaceholderClass` 的那条断言），其余任务**必须完全持平**
   - `cd app/src-tauri && cargo build` → **不新增任何 warning**（与 Task 1 Step 1 的 `clippy-before.txt` 逐类比对）
-  - `cd app/src-tauri && cargo test --test app_lib_tests` → **2359 passed / 0 failed / 6 ignored**（唯一入口；`[lib] test = false` ⇒ **没有 `cargo test --lib`**）。⚠️ **只有 Task 5 允许下降 16 条**（→ 2343），其余任务持平。
+  - `cd app/src-tauri && cargo test --test app_lib_tests` → **2359 passed / 0 failed / 6 ignored**（唯一入口；`[lib] test = false` ⇒ **没有 `cargo test --lib`**）。⚠️ **只有 Task 5 允许下降 16 条**（→ 2343〔**该数字已作废，见紧随其后的更正**〕），其余任务持平。**2026-09-12 更正**：实际链为 **2359 → 2334**（Task 3，−25，控制方扩大删除面所致）**→ 2308**（Task 4+5 合并为一次提交，−26 = T5 本体的 9+7 ＋ `ai_protocol.rs` 的 `AiEnhance*` 半边 10）；「逐任务写死允许降多少」这条纪律不变。
   - 仓库根 `node scripts/line-limits.mjs --full` · `node scripts/docs-check.mjs` · `node scripts/check-command-registry.mjs` → 全 exit 0
 - **⚠️ 判退出码的固定口径（PS 5.1）**：`cargo` 往 stderr 写 warning 时，`2>&1 | …` 会被 PS 5.1 包成 `NativeCommandError`，让**成功的命令报 exit 1**（`docs/versions/v0.22.md:121-126` 实测）。⇒ 原生命令一律 `2>file` 重定向或直接读 `$LASTEXITCODE`，**不要用 `2>&1 |`**。
 - **⚠️ `ffmpeg::tests::run_captured_handles_large_output` 是装载敏感偶发失败**（内含 10s 墙钟超时；同时跑 `cargo build` + `vitest` 时会被拖超时）。实测本会话就撞过一次（`2358 passed; 1 failed`）⇒ 判定门禁时**串行执行**，或单独复跑该用例再下结论（`docs/versions/v0.22.md:133` 已登记）。
@@ -55,6 +55,16 @@
 - **提交纪律**：`git commit --only -m "<msg>" -- <显式路径…>`（本仓**多 agent 并行**，裸 `git commit` 会扫走别人已暂存的条目**包括 `D` 删除条目**）。禁止 `git add -A` / `git add .` / `git stash` / `git checkout -- <file>` / `git clean`（任何形式）/ `--no-verify`。提交信息 Conventional Commits：`<type>(<scope>): <subject>`，subject ≤50 字、动词开头、无句号。**删除文件用 `git rm <路径>` 单独暂存**，并在 `git diff --cached --stat --diff-filter=D` 里复核删除清单。
 - **★ 可验证主张必须带 `git log -S`**：本批两条「首次」主张的工具化证据见 Task 1 Step 1 与 Task 10 Step 1 —— 不得写成无证据的形容词。
 - **★ 提交树上判门禁**：判「某个提交是否自洽」必须导出该提交的树再跑（`git -c core.autocrlf=false archive -o t.tar <commit>` → `tar -xf` → 在该树内跑它自带的脚本），**不要**拿工作树当时的绿当提交事实（`DISPATCH-TEMPLATE.md` §三末条）。
+
+## 本批执行中的控制方裁决（2026-09-12 追加 —— 只加注记，不改写上文）
+
+> 执行期间控制方作出的裁决与实测纪律**改变了本计划的部分条文与数字**。原文一律**保留不删**，改动处就地加注；本节只是**指针**，完整理由与读数见台账 `progress.md` §〇·9–§〇·14（该目录不入库）。
+
+- **(a) §四·3 的 L211 已被推翻**：`ai_protocol.rs` 的 `AiEnhance*` 半边**不予保留**，已随 `fd9dd8f9` 删除（理由、规格先例与可逆性见 §四·3 表下注记）；受影响的测试数一并更正为 **2308**。
+- **(b) §四·3「不删」清单已被实测证伪三次**：L210 由 Task 3 推翻（`artifact_templates` 家族实际整族删除）· L211 由 Task 4 推翻 · Task 2 复核行 **L445** 的「5 处调用点」实测只有 3 处 `recognize_image` + 1 处 `transcribe_audio`。⇒ **后续任务必须对每一条「不删」条目自己实测复核，不得直接采信本计划的判断。**
+- **(c) 还原或重新施加源文件后必须 `touch` 再复验**：`Copy-Item` 保留源 mtime ⇒ cargo 判定产物最新（`Finished in 0.5–0.6s`），复验读到的是**陈旧缓存里的警告集**（曾读出 build 20 / clippy 35 的假读数，与哈希证据矛盾）。
+- **(d) `git archive` 把当前工作目录当作 pathspec 过滤器**：在**未跟踪的子目录**里执行会产出 **10240 字节的空归档且 exit 0** ⇒ 基于该归档文件清单的残留扫描会**全报 0 命中（假绿）**。**一律在仓库根执行 + 绝对 `-o` 路径**（完整树约 14.6 MB，可作自检判据）。
+- **(e) `dead_code` 不是完整的死代码清单**：它既不覆盖 **crate 根可达的 `pub` 项**，也不覆盖**被 serde derive 掩蔽、只在测试里构造的项**（Task 3 实测：20 个枚举变体零诊断地孤儿化）⇒ 警告普查之外**必须另做 `pub` 面可达性分析与 serde 面复核**。
 
 ---
 
@@ -69,7 +79,7 @@
 | 注册条目（官方逐行口径） | **334** | `node scripts/check-command-registry.mjs` → `✅ 命令注册一致：定义 334 / 注册 334 / 重复 0` |
 | 前端生产代码零引用的命令 | **47** | 见下方「复算脚本」；与规格 §9 的 47 条**逐条相同（0 漂移）** |
 | Rust 非测试用例总数（含 ignored） | **2365**（2359 有效 + 6 ignored） | `cargo test --test app_lib_tests` |
-| `app/src-tauri/src` 里由本批删除的测试 | **16** | `cargo test --test app_lib_tests ai_judge::` = 9 · `cargo test --test app_lib_tests ai_mock::` = 7 |
+| `app/src-tauri/src` 里由本批删除的测试 | **16**（**2026-09-12 更正：本批实际共删 51 条**） | `cargo test --test app_lib_tests ai_judge::` = 9 · `cargo test --test app_lib_tests ai_mock::` = 7 —— 另有 Task 3 连带 **−25**（控制方扩大删除面）与 `ai_protocol.rs` 的 `AiEnhance*` 半边 **−10** ⇒ `cargo test --test app_lib_tests` **2359 → 2334 → 2308** |
 | 前端 vitest 基线 | **124 文件 / 1125 用例全绿**（`dev@52856ab6` 复测，exit 0） | `cd app && npx vitest run` |
 
 **复算脚本（不要新建文件；用一段内联 node 或按上面的正则手写 PowerShell 均可，判据逐条对应本节的匹配式）**
@@ -208,9 +218,15 @@ node -e "const{readFileSync,readdirSync,statSync}=require('fs');const{join,extna
 | `concat.rs` / `NoteDraft` / `NewNote` | `concat::build_note_draft` 仍被 `commands.rs:343` 的 `process_to_note` 调用 |
 | `vad_threshold_slot` 模块 | `app_setup.rs:154` 建槽、`live_session.rs:71` / `live_session_loop.rs:61` 消费 |
 | `artifact.rs` / `artifact_templates.rs` / `db_artifacts.rs` | `refine.rs:86` / `db_artifacts.rs` 等 refine 链路在用（`build_artifact` 实测 25 处命中、`replace_artifact` / `get_artifact` 各有非本模块消费者） |
-| `ai_protocol.rs` 的 `AiEnhance*` 半边 | `ai_protocol.rs` **与活的 REQ-085 文本复核共用**（`TextFilterRequest/Response/Decision/Action` 被 `ai_text_filter.rs:18`、`note_filter_ai.rs:13`、`commands_session_note.rs:18`、`commands_ai.rs` 消费）⇒ **不为删半边而切一个共用的 17 条测试的协议文件**；登记给批 8（见「未做（登记）」） |
+| `ai_protocol.rs` 的 `AiEnhance*` 半边 | `ai_protocol.rs` **与活的 REQ-085 文本复核共用**（`TextFilterRequest/Response/Decision/Action` 被 `ai_text_filter.rs:18`、`note_filter_ai.rs:13`、`commands_session_note.rs:18`、`commands_ai.rs` 消费）⇒ **不为删半边而切一个共用的 17 条测试的协议文件**；登记给批 8（见「未做（登记）」）　⛔ **2026-09-12 控制方裁决：本行已被推翻——该半边已随 `fd9dd8f9` 删除，理由与先例见本表下方注记** |
 | `structuredBlocks.ts` 的其余 3 个导出与整模块 | 控制方 2026-09-11 裁决：**整模块存废不归批 1**；`lowConfidenceClass` 是规格 §4.1 `--due` 行点名的「低置信点线」消费场景 ⇒ 属**有意要的功能**，二选一（接线 / 删除）登记给**批 7** |
 | `App.css:119` 的 `.ed-low-confidence` 记述 | 该文件**已于批 0-D Task 13 删除**（实测工作树无 `app/src/App.css`）；只在 Task 9 报告里记录闭环关系，不产生改动 |
+
+> ⛔ **控制方注记（2026-09-12，批 1 执行中；上文一字未删，仅加注）**：上表 `ai_protocol.rs` 的 `AiEnhance*` 半边一行**已被推翻**。
+> ① **理由**：删掉补缝三连（`scan_ai_candidates` / `ai_enhance_mock` / `ai_enhance_status`）后，该半边的 7 个类型（`AiEnhanceRequest` / `AiRequestType` / `AiSourceRef` / `AiContext` / `AiEnhanceResponse` / `AiResponseContent` / `AiNode`）＋ `AiEnhanceResponse::validate` 共 **8 个符号已无任何生产消费者**（实测活代码只消费 `TextFilter{Request,Response,Decision,Action}` 四类型，对其 **0 依赖**），保留即必然新增 **8 条 `dead_code` 警告** ⇒ **与本计划自己的 Global Constraints（每个任务必须全绿 · 不新增任何 warning）冲突，即计划与其自身约束不自洽，批 1 收口门禁不可达绿** ⇒ **以 Global Constraints 为准**。
+> ② **规格先例**：`vad_threshold_diag` 判删的原文理由是「开发诊断用；未来若需要，届时按诊断需求重新引入，**不留半成品**」——`AiEnhance*` 半边正是「唯一生产消费者已被删的半成品脚手架」，处境完全同构。
+> ③ **可逆**：git 历史完整保留，`git show fd9dd8f9^:app/src-tauri/src/ai_protocol.rs` 可取回（与 `ASR_REQUEST_TIMEOUT` 同一口径）。
+> ④ **落地读数**（`fd9dd8f9`）：`ai_protocol.rs` 251 → **104** 行 · `ai_protocol_tests.rs` 17 → **7** 条（`TextFilter` 四类型与其 7 条测试**逐字节未改**）· registry 321/321/0 · `cargo test` **2308 / 0 / 6**。详见台账 **§〇·13**（裁决）与 **§〇·14**（落地）。
 
 ### 五、行数落点预算（**实测为准**；预算值用于交叉核对，差 >5 行必须查原因）
 
@@ -276,7 +292,7 @@ node -e "const{readFileSync,readdirSync,statSync}=require('fs');const{join,extna
 | 2 | `commands.rs` 旧直调四连 | T1 | ❌ 与 T3–T8 串行 |
 | 3 | `commands_artifacts` 整模块 | T2 | 同上 |
 | 4 | `commands_ai.rs` 补缝三连 | T3 | 同上 |
-| 5 | 补缝连带模块（`ai_judge` + `enhance`，−16 用例） | T4 | 同上（**必须紧跟 T4**：T4 之后才成死代码） |
+| 5 | 补缝连带模块（`ai_judge` + `enhance`，−16 用例） | T4 | 同上（**必须紧跟 T4**：T4 之后才成死代码）　⛔ **2026-09-12 实况：与 T4 合并为一次提交（`fd9dd8f9`），并连带 `ai_protocol.rs` 的 `AiEnhance*` 半边 ⇒ 实际 −26 用例、落地 2308**。**T3 的删除面亦经控制方扩大 ⇒ T3 实测 −25** |
 | 6 | 四单体（groups / fragments / refine / diag） | T5 | 同上 |
 | 7 | `commands_video` 四连 | T6 | 同上 |
 | 8 | `open_capture_float` 改判删除 | T7 | 同上 |
@@ -494,7 +510,7 @@ git commit --only -m "chore(rust): 删产物命令整模块" -- app/src-tauri/sr
 | 命令 | 期望 |
 |---|---|
 | `node scripts/check-command-registry.mjs` | `定义 324 / 注册 324 / 重复 0` |
-| `cd app/src-tauri; cargo test --test app_lib_tests` | `2359 passed; 0 failed; 6 ignored`（本模块 0 测试） |
+| `cd app/src-tauri; cargo test --test app_lib_tests` | `2334 passed; 0 failed; 6 ignored`（**2026-09-12 更正**：原写「2359，本模块 0 测试」；控制方裁决扩大 Task 3 删除面后实测 **2359 → 2334 = −25**（17+8），落地 `6f90f7b1`） |
 | `Test-Path app/src-tauri/src/commands_artifacts.rs` | `False` |
 | `Select-String … 'commands_artifacts'` | 全仓 0 命中（含 `lib.rs` / `app_commands.rs`） |
 | `node scripts/line-limits.mjs --full` | exit 0；`lib.rs` 与 `app_commands.rs` 登记值更新 |
@@ -553,7 +569,7 @@ git commit --only -m "chore(rust): 删补缝三连命令（ADR-010 退役前置�
 | 命令 | 期望 |
 |---|---|
 | `node scripts/check-command-registry.mjs` | `定义 321 / 注册 321 / 重复 0` |
-| `cd app/src-tauri; cargo test --test app_lib_tests` | `2359 passed; 0 failed; 6 ignored`（**不许变**：`commands_ai.rs` 无内联测试） |
+| `cd app/src-tauri; cargo test --test app_lib_tests` | `2334 passed; 0 failed; 6 ignored`（**不许变**：`commands_ai.rs` 无内联测试）（**2026-09-12 更正**：原写 2359 —— Task 3 已先降至 2334；本任务与 Task 5 合并落地后为 **2308**） |
 | `[System.IO.File]::ReadAllLines('app/src-tauri/src/commands_ai.rs',[Text.Encoding]::UTF8).Count` | ≤300（预算 ~291）且**与豁免表无该行**一致 |
 | `Select-String … '\bai_judge\b'`（在 `commands_ai.rs` 内） | 0 命中 |
 | `node scripts/line-limits.mjs --full` | exit 0；`301–600 档` 计数 **−1** |
@@ -563,9 +579,9 @@ git commit --only -m "chore(rust): 删补缝三连命令（ADR-010 退役前置�
 
 ---
 
-### Task 5: 补缝连带模块删除（`ai_judge` + `AiMockAdapter::enhance`，−16 用例）
+### Task 5: 补缝连带模块删除（`ai_judge` + `AiMockAdapter::enhance`，−16 用例）　⛔ **2026-09-12 控制方裁决：本任务与本批 Task 4 合并为一次提交（`fd9dd8f9`），并连带删除 `ai_protocol.rs` 的 `AiEnhance*` 半边 ⇒ 实际 −26 用例（9+7+10），落地 `2308 passed / 0 failed / 6 ignored`**
 
-> **本任务是规格 §9 L505「唯一例外是补缝三连的模块级连带死代码」的落地**，也是本批**唯一会改变 Rust 用例数**的任务。⚠️ **它是可独立裁剪的**：跳过它不影响 T1–T4 / T6–T8 的任何数字（注册计数仍是 321→317 的下一步起点），若控制方裁决「删除面再窄一点」，**直接跳过本任务并把它登记给批 8** 即可。
+> **本任务是规格 §9 L505「唯一例外是补缝三连的模块级连带死代码」的落地**，也是本批**唯一会改变 Rust 用例数**的任务。⚠️ **它是可独立裁剪的**：跳过它不影响 T1–T4 / T6–T8 的任何数字（注册计数仍是 321→317 的下一步起点），若控制方裁决「删除面再窄一点」，**直接跳过本任务并把它登记给批 8** 即可。　⛔ **2026-09-12 实况：控制方裁决为「执行」而不是跳过**（见「本批执行中的控制方裁决」(a)），且删除面扩到 `ai_protocol.rs` 的 `AiEnhance*` 半边 ⇒ 实际 −26 用例。
 
 **Files:**
 - Delete: `app/src-tauri/src/ai_judge.rs`（158 行）· `app/src-tauri/src/ai_judge_tests.rs`（139 行 / 9 用例）
@@ -578,7 +594,7 @@ git commit --only -m "chore(rust): 删补缝三连命令（ADR-010 退役前置�
 
 **Interfaces:**
 - Consumes: T4
-- Produces: `RUST_AFTER = 2343 passed / 0 failed / 6 ignored`；注册计数**仍 321**
+- Produces: `RUST_AFTER = 2308 passed / 0 failed / 6 ignored`（**2026-09-12 更正**：原写 2343 —— = 合并单元入口值 2334 − 26）；注册计数**仍 321**
 
 - [ ] **Step 1: 死代码三重确认（每条都要有输出）**
 
@@ -610,13 +626,13 @@ git rm app/src-tauri/src/ai_judge.rs app/src-tauri/src/ai_judge_tests.rs app/src
 - module doc `:3-7` 里描述「按请求类型规则生成合法响应 / mock 响应对请求类型做结构化回复」两句**改写**为只描述 `review_text` / `refine` / `enrich`（否则文档说谎）。
 - 删尾部 `:226-229` 的 `/// 单测独立文件…` + `#[cfg(test)] #[path = "ai_mock_tests.rs"] mod tests;`。
 
-- [ ] **Step 4: 门禁（用例数必须精确下降 16）+ 提交**
+- [ ] **Step 4: 门禁（用例数必须精确下降 16）+ 提交** —— **2026-09-12 更正：合并单元须精确下降 26**（T5 本体 16 ＋ `ai_protocol.rs` 的 AiEnhance 侧 10）
 
 ```powershell
 cd app/src-tauri
 cargo build 2> ..\..\$S\tmp\t5-build.txt
 cargo test --test app_lib_tests 2> ..\..\$S\tmp\t5-rust.txt ; "exit=$LASTEXITCODE"
-Select-String -Path ..\..\$S\tmp\t5-rust.txt -Pattern 'test result:'      # 期望 ok. 2343 passed; 0 failed; 6 ignored
+Select-String -Path ..\..\$S\tmp\t5-rust.txt -Pattern 'test result:'      # 期望 ok. 2308 passed; 0 failed; 6 ignored（2026-09-12 更正：原写 2343）
 cd ../..
 node scripts/line-limits.mjs --full ; node scripts/docs-check.mjs ; node scripts/check-command-registry.mjs   # 321/321/0
 git add app/src-tauri/src/lib.rs app/src-tauri/src/ai_mock.rs
@@ -629,13 +645,13 @@ git commit --only -m "chore(rust): 删补缝判定器与 mock 增强死模块" -
 | 命令 | 期望 |
 |---|---|
 | `node scripts/check-command-registry.mjs` | `定义 321 / 注册 321 / 重复 0`（**与 T4 相同**：本任务不删命令） |
-| `cd app/src-tauri; cargo test --test app_lib_tests` | **`2343 passed; 0 failed; 6 ignored`** —— 必须**恰好**比 `RUST_BEFORE` 少 16；若少 17 或多 1 ⇒ 停手上报（说明有别的测试引用了被删符号） |
+| `cd app/src-tauri; cargo test --test app_lib_tests` | **`2308 passed; 0 failed; 6 ignored`**（**2026-09-12 更正**：原写 2343）—— 必须**恰好**比合并单元的入口值 `2334` 少 **26**（T5 本体 9+7 = 16 ＋ `ai_protocol.rs` 的 `AiEnhance*` 半边 10）；若少 27 或多 1 ⇒ 停手上报（说明有别的测试引用了被删符号） |
 | `Test-Path app/src-tauri/src/ai_judge.rs` 等三文件 | 全 `False` |
 | `Select-String … '\bai_judge\b'` | 全仓 0 命中 |
 | `cargo build` warning 计数 | ≤ `CLIPPY_BEFORE` |
 | `node scripts/line-limits.mjs --full` | exit 0（`ai_judge.rs` / `ai_mock.rs` 均不在登记表） |
 
-**Rollback:** `git revert <commit>` —— 会一并恢复 3 个文件与 `lib.rs` 的 `mod` 行；因为 `ai_judge_tests.rs` 的挂载点在被恢复的 `ai_judge.rs` 内，revert 后测试数回到 2359（**独立验证 revert 完整性的一次机会**，建议在报告里给一次 revert 演练的干跑结论，若时间不允许则如实写「未演练」）。
+**Rollback:** `git revert <commit>` —— 会一并恢复 3 个文件与 `lib.rs` 的 `mod` 行；因为 `ai_judge_tests.rs` 的挂载点在被恢复的 `ai_judge.rs` 内，revert 后测试数回到 **2334**（**2026-09-12 更正**：原写 2359 —— T4+T5 已合并为 `fd9dd8f9`，回滚该提交即回到其入口值 2334，也就是 Task 3 之后的态）（**独立验证 revert 完整性的一次机会**，建议在报告里给一次 revert 演练的干跑结论，若时间不允许则如实写「未演练」）。
 
 ---
 
@@ -686,7 +702,7 @@ git commit --only -m "chore(rust): 删组/碎片/精修/诊断四单体命令" -
 | 命令 | 期望 |
 |---|---|
 | `node scripts/check-command-registry.mjs` | `定义 317 / 注册 317 / 重复 0` |
-| `cd app/src-tauri; cargo test --test app_lib_tests` | `2343 passed; 0 failed; 6 ignored`（本任务 0 测试；**不许再降**） |
+| `cd app/src-tauri; cargo test --test app_lib_tests` | `2308 passed; 0 failed; 6 ignored`（本任务 0 测试；**不许再降**）（**2026-09-12 更正**：原写 2343） |
 | `node scripts/line-limits.mjs --full` | exit 0；`commands_groups.rs`（~272）/`commands_refine.rs`（~173）/`commands_diag.rs`（~121）**均不在登记表**（≤300）；`commands_fragments.rs` 数值更新 |
 | `cd app; npx vitest run` | 与 `VITEST_BEFORE` 相同 |
 
@@ -739,7 +755,7 @@ git commit --only -m "chore(rust): 删旧视频档案四命令" -- app/src-tauri
 | 命令 | 期望 |
 |---|---|
 | `node scripts/check-command-registry.mjs` | `定义 313 / 注册 313 / 重复 0` |
-| `cd app/src-tauri; cargo test --test app_lib_tests` | `2343 passed; 0 failed; 6 ignored`（`commands_video.rs` 的测试在独立文件 `commands_video_tests.rs`，实测**不引用**这 4 条 ⇒ 不许降） |
+| `cd app/src-tauri; cargo test --test app_lib_tests` | `2308 passed; 0 failed; 6 ignored`（`commands_video.rs` 的测试在独立文件 `commands_video_tests.rs`，实测**不引用**这 4 条 ⇒ 不许降）（**2026-09-12 更正**：原写 2343） |
 | `Select-String … 'commands_video::'`（在 `app_commands.rs` 内） | 剩余条目数 = 删除前 − 4；且 `remember_video_profile_form` / `_domain` / `video_profile_for_spec` / `video_profile_memory` **仍在** |
 | `node scripts/line-limits.mjs --full` | exit 0；`commands_video.rs` 登记值 ≈311 |
 
@@ -799,7 +815,7 @@ git commit --only -m "chore(rust): 删 open_capture_float 并同步规格改判"
 | 命令 | 期望 |
 |---|---|
 | `node scripts/check-command-registry.mjs` | `定义 312 / 注册 312 / 重复 0` |
-| `cd app/src-tauri; cargo test --test app_lib_tests` | `2343 passed; 0 failed; 6 ignored`（`commands_window.rs` 的 2 条测试与 `open_capture_float` 无关 ⇒ 不许降） |
+| `cd app/src-tauri; cargo test --test app_lib_tests` | `2308 passed; 0 failed; 6 ignored`（`commands_window.rs` 的 2 条测试与 `open_capture_float` 无关 ⇒ 不许降）（**2026-09-12 更正**：原写 2343） |
 | `Select-String … 'open_capture_float'` | 全仓 0 命中（含 `app_setup.rs` 注释） |
 | `node scripts/docs-check.mjs` | exit 0（规格改动未破坏链接） |
 | `node scripts/line-limits.mjs --full` | exit 0；`commands_window.rs` 登记值 ≈357；**`app_setup.rs` 数值仍 420**（行数不变的正向用例） |
@@ -1009,7 +1025,7 @@ git status --short
 | `docs-check.mjs` | exit 0 |
 | `npx tsc --noEmit` | 0 错 |
 | `npx vitest run` | `VITEST_BEFORE` **−1 用例**（仅 Task 9 的删除） |
-| `cargo test --test app_lib_tests` | **`2343 passed / 0 failed / 6 ignored`** |
+| `cargo test --test app_lib_tests` | **`2308 passed / 0 failed / 6 ignored`**（**2026-09-12 更正**：原写 2343） |
 | `cargo build` warning | ≤ `CLIPPY_BEFORE` |
 | `git status --short` | 只剩历史遗留的 `?? docs/tech-debt/`、`?? tmp/`、以及并行 agent 的文件（**本批不碰**） |
 
@@ -1023,14 +1039,14 @@ git show --stat --oneline HEAD~N..HEAD | Select-String 'app_commands.rs'   # 本
 
 - [ ] **Step 3: 规格进度标记（照批 0-D 的体例）**
 
-1. §10 `:515` 批 1 行：在「内容」列后补 `**✅ 已落（2026-09-11，批 1）**`，并把验收列写真：`注册表 334→312（22 条）；cargo test 2343/0/6 全绿；ADR-010 已废弃；structuredBlocks:63 死文案已清`。
-2. §10 表下补一行归属注（与批 0 那条 ADR 归属注同体例）：`| ↳ 批 1 的收口（批 1 完成时更新） | **22 条命令已删**（规格原写 21 + #41 \`open_capture_float\` 改判）· **补缝三连连带模块已删**（\`ai_judge\` + \`AiMockAdapter::enhance\`，−16 用例）· **ADR-010 已废弃** · **\`structuredBlocks\` 死文案已清**（整模块存废登记给批 7） | — |`
+1. §10 `:515` 批 1 行：在「内容」列后补 `**✅ 已落（2026-09-11，批 1）**`，并把验收列写真：`注册表 334→312（22 条）；cargo test 2308/0/6 全绿；ADR-010 已废弃；structuredBlocks:63 死文案已清`（**2026-09-12 更正**：原写 `2343/0/6`）。
+2. §10 表下补一行归属注（与批 0 那条 ADR 归属注同体例）：`| ↳ 批 1 的收口（批 1 完成时更新） | **22 条命令已删**（规格原写 21 + #41 \`open_capture_float\` 改判）· **补缝三连连带模块已删**（\`ai_judge\` + \`AiMockAdapter::enhance\`，−26 用例〔**2026-09-12 更正**：原写 −16；实际含 `ai_protocol.rs` 的 `AiEnhance*` 半边 10 条〕）· **ADR-010 已废弃** · **\`structuredBlocks\` 死文案已清**（整模块存废登记给批 7） | — |`
 3. §11 验收 7 下方补进度注：`> **进度（2026-09-11 批 1）**：47 条中 **22 条已删**、**25 条处置已定但未执行**（补 UI 12 → 批 7 · 登记不排期 7 → 批 7/无期 · 撤下 IPC 3 → 批 7 · 有意保留 3）。无「不知道」。`
 4. §13 风险表「删命令删到活代码」行的缓解栏：`**每条删除前重新确认调用方**（一次 grep）` → 补实测结论：`**每条删除前三向复核（前端字面量 / 前端测试 / Rust 调用形态）；本批 22 条全部为空**（机械口径见批 1 计划 §现状普查；⚠️ \`includes()\` 子串判定会误判，实测 \`"auto_refine_session"\` 含 \`refine_session\`、\`"finish_photo_session"\` 含 \`finish_session\`）`。
 
 - [ ] **Step 4: `docs/versions/v0.22.md` 交付记录追加「批 1」节**
 
-在「### 批 0 其余部分（未落地）」之后（或交付记录节末尾）追加，体例照批 0-A/0-B：**交付**（22 条命令 + 连带模块 + 16 用例 + 文档）+ **验收**（四条门禁的确切数字）+ **规格漂移纠正清单**（见本计划文末「规格漂移」节，逐条抄入）+ **过程中纠正的计划错误**（由实施者/评审者实测抓出的，逐条列出）+ **未做（登记）**。
+在「### 批 0 其余部分（未落地）」之后（或交付记录节末尾）追加，体例照批 0-A/0-B：**交付**（22 条命令 + 连带模块 + 26 用例〔**2026-09-12 更正**：原写 16 用例；另含 `ai_protocol.rs` 的 `AiEnhance*` 半边 10 条〕 + 文档）+ **验收**（四条门禁的确切数字）+ **规格漂移纠正清单**（见本计划文末「规格漂移」节，逐条抄入）+ **过程中纠正的计划错误**（由实施者/评审者实测抓出的，逐条列出）+ **未做（登记）**。
 
 - [ ] **Step 5: 批次台账 `progress.md`（不入库）+ 提交**
 
@@ -1058,7 +1074,7 @@ git commit --only -m "docs(spec): 批 1 收口——进度标记与交付记录"
 ## 完成本批后的状态
 
 - **IPC 注册面 334 → 312**（净删 22 条），`app_commands.rs` 与命令定义侧三向一致（`scripts/check-command-registry.mjs` 机器守）。
-- **补缝式 AI 在代码层清空**：三条命令 + `ai_judge` 判定器模块 + `AiMockAdapter::enhance`，连带 **16 条 Rust 用例**（2359 → 2343，精确下降、无附带损失）。
+- **补缝式 AI 在代码层清空**：三条命令 + `ai_judge` 判定器模块 + `AiMockAdapter::enhance` + `ai_protocol.rs` 的 `AiEnhance*` 半边，连带 **26 条 Rust 用例**（**2026-09-12 更正**：原写「16 条 /（2359 → 2343）」；实际 T4+T5 合并单元 **2334 → 2308 = −26**（−16 = 9+7 · −10 = AiEnhance 侧），精确下降、无附带损失；批内另有 Task 3 的 −25）。
 - **ADR-010 转为「已废弃」**，文件保留、索引与 2 处交叉引用同步；**退役节显式切割**「补缝式 AI 形态」与「本地优先/AI 授权/降级红线」，8 条引用它的 ADR 不产生悬空主张。
 - **规格与需求池同步**：§9 `open_capture_float` 改判（待核实 → 删）、汇总 21 → 22、§10 批 1 进度标记与归属注、§11 验收 7 的进度注、§12 该行结清、§14 ADR 行落地、REQ-055/056 状态改写。
 - **死文案清理**：`structuredBlocks.ts:63` 的 `"AI 增强待 V1.0"` 与 `aiPlaceholderLabel()` 及其 1 条测试消失；**整模块存废留给批 7**（控制方裁决），本批不越权。
@@ -1070,7 +1086,7 @@ git commit --only -m "docs(spec): 批 1 收口——进度标记与交付记录"
 | 项 | 归属 | 说明 |
 |---|---|---|
 | `structuredBlocks.ts` **整模块**存废（连同 `.ed-low-confidence`） | **批 7（未接线落地）** | 二选一：**(a) 接线**（用真实置信度数据渲染「低置信点线」——规格 §4.1 `--due` 行点名它是 token 消费场景；4 个导出全部接入）；**(b) 删除**（连同类名与规格/登记表一并移除）。**批 7 未决之前不得删**（控制方 2026-09-11 裁决） |
-| `ai_protocol.rs` 的 `AiEnhance*` 半边（`AiEnhanceRequest` / `AiEnhanceResponse` / `AiResponseContent` / `AiNode` / `AiRequestType`） | **批 8（治理收口）** | 删掉 `enhance` 后已无生产消费者，但与活的 REQ-085 文本复核共用文件 ⇒ 不为删半边切一个 17 用例的共用协议文件 |
+| `ai_protocol.rs` 的 `AiEnhance*` 半边（`AiEnhanceRequest` / `AiEnhanceResponse` / `AiResponseContent` / `AiNode` / `AiRequestType`） | **批 8（治理收口）**　⛔ **2026-09-12 控制方裁决：本行已被推翻——该项已在批 1（`fd9dd8f9`）删除** | 删掉 `enhance` 后已无生产消费者，但与活的 REQ-085 文本复核共用文件 ⇒ 不为删半边切一个 17 用例的共用协议文件。**2026-09-12 更正**：保留该半边必然新增 8 条 `dead_code`，使本批收口门禁不可达绿 ⇒ 实删 8 符号 + 10 条测试；`TextFilter` 半边与其 7 条测试**逐字节保留**。见 §四·3 表下注记 |
 | `video_profile_spec::spec_from_kind()` | **批 7（档位通道）** | 删掉 `video_profile_spec_by_kind` 后只剩自有 2 条测试引用；它是档位通道的旧档案映射读端，批 7 做「档位通道做完整」时一并判定接/删 |
 | 25 条「处置已定但未执行」的命令（补 UI 11 + 档位读端 1 + 登记不排期 7 + 撤下 IPC 3 + 有意保留 3） | **批 7**（有意保留的 3 条**无期**） | 逐条清单见 §现状普查第三节 |
 | REQ-201 的记录修正（`update_fragment_group` 声称已接线但实际无调用方） | **批 7** | 规格 §14 已登记；与「补 UI」同批 |
@@ -1085,7 +1101,7 @@ git commit --only -m "docs(spec): 批 1 收口——进度标记与交付记录"
 
 1. **§9 汇总「删 21 … 待核实 1」与 §10 批 1 行「21 条命令」** —— 控制方 2026-09-11 结清 `open_capture_float`（前端 0 调用者；活路径 `float_toggle` + `close_capture_float`；`float_open_core` 仅 `:250` 与 `:269` 两个调用点）后应改为 **删 22 / 待核实 0**。**回写位置**：规格 `:493` / `:501` / `:515` / `:558`（Task 8 Step 3 + Task 11 Step 3）。
 2. **§9 `:505`「删除的通用影响面：仅 `lib.rs` 的 `generate_handler!`」** —— **两处过时**：① 注册清单**已不在 `lib.rs`**，批 0-C3 Task 1（提交 `c409a956`）把它整体搬到 `app/src-tauri/src/app_commands.rs`（`git log -S "crate::commands::transcribe_audio" -- app/src-tauri/src/app_commands.rs` 只有那一个搬入提交）；② 真实影响面**不止注册清单**：整模块删除要动 `lib.rs` 的 `mod` 声明、行数变化要刷 `docs/standards/line-limit-exemptions.md`（否则 `--full` 的 (e) 当场拦提交）、补缝三连还有**模块级连带死代码**（同一行的后半句已自认此例外）。
-3. **§9 `:505`「单测全为 `#[cfg(test)]` 内联且不引用这些命令」** —— 对**命令符号**成立（实测：22 条命令名在全部 `*.rs` 测试文件中 **0 命中**），但**连带模块的测试必须同删**：`ai_judge_tests.rs` **9 条** + `ai_mock_tests.rs` **7 条** = **16 条** ⇒ `cargo test --test app_lib_tests` 由 **2359 → 2343**。本计划把这个数字写死为 Task 5 的验收判据（规格未给该数字）。
+3. **§9 `:505`「单测全为 `#[cfg(test)]` 内联且不引用这些命令」** —— 对**命令符号**成立（实测：22 条命令名在全部 `*.rs` 测试文件中 **0 命中**），但**连带模块的测试必须同删**：`ai_judge_tests.rs` **9 条** + `ai_mock_tests.rs` **7 条** = **16 条**，另加 `ai_protocol_tests.rs` 的 AiEnhance 侧 **10 条** = **26 条** ⇒ `cargo test --test app_lib_tests` 由 **2359 → 2334**（Task 3，控制方扩大删除面）**→ 2308**（Task 4+5）。本计划把这个数字写死为 Task 5 的验收判据（**2026-09-12 更正**：原写「16 条 ⇒ 2359 → 2343」，目标值应为 **2308**；规格未给该数字）。
 4. **§2 的 `[DEAD]` 污染警告成立，且污染是双向的** —— ① 「被测试引用 ⇒ 误判为活」的实例：`ai_judge` 模块与 `AiMockAdapter::enhance`（唯一生产消费者都是被删命令，却被各自的 `*_tests.rs` 引用）；② 「汇总结论把活的算成死的」的实例：`docs/tech-debt/review-2026-09-11.md` 称相关有「18 个死运行时导出」，控制方抽查即发现反例 —— `relativeLuminance` **11 处总命中 / 6 处非测试 ⇒ 活的**（另有 `parseNoteTags` 2/2 疑似死、`orderedBlockFrames` 1/1 死、`systemKindLabel` 1/1 死）。⇒ 本计划**不采用**任何「N 个死导出」的汇总结论，只采用**逐条三向复核**的结论。
 5. **§9 `:493` 的「待核实」是本批唯一一条被改判的处置** —— 其余 46 条的成员与分类与代码实测**逐条一致（0 漂移）**：计划者用官方逐行解析复算得「前端生产零引用 = **47**」，与规格 §9 的 47 条**成员完全相同**。
 6. **控制方普查「45 条」与计划者「47 条」并列（不静默取一个）** —— 差异已定位：控制方探针用 `String.includes()` 判活（`"auto_refine_session"` 含 `refine_session`、`"finish_photo_session"` 含 `finish_session` ⇒ 2 条被误判为活），并用 `crate::mod::name` 两段正则在 `generate_handler!` 块体上取名字（三段路径 `crate::commands_goals::views::list_goals` 会被读成假命令名 `views`，同类还有 `milestones ×7` / `workbench ×1` ⇒ 死数虚高）。**正确口径**：官方逐行解析（清单条目必须以 `,` 结尾、路径必须匹配全路径正则，IPC 名取**末段**）+ 引号定界字面量匹配。
@@ -1096,15 +1112,15 @@ git commit --only -m "docs(spec): 批 1 收口——进度标记与交付记录"
 
 **规范覆盖（逐条对照规格 §10 批 1 行的四项交付 + §11 验收 7）**：
 - 「21 条命令」→ **Task 1–8 删 22 条**（含控制方改判 1 条），逐条 `文件:行` 见 §四；注册面 334 → 312。
-- 「补缝三连连带模块」→ **Task 4（命令）+ Task 5（模块级死代码）**；规格 §9 `:505` 自认的「唯一例外」被具体化并给出删除判据与 16 条用例的精确账。
+- 「补缝三连连带模块」→ **Task 4（命令）+ Task 5（模块级死代码）**（**2026-09-12 实况**：两者合并为一次提交 `fd9dd8f9`）；规格 §9 `:505` 自认的「唯一例外」被具体化并给出删除判据与 **26 条**用例的精确账（**2026-09-12 更正**：原写 16 条 —— 16 = 9+7 属 T5 本体，另 10 条属 `ai_protocol.rs` 的 `AiEnhance*` 半边）。
 - 「ADR-010 修订」→ **Task 10**（文件保留 + 状态改「已废弃」+ 退役节 + 索引 + 2 处交叉引用 + 需求池 2 行 + 规格 §14 行）。
 - 「清理 `structuredBlocks.ts:63` 死文案」→ **Task 9**（严格照字面 + 控制方边界裁决）。
 - §11 验收 7「47 条逐个有结论」→ §现状普查第三节给出 **47/47 的处置表**（本批执行 22 · 其余 25 条归属点名）；Task 11 Step 2 复算删除后余量并要求写进台账。
 
 **占位符扫描**：无 TBD / TODO / 「类似 Task N」；每条命令的删除位置、注册行、连带 helper、期望计数、门禁命令与提交信息**逐条写出**。计划里**唯一需要实施者实测判定**的两处已显式标注：① Task 2 的 `CONTENT_MAX_CHARS` 是否随 `save_draft_as_note` 成死常量（给了判据命令与「若为 0 则一并删」的处置）；② 各文件删除后的**最终行数以 `--write` 实测为准**（给了预算值用于交叉核对，差 >5 行必须查原因）。
 
-**类型/标识一致性（跨任务交叉检查过）**：`REGISTRY_AFTER` 序列 334 → 331（T1）→ 327（T2）→ 324（T3）→ 321（T4）→ **321（T5，不删命令）** → 317（T6）→ 313（T7）→ 312（T8），与 §四清单的 22 条一一对应；`RUST_AFTER` 只在 T5 变化（2359 → 2343，−16 = 9 + 7）；`VITEST_AFTER` 只在 T9 变化（−1）；豁免表动作只有三种（**数值更新** / **整行删除** / **不变**），与 §五逐文件对应；三个「同名不同物」的陷阱（`recognize_image` / `transcribe_audio` / `profile_by_kind`）在 §四「不删清单」与 Task 2 / Task 7 的复核步骤里各拦一次。
+**类型/标识一致性（跨任务交叉检查过）**：`REGISTRY_AFTER` 序列 334 → 331（T1）→ 327（T2）→ 324（T3）→ **321（T4+T5 合并为一次提交 `fd9dd8f9`；T5 不删命令）** → 317（T6）→ 313（T7）→ 312（T8），与 §四清单的 22 条一一对应（实测链 334 → 331 → 327 → 324 → **321**，一致）；`RUST_AFTER` 在 T3 与 T4+T5 两处变化（**2359 → 2334**（T3，−25）**→ 2308**（T4+T5，−26 = 9+7+10）；**2026-09-12 更正**：原写「只在 T5 变化（2359 → 2343，−16 = 9 + 7）」）；`VITEST_AFTER` 只在 T9 变化（−1）；豁免表动作只有三种（**数值更新** / **整行删除** / **不变**），与 §五逐文件对应；三个「同名不同物」的陷阱（`recognize_image` / `transcribe_audio` / `profile_by_kind`）在 §四「不删清单」与 Task 2 / Task 7 的复核步骤里各拦一次。
 
-**删除批特有的一次性风险（本计划已全部显式化）**：① 注册面是**唯一静默失败面** ⇒ 每个任务 Step 1 的三向复核 + 门禁三向一致；② 行数登记表是**共享生成物** ⇒ 统一走 `--write`，禁止手改数字，`--full` 在**提交树上**判；③ 并行 agent ⇒ T1–T8 串行、T9/T10 可并行、禁 `git add -A` / `git clean` / 裸 `commit`；④ 测试数**下降是预期**而非回归 ⇒ 每个任务把「允许降多少」写死（T5 = 16，T9 = 1，其余 0）；⑤ 加载敏感的 `ffmpeg` 用例 ⇒ 串行跑门禁 + 单跑复核。
+**删除批特有的一次性风险（本计划已全部显式化）**：① 注册面是**唯一静默失败面** ⇒ 每个任务 Step 1 的三向复核 + 门禁三向一致；② 行数登记表是**共享生成物** ⇒ 统一走 `--write`，禁止手改数字，`--full` 在**提交树上**判；③ 并行 agent ⇒ T1–T8 串行、T9/T10 可并行、禁 `git add -A` / `git clean` / 裸 `commit`；④ 测试数**下降是预期**而非回归 ⇒ 每个任务把「允许降多少」写死（**2026-09-12 实测更正：T3 = 25（控制方扩大删除面）· T4+T5 = 26（原写 T5 = 16）· T9 = 1，其余 0**）；⑤ 加载敏感的 `ffmpeg` 用例 ⇒ 串行跑门禁 + 单跑复核。
 
 **报告与评审的落点（每个 Unit 一对一）**：实施者报告 `.superpowers/sdd/2026-09-11-frontend-redesign-batch1-deletions/task-<N>-report.md`；独立任务评审报告同目录 `task-<N>-review.md`。**11 个 Task = 11 个实施者 Unit（T9 / T10 可与 T1–T8 并行）+ 11 份独立任务评审**，分别照 `.superpowers/sdd/DISPATCH-TEMPLATE.md` 与 `.superpowers/sdd/REVIEW-TEMPLATE.md` 执行 —— 本计划**不复制**那两个模板的条文。**评审者特别检查项**：删除清单是否**恰好**是 §四的 22 条（多删/少删都是失败）· 「不删清单」里的每一项是否**仍在** · 期望计数是否与实测一致 · 豁免表 diff 里有无非本批文件的行（若有，是否已在报告里如实归因）。
