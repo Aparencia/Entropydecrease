@@ -1,0 +1,20 @@
+/*
+ * TriTrackAlign.css — #1「对齐」的**共轴高亮落点**（批 6 T27 · 裁决 R5.1）。
+ *
+ * @ai-context 「同 ms 条目高亮**共轴关系**」的视觉接缝：`.ed-tritrack__item--coaligned` 只做一件事
+ *   —— 在条目左缘画一条 `--ed-link` 的引线。取 `--ed-link` 的依据是它自己的语义注释（`tokens.gen.ts`
+ *   「链接 / **时间码** / 引用」）：共轴组正是由**时间码那一刻**选中的 ⇒ 同 ms 的三个条目在三条轨上
+ *   读起来是**一组**，而不是三件无关的条目。
+ * @ai-context 落点形状 = `<基类>--<修饰>`；🔴 **基类 `.ed-tritrack__item` 故意不写规则** —— 布局由
+ *   组件的行内 style 唯一持有（ADR-033 §4）⇒ 为一个名字再写一份布局 = 第二份真源（R1.1 禁止）。
+ * @ai-context **零 `transition` / 零 `animation` / 零 `@media` / 零 `z-index`**：位移与高亮的时机由
+ *   GSAP 编排层（`useTriTrackAlign.ts`）决定 ⇒ 既不需要进 `motion.css` 的 reduced-motion 名单
+ *   （那张名单的域只含 `ui/primitives/*.css`，见 `motion-coverage.test.ts`），也不会新增第二条
+ *   reduced-motion 媒体查询（`style-seams.test.ts` 的「全仓只许一条」）。
+ * @ai-context 颜色一律走 token ⇒ 本文件 **0 个色值字面量**（`inset 2px` 是线宽，不是色值）。
+ * 副作用：无（纯样式表；无 I/O、无动画、无全局选择器 —— 唯一规则锚在 `.ed-tritrack__item` 上）。
+ */
+
+.ed-tritrack__item--coaligned {
+  box-shadow: inset 2px 0 0 var(--ed-link);
+}

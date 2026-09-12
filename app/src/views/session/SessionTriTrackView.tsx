@@ -43,6 +43,13 @@
  * @ai-context 与「印样」视图的边界（计划 Task 8 Step 1 的逐字要求在这里登记）：**本件不渲染图片**。
  *   配图需要容器注入的 `imageUrl()` 槽（本件不接该槽），且「一屏一段区间 + 配图」是印样视图的形态；
  *   三轨对齐只需要「时间 + 这一条是什么」⇒ 画面轨只出 `title`/`body` 文本与区间时间码。
+ * @ai-context **批 6 T27：#1「对齐」（R5.1 的形态裁定 = 该动效的定义）**。三轨条目按 `data-ms` 共轴；
+ *   **非对齐轨**（画面 / OCR 两条派生轨 —— 🔴 **第三轨 = OCR**，§8.6 的批 5 加注逐字）在错位态各带
+ *   ≤8px 的位移偏移，交互（**时间码点击** = 本视图唯一的用户动作）把它们滑到对齐位（`y → 0`），
+ *   同 ms 的三个条目**高亮共轴关系**（`ed-tritrack__item--coaligned`）。反向 = 再次触发或切走再回；
+ *   可中断 = 新输入接管。编排、两个持有量、三档与 reduced-motion 全在 `useTriTrackAlign.ts` 的文件头。
+ *   ⚠️ **视图自身仍零副作用**：位移只由那条 hook 经出口写；本件只加两个 DOM 锚（`data-tone="instrument"`
+ *   与两条非参考轨的 ref 登记）与一个**受控**的高亮类（`aligned && item.ms === ms`）。
  * 副作用：无（纯函数式渲染；无 I/O、无订阅、无定时器、无本地 state、无全局单例）。T25 增：
  *   子件 `TimeRail` 的一次元素级滚动写入（DOM 属性，随 `playheadMs` 变化）。
  * 边界：① `detail` 三个数组**都空** ⇒ 整块换成 `EmptyState`（根 `data-testid` 仍在，形态可判）
@@ -56,9 +63,10 @@ import { Button, EmptyState, Text } from "../../ui/primitives";
 import { fmtMs } from "../../utils/fmt";
 import type { SessionViewSlot } from "../registry";
 import TimeRail from "./TimeRail";
-
-/** 三轨的轨名（DOM 锚点 `data-track` 与纵向固定序的唯一字面量来源） */
-type TrackKey = "transcript" | "screen" | "ocr";
+import "./TriTrackAlign.css";
+import { useTriTrackAlign } from "./useTriTrackAlign";
+// 轨名类型（`data-track` 锚的唯一字面量来源）由编排层持有 ⇒ 两处不各写一份字面量
+import type { TrackKey, TriTrackAlign } from "./useTriTrackAlign";
 
 /** 视图的数据面：`detail`（三轨）+ T25 的三个**只读**注入槽（音频引用 / 播放头 / 上行通道） */
 type Slot = Pick<SessionViewSlot, "detail" | "audio" | "playheadMs" | "onSeekMs">;
@@ -84,6 +92,10 @@ const LANE_STYLE: CSSProperties = { display: "flex", flexDirection: "column", ga
 const ITEM_STYLE: CSSProperties = { display: "flex", gap: 6, alignItems: "baseline" };
 /** 数字等宽：时间码跨行对齐靠它，不靠 `Text` 的字阶（`fontVariantNumeric` 是排版接缝不是墨度） */
 const TIME_STYLE: CSSProperties = { fontVariantNumeric: "tabular-nums", flexShrink: 0 };
+
+/** 条目基类与共轴高亮的修饰类（`<基类>--<修饰>` 形状；规则在 `TriTrackAlign.css`，基类故意无规则）。 */
+export const ITEM_CLASS = "ed-tritrack__item";
+export const COALIGNED_CLASS = `${ITEM_CLASS}--coaligned`;
 
 /**
  * 时间码**唯一出口**：一律经 `fmtMs`（`utils/fmt.ts`）。
@@ -192,9 +204,9 @@ export function totalMsOf(detail: Detail, audio: Slot["audio"]): number {
 }
 
 /** 一条对齐条目（纯展示：时间码 → 次要信息 → 区间 → 正文；时间码是**定位按钮**） */
-function TriTrackItem({ item, onSeek }: { readonly item: AlignedItem; readonly onSeek: (ms: number) => void }): ReactElement {
+function TriTrackItem({ item, onSeek, coaligned }: { readonly item: AlignedItem; readonly onSeek: (ms: number) => void; readonly coaligned: boolean }): ReactElement {
   return (
-    <div style={ITEM_STYLE} data-ms={item.ms}>
+    <div style={ITEM_STYLE} data-ms={item.ms} className={coaligned ? `${ITEM_CLASS} ${COALIGNED_CLASS}` : ITEM_CLASS}>
       {/* 时间码 = 唯一的「回跳」入口：点它 ⇒ 播放头滑到该段（R5.5 #5 的可见动作）。
           用 `Button` 原语而不是可点 `<div>`：键盘可达与四态由原语保证（§8.6.1 第 4 条）。
           首个文本子节点仍是 `fmtMs` 的输出 ⇒ T5 的时间码判据形态不变。 */}
@@ -220,13 +232,21 @@ function TriTrackItem({ item, onSeek }: { readonly item: AlignedItem; readonly o
   );
 }
 
+/** 对齐动效的落点登记：只有**非参考轨**需要（转写轨是时间基 ⇒ 不施加偏移，`ref` 为 `undefined`）。 */
+function attachOf(align: TriTrackAlign, track: TrackKey): ((el: HTMLElement | null) => void) | undefined {
+  return track === "screen" || track === "ocr" ? align.attach[track] : undefined;
+}
+
 /**
- * 渲染会话三轨对齐视图 + 时间轨（T25）。数据全来自 props（`detail` + 三个注入槽）
+ * 渲染会话三轨对齐视图 + 时间轨（T25）+#1 对齐动效（T27）。数据全来自 props（`detail` + 三个注入槽）
  * ⇒ 本件不取数、**不自持播放头状态**（受控：点击只上报，位置随 `playheadMs` 回来）。
  */
 export default function SessionTriTrackView({ detail, audio, playheadMs, onSeekMs }: Slot): ReactElement {
   const lanes = lanesOf(detail);
   const empty = lanes.every((lane) => lane.items.length === 0);
+  // 🔴 hook 在**空态提前返回之前**调用（否则两次渲染的 hook 数不同 ⇒ React 抛错）；空态下两条轨
+  //    容器不存在 ⇒ 编排层走「未挂上」分支，**不建时间线**。
+  const align = useTriTrackAlign();
 
   // 全空 ⇒ 走 `EmptyState` 原语（不是裸灰字）：`emptyStateRatchet` 与「不写裸色值」两条同时成立
   if (empty) {
@@ -240,8 +260,9 @@ export default function SessionTriTrackView({ detail, audio, playheadMs, onSeekM
     );
   }
 
-  /** 时间码点击：**只**经唯一上行口请求容器定位（视图自持状态 = 第二份真源，禁止） */
+  /** 时间码点击：**只**经唯一上行口请求容器定位（视图自持状态 = 第二份真源，禁止）+ 触发 #1 对齐 */
   const seek = (ms: number): void => {
+    align.trigger(ms); // #1 对齐（R5.1）：对齐 ⇄ 错位由编排层**持有**的 `aligned` 反转
     onSeekMs?.(ms);
   };
 
@@ -249,16 +270,18 @@ export default function SessionTriTrackView({ detail, audio, playheadMs, onSeekM
     <div style={ROOT_STYLE} data-testid="session-tritrack-view">
       {/* R5.5 #5 的承载面：共享时间轴尺 + 播放头 + `<audio>` 属性契约 + 降级提示行 */}
       <TimeRail totalMs={totalMsOf(detail, audio)} playheadMs={playheadMs ?? null} audio={audio} onSeekMs={onSeekMs} />
-      <div style={TRACKS_STYLE}>
+      {/* `data-tone="instrument"` = #1 的基调登记（R3.4 逐字「每个动效落点显式声明基调」） */}
+      <div style={TRACKS_STYLE} data-tone="instrument">
         {lanes.map((lane) => (
           <div key={lane.track} style={COLUMN_STYLE}>
             <Text as="p" size={5} tone="ink-3">
               {lane.label}
             </Text>
-            {/* 列内**只有条目**：`[data-track]` 的子项数 == 该轨条目数（判据 T1 的锚） */}
-            <div style={LANE_STYLE} data-track={lane.track}>
+            {/* 列内**只有条目**：`[data-track]` 的子项数 == 该轨条目数（判据 T1 的锚）；
+                两条非参考轨额外挂对齐动效的登记口（`ref`） */}
+            <div style={LANE_STYLE} data-track={lane.track} ref={attachOf(align, lane.track)}>
               {lane.items.map((item) => (
-                <TriTrackItem key={item.key} item={item} onSeek={seek} />
+                <TriTrackItem key={item.key} item={item} onSeek={seek} coaligned={align.aligned && item.ms === align.ms} />
               ))}
             </div>
           </div>
