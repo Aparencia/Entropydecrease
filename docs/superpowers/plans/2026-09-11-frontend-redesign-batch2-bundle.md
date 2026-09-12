@@ -400,6 +400,8 @@ git diff --stat                       # 只应有 scripts/bundle-eager-graph.mjs
 git commit --only -m "build(scripts): add first-screen reachability probe" -- scripts/bundle-eager-graph.mjs
 ```
 
+> **2026-09-12 更正（Task 12 回写）**：上面这个 subject **51 字符，超 `AGENTS.md` §5 的 ≤50 字上限**，且**照抄落地**了（`e46e0e82`）。**门禁不会拦**：`commitlint.config.js` 的 `header-max-length` 沿用 config-conventional 的 **100**，未覆盖为 50。**Task 2 Step 5 的 subject 同样是 51 字符**（同一处失误，已实测入库 `f0592654`）。⇒ 抄写提交命令前请人工数字符数。
+
 **Verification（本任务的验收，逐条给命令与期望）**
 
 | # | 命令 | 期望 |
@@ -581,6 +583,8 @@ node scripts/check-bundle-budget.mjs --no-build --self-test; "selftest-exit=$LAS
 git diff --stat
 git commit --only -m "build(scripts): add first-screen bundle budget gate" -- scripts/check-bundle-budget.mjs
 ```
+
+> **2026-09-12 更正（Task 12 回写）**：上面这个 subject **51 字符，超 `AGENTS.md` §5 的 ≤50 字上限**，且**照抄落地**了（`f0592654`）。**门禁不会拦**（`commitlint.config.js` 的 `header-max-length` = **100**）。**Task 1 Step 7 的 subject 同为 51 字符**（`e46e0e82`）；本批计划里超限的提交命令共 **3 处**（第三处是 Task 7 Step 5 的 53 字符）。
 
 **Verification**
 
@@ -1356,7 +1360,8 @@ git diff --stat
 git commit --only -m "perf(app): lazy-load capture float and overlay panels" -- app/src/App.tsx
 ```
 
-> **2026-09-12 更正（Task 12 回写）**：上面这个 commit subject **53 字符，超 `AGENTS.md` §5 的 ≤50 字上限**。交付时改用 **42 字符**的 `perf(app): lazy-load window variant panels`（`63536018`，同一动作、同一显式路径）。⚠️ 本仓 pre-commit 有 commitlint 时该行**会**被拦；后续批次派发词里的提交命令请**先数字符数**。
+> **2026-09-12 更正（Task 12 回写）**：上面这个 commit subject **53 字符，超 `AGENTS.md` §5 的 ≤50 字上限**。交付时改用 **42 字符**的 `perf(app): lazy-load window variant panels`（`63536018`，同一动作、同一显式路径）。
+> ⚠️ **Task 12 逐条普查（码点计数，脚本 `tmp/task12/subject-len.mjs`）发现：计划里超限的提交命令不是 1 处而是 3 处** —— 本行（53）· **Task 1 步骤（L400，51）** · **Task 2 Step 5（L582，51）**；后两条**被逐字照抄落地**（`e46e0e82` / `f0592654`）。**根因是这条规则没有任何机器门禁**：`commitlint.config.js` 沿用 `@commitlint/config-conventional` 的 `header-max-length = 100`，**未覆盖为 50**，故 51 字符的提交**能通过 commit-msg 钩子**（已实测：两条确实入库）。⇒ 后续批次派发词里的提交命令**必须人工数字符数**（或另立一条 `header-max-length` 规则 —— 登记批 8）。
 
 **Verification**
 
@@ -1903,6 +1908,7 @@ git commit --only -m "docs(batch2): close bundle governance batch" -- docs/super
 | 11 | Task 2 注 | 守卫的**嵌套路径盲区**（静默假绿，真实构建复现）+ 输出把「非首屏」说成「仅动态可达」的**假文案** |
 | 12 | Global Constraints 仪器纪律 | 追加**第 6–13 类仪器陷阱**（累计 13 类） |
 | 13 | Global Constraints 门禁基线注 | clippy 判据 = **集合比对**，**禁止比 Task 1 的 sha256**（BOM+CRLF vs LF，永远假红） |
+| 14 | Task 1 Step 7 / Task 2 Step 5 / Task 7 Step 5 注 | 计划里**超 ≤50 的提交命令共 3 处**（**51 / 51 / 53** 字符，脚本 `tmp/task12/subject-len.mjs` 逐条普查），其中**两处被照抄落地**（`e46e0e82` / `f0592654`）；根因 = `commitlint.config.js` 的 `header-max-length` 沿用默认 **100**，**该规则无机器门禁** |
 
 **规格与台账同步（Task 12 同批提交）**：规格 §2 包体行 / §10 批 2 行 + 口径注 + 瓶颈清单指针 / §11 验收 9 进度注 / §13 风险表 / §14 交付记录落点行；`docs/versions/v0.22.md` 新增 `### 批 2 · 包体治理` 节（含七段固定结构与 v0.22.2 行、验收门槛 9 的进度标记）。
 
@@ -1914,6 +1920,7 @@ git commit --only -m "docs(batch2): close bundle governance batch" -- docs/super
 | 16 | `scripts/**/*.mjs` **不在 `line-limits` 的扫描域**（`SOURCE_EXT` 不吃 `.mjs`、`SCAN_DIRS` 只有两处）⇒ 本批两个新脚本（299 / 86 行）**无门禁保护** | 批 8 |
 | 17 | `app/vite.config.ts` **同时**不在 `line-limits` 扫描域**与** `tsc --noEmit` 的 program（`--listFilesOnly` 879 文件 0 命中，正样本 `main.tsx` = 1）⇒ 只靠 `vite build` 兜底 | 批 8 |
 | 18 | 计划自带的「子串碰撞」反例**恒假红**（`@xyflow/react` 的 id 里没有连续子串 `node_modules/react`）· `@types/katex` 覆盖闸必然红（`dependencies` 实为 **14** 个，计划写 12）· V3 判据「Δ ≤3 kB」实测 −4.39 kB 突破 ⇒ 已改判为「**只许变小 ∧ modules 不变**」 | 已就地更正（批 8 只承接 F4：把 `@types/*` 挪 `devDependencies`） |
+| 19 | **`AGENTS.md` §5 的「subject ≤50」是一条无门禁的约定** —— `commitlint.config.js` 未覆盖 `header-max-length`（默认 **100**），故 51 字符的提交能过 commit-msg 钩子并被照抄落地（本批 2 例）。建议加一条 `'header-max-length': [2, 'always', 50]`，或至少在派发词里要求人工数字符数 | 批 8 |
 
 > **Task 12 未验证（诚实单列）**：① 真 WebView 的时序 / 网络抓包 / 两窗变体实测（静态推理 + 守卫读数，未在真机跑）；② CSS 三文件加载顺序未做 WebView 实测；③ `dist` 未做安装包级实测（字体 1,072,948 B 一字节未动 ⇒ 安装包体积未改善）；④ 本批的 `Circular chunk` 归零只在**规则层**被守卫，**构建日志仍无门禁看管**（登记批 8）；⑤ 收口门禁跑在**工作树**而非导出提交树（`node_modules` 不在归档内，故 `tsc`/`vitest`/`cargo` 无法在导出树上复跑 —— 与 Task 1 同一限制）。
 
