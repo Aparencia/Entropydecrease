@@ -4,8 +4,9 @@
  *
  * Why（为什么存在）：规格 §8.4 的时长/缓动在批 0-D 还没有真源（0-A 计划自审把「时长与缓动」
  * 推迟到批 6），但本批的每个原语都要在 transition 里引用它们（如 `.ed-text` 的墨度过渡）。
- * 先把变量按规格 §8.4 的名字与取值落在这里，批 6 的动效 token 真源完成后**整块删除** ——
- * 所有引用点写的是 `var(--ed-dur-x, <同值字面量>)`，删块即生效，无需改任何规则。
+ * 当时先落了一份临时 `:root{}` 当接缝 —— 它**已随 T5（2ebac5ed）把那 10 个变量迁进唯一真源
+ * `scripts/gen-tokens.mjs` 而整块删除**（T12 更正此处已变形的承诺）：本文件**不再定义**
+ * `--ed-dur-*` / `--ed-ease`；引用点写的是 `var(--ed-dur-x, <同值字面量>)`，真源改值即生效、无需改规则。
  *
  * ② 本文件是 **`app/src` 内第一条 `prefers-reduced-motion` 块**（实测改造前 `app/src` 里 0 处，recon §8.1；
  *    ⚠️ 口径只到 `app/src`：仓库根的 `website/components/dive/ChronosDemo.tsx:59` 早已有 JS 侧
@@ -35,11 +36,113 @@
  */
 
 
-/* ★ 强度三档（规格 §8.5 / R3.1）—— **本块必须写在下面 reduced-motion 块之前**：源序即优先级，
-   后写的 reduced-motion 覆盖带 `!important` ⇒ 系统偏好永远赢过用户选的档（§8.5 逐字「系统
-   `prefers-reduced-motion` 优先于档位」）；顺序写反 = 用户选的档位盖掉系统无障碍设置。
+/* ▼▼▼ 响应层（T12）：七类动作的**元素级全局回执** —— 本文件内唯一的响应层落点 ▼▼▼
+   规格 §8.6.1 第 2 条逐字列七类动作（点击 / 拖拽 / 悬停 / 键入 / 勾选 / 展开折叠 / 切换视图），
+   每类都必须有即时回执；第 3 条逐字说原语预留动效接缝的意义就是「否则批 6 只能回头改每一处
+   调用点」—— 本节兑现的正是"不用回头改"：回执写在**元素 / 属性选择器**上，**零调用点改动**。
+   实测调用面（T12 自测，仪器 = 批次 `tmp/t12/probe-shapes.mjs`；剥注释、排除 `*.test.*`、312 个生产
+   文件）：裸 `<button>` 420 处/119 文件 · 原语 `<Button>` 109 处/42 文件 · 非 `<button` 行的
+   `onClick=` 395 处 · `<input|textarea>` 118 处/55 文件 · `type="checkbox"` 26 处/21 文件 ·
+   `<details|summary>` 8 处/4 文件 · `role="separator"` 1 处 · 裸 `draggable` 行 1 处 ·
+   JS 悬停 8 处/6 文件 · 折叠动作 27 处/13 文件 · 切换视图 16 处/8 文件。
+   ★ 机制（为什么每类都给 transform / filter / opacity 的那一半）：调用点绝大多数把颜色与边框写在
+   **行内 style** 里（ADR-033 §4 的既成事实，见本文件头部 ⑤「行内优先于类」）⇒ 类规则改不动它们的
+   颜色；穿得过去的是 transform / filter / opacity（调用点几乎不写这三个）。token 色的那一半在未写
+   行内的落点上生效，**被行内遮蔽的面逐条登记在 `app/src/motion/responseCoverage.test.ts`**。
+   ★ 边界（硬）：① 不新增任何 `.ed-*` 类名（只有 `:not(.ed-btn)` 里那一次引用 —— 新基类会撞
+   `motion-coverage.test.ts` 的「未登记基类」判据）；② 不新增 `@media` / `@keyframes` / `animation`
+   （响应层一律 CSS transition，规格 §8.2 判据；keyframes 桶只留 `Loading`/`Skeleton`/`Probe`）；
+   ③ 时长 / 缓动**只**引 token 且带同值兜底（`motionTokens.consumption.test.ts` 的双向判据）；
+   ④ 本节的规则**不得**被 `[data-motion]` 覆写 —— 规格 §8.5 的节能档逐字是「**只留**响应层」
+   （响应层三档同行为，"丰富"档只加环境层与编排层）⇒ 判据见 responseCoverage.test.ts 的「三档同行为」；
+   ⑤ 本节每一处 transition 落点都逐字进下面那条唯一的 reduced-motion 名单；
+   ⑥ 第七类「切换视图」**故意不在此处重复**：它是原语层 `.ed-btn--segment`（`ViewSwitcher.css` 的
+   120ms 三属性 + `[aria-pressed]`），`button:not(.ed-btn)` 的排除条款保证段控件不被两份规则同时命中。 */
+
+/* ① 点击 / 按下 / 焦点环 —— 420 处裸 `<button>` + 3 处 `[role="button"]`（`ChatMessageList` /
+   `ChatSidebar`）。排除 `.ed-btn`：原语四态回执的真源在 `Button.css`，两处都写 = 第二个真源。
+   基准态先声明透明 outline ⇒ 焦点环的 color / offset 有起点可插值，「焦点环落纸」才有 120ms 可言
+   （对非焦点态零观感影响：outline 不占布局）。 */
+button:not(.ed-btn),
+[role="button"] {
+  outline: 2px solid transparent;
+  outline-offset: 0;
+  transition-property: background-color, border-color, color, filter, transform, outline-color, outline-offset;
+  transition-duration: var(--ed-dur-micro, 120ms);
+  transition-timing-function: var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
+}
+/* 悬停 = "收到了"：`brightness` 穿得过行内底色（不写颜色字面量，也不与调用点的调色板打架） */
+button:not(.ed-btn):not(:disabled):hover,
+[role="button"]:not([aria-disabled="true"]):hover { filter: brightness(0.97); }
+/* 按下 = "正在按"：微陷 1px（与 `.ed-btn:active` 同幅度，≪ 规格 §8.4 的 8px 上限） */
+button:not(.ed-btn):not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active { transform: translateY(1px); }
+button:not(.ed-btn):focus-visible,
+[role="button"]:focus-visible { outline-color: var(--ed-ink-1); outline-offset: 2px; }
+
+/* ② 键入 —— 118 处 `<input>` / `<textarea>`：把焦点环从"浏览器原生的 0ms 硬跳"换成"落纸"
+   （token 墨色 + 从 transparent / offset 0 过渡到位）。用 `:focus` 而不是 `:focus-visible`：文本输入
+   被聚焦本身就是"在键入"，鼠标点进输入框也要看得见环（与 `.ed-btn` 的口径不同，且刻意如此）。
+   `border-color` / `background-color` 两条是为**调用点自己的**状态变化预留的接缝（今天 118 处的
+   焦点态全靠浏览器原生 outline —— recon-b B11 实测）。 */
+input:not([type="checkbox"]):not([type="radio"]),
+textarea {
+  outline: 2px solid transparent;
+  outline-offset: 0;
+  transition-property: border-color, background-color, outline-color, outline-offset;
+  transition-duration: var(--ed-dur-micro, 120ms);
+  transition-timing-function: var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
+}
+input:not([type="checkbox"]):not([type="radio"]):focus,
+textarea:focus { outline-color: var(--ed-ink-1); outline-offset: 2px; }
+
+/* ③ 勾选 —— 26 处**原生** checkbox（今天**无自定义勾选原语** ⇒ 规格 §8.1 的「勾选框落笔」只能落在
+   元素级，这是**如实登记的降级形态**，不是"有原语"）。落笔载体 = `accent-color`：未勾浅墨 → 勾上
+   墨黑，勾号出现的同时墨色落下（120ms 单属性）。`radio` 今日 0 调用点（接缝先于调用点，登记）。 */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--ed-ink-3);
+  transition-property: accent-color;
+  transition-duration: var(--ed-dur-micro, 120ms);
+  transition-timing-function: var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
+}
+input[type="checkbox"]:checked,
+input[type="radio"]:checked { accent-color: var(--ed-ink-1); }
+
+/* ④ 展开折叠 —— 8 处真实 `<details>` / `<summary>`（其余折叠动作是 chevron `<button>`，由 ① 覆盖）。
+   `[open]` 的墨度是"展开后落定"的持久回执；hover 的 filter 穿得过行内 color。 */
+details > summary {
+  transition-property: color, filter;
+  transition-duration: var(--ed-dur-micro, 120ms);
+  transition-timing-function: var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
+}
+details > summary:hover { filter: brightness(0.97); }
+details[open] > summary { color: var(--ed-ink-1); }
+
+/* ⑤ 拖拽 —— 4 处：`ColumnResizer`（`role="separator"`，已有 0.15s 行内背景回执）+ `NoteListRow` /
+   `NoteTreeSection` 的原生 DnD（裸 `draggable` 属性 ⇒ 元素级可命中的第二种形态）。
+   ⚠️ `ColumnResizer` 的行内 `transition: background 0.15s` 是 **shorthand**，会整条替换类上的
+   transition ⇒ 本节**不给** `[role="separator"]` 声明 transition（声明了也不生效 = 标签说谎），只给
+   状态回执；它的平滑半场由自己那 0.15s 承担（登记在 responseCoverage.test.ts 的余量表）。 */
+[draggable="true"] {
+  transition-property: filter, opacity;
+  transition-duration: var(--ed-dur-micro, 120ms);
+  transition-timing-function: var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
+}
+/* 起手"提起"：按住待拖的行时整行略淡（不用位移 —— 落点未定时不该先动） */
+[draggable="true"]:active { opacity: .85; }
+[role="separator"]:hover { filter: brightness(0.97); }
+/* ▲▲▲ 响应层结束（切换视图一类由原语层承担，见上 ⑥）▲▲▲ */
+
+/* ★ 强度三档（规格 §8.5 / R3.1）—— 本块写在下面 reduced-motion 块**之前**（源序），但优先级**不**
+   由源序给：reduced-motion 块的每条声明都带 `!important`（本文件唯一的 `!important` 落点）⇒ 无论两块
+   谁先谁后，系统偏好都赢过用户选的档（§8.5 逐字「系统 `prefers-reduced-motion` 优先于档位」）。
+   🔴 源序判据是**防御性钦定**：它守的是「这两条前提（reduced 块带 `!important` · 档位块不带）被无意
+   改动」这件事（承重机理 = `!important`，T6 评审 I-2 实测订正）；🔴 **不得**给本块加 `!important`
+   —— 那会**反转**无障碍优先级（用户选的档盖掉系统设置）。
    机器判据 = `motion-coverage.test.ts` 的「三档强度通道」describe（档位块行号 < reduced 块行号；
-   CSS 里的档位取值集合 === `MOTION_INTENSITIES`）。
+   CSS 里的档位取值集合 === `MOTION_INTENSITIES`）+ `../../motion/responseSeams.test.ts` 的
+   「I-2 · `!important` 承重」与「I-3 · 两块之间零规则块」两条（T12 追加，控制方 2026-09-13 指令）。
    ⚠️ 本块**不得**定义任何 `--ed-*` 变量（真源只有 `scripts/gen-tokens.mjs`；`style-seams.test.ts`
    断言本文件的 `--ed-*` 定义恒 0）⇒ 档位差异一律**直接覆写属性**，不引私变量、不新造第二个真源。
    ⚠️ 本块**不得**写 `animation:` / `animation-name:`（那会让这些选择器必须再进 reduced-motion 名单）
@@ -73,12 +176,22 @@ html[data-motion="rich"] .ed-skeleton::after {
    伪元素（`.ed-skeleton::after`）**拿不到**，实测它仍是 `1.2s / infinite / ed-skeleton-shimmer`。
    ⇒ 这条规则**不许**只写基类：漏掉伪元素是系统性洞（未来任何原语在伪元素上做动画都会再踩）。
    机器判据：`motion-coverage.test.ts` 从 `primitives/*.css` 抽取每个 `animation`/`animation-name`
-   声明的选择器原文，逐个要求出现在下面这份名单里。 */
+   声明的选择器原文，逐个要求出现在下面这份名单里。
+
+   ★ T12 追加的**响应层落点**（元素 / 属性选择器没有可枚举的基类名 ⇒ 逐个原文列出；`transition-duration`
+   不是可继承属性，与伪元素同理：覆盖必须落在选择器自己身上）。判据 = `responseCoverage.test.ts` 的
+   「reduced-motion 双向包含」（本节里声明了 transition 的每个选择器都必须在此名单里，且名单里每个
+   非 `.ed-*` 条目都必须对应本节的一处落点 —— 双向，防"删了规则留死名单"）。 */
 @media (prefers-reduced-motion: reduce) {
   .ed-btn, .ed-surface, .ed-text, .ed-modal-overlay, .ed-modal, .ed-confirm,
   .ed-toast, .ed-empty, .ed-loading, .ed-skeleton, .ed-probe,
   .ed-status,
-  .ed-skeleton::after, .ed-empty-enter {
+  .ed-skeleton::after, .ed-empty-enter,
+  button:not(.ed-btn), [role="button"],
+  input:not([type="checkbox"]):not([type="radio"]), textarea,
+  input[type="checkbox"], input[type="radio"],
+  details > summary,
+  [draggable="true"], [role="separator"] {
     transition-duration: 1ms !important;
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
