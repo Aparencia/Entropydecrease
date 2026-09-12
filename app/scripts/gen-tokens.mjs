@@ -105,10 +105,16 @@ export const DURATION_TOKENS = [
  *
  * 双基调的两条（规格 §8.3 的两张面；两侧的同源机理见 `src/motion/tone.ts` 的头注）：
  * · `ease-instrument`（精密仪器 · 有「读数」的界面：采集 / 复习 / 时间轴 / 到期刻度）：GSAP 侧是
- *   `power3.inOut`，而 CSS 没有 ease 族 ⇒ 这里**只能是 bezier 近似**（微小曲线差本批接受、不引入
- *   第二套 ease 定义）；值取计划 T8 Step 2 的逐字值 `cubic-bezier(0.4, 0, 0.2, 1)`。
+ *   `power3.inOut`，而 CSS 没有 ease 族 ⇒ 这里**只能是 bezier 粗近似**（**不引入第二套 ease 定义**）；值取
+ *   计划 T8 Step 2 的逐字值 `cubic-bezier(0.4, 0, 0.2, 1)`。🔴 与 GSAP `power3.inOut` 的差**不是「微小」**，
+ *   而是**量化事实**：归一化进度轴上 **maxDiff ≈ 0.409 @ x = 0.40**（CSS 0.6136 vs GSAP 0.2048；
+ *   出处 = T8+T9 合并评审的独立测量）⇒ 本批**接受该差**，但 🔴 **同一动效不得在 CSS 路与 GSAP 路之间横跳**：
+ *   一个落点要么全程 CSS transition（`var(--ed-ease-instrument)`）、要么全程 GSAP timeline，**不许**同一处
+ *   两路混用；**「本批接受该差」不等于可以两路横跳**（混用即出现 0.409 量级的曲线跳变）。
  * · `ease-paper`（活的纸 · 有「文字」的界面：笔记 / 会话 / 体系）：`power2.out` 的 bezier 近似，
- *   与 `engine.ts` 里 `CustomEase.create("ed-paper-bleed", …)` 用**同一组控制点** ⇒ 两侧是同一条曲线。
+ *   与 `engine.ts` 里 `CustomEase.create("ed-paper-bleed", …)` 用**同一组控制点** `[0.215,0.61,0.355,1]`
+ *   ⇒ 两侧是**同一条曲线**（不是近似）：101 点对拍 **maxDiff = 5.26e-4 · drops = 0**（同一台仪器、同一次运行），
+ *   即「活的纸」族**两路一致**，与 instrument 族的 0.409 形成对照。
  * 🔴 两条都**不是回弹**（规格 §8.7 明确不做回弹/弹性）：单调不减由 `motion/tone.test.ts` 的 101 点判据
  *   钉住 —— 改这里的 `value` 时那条判据会红（y 控制点必须满足 `0 ≤ y1 ≤ y2 ≤ 1`）。
  */

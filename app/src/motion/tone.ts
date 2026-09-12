@@ -10,9 +10,18 @@
  * @ai-context CSS 侧与 GSAP 侧的**同源机理**：CSS 只有 `cubic-bezier(...)`（真源 = 生成物 `tokens.css` 的
  *   `--ed-ease-instrument` / `--ed-ease-paper` 两条，由 `scripts/gen-tokens.mjs` 的 `EASING_TOKENS` 渲染），
  *   GSAP 侧是 `CustomEase.create("ed-paper-bleed", …)`（在 `engine.ts` 注册）——「活的纸」两侧是**同一条**
- *   bezier（`0.215,0.61,0.355,1`，即 `power2.out` 的 bezier 近似）；「精密仪器」两侧只是**近似**
- *   （CSS 没有 GSAP 的 ease 族，`power3.inOut` 用 `cubic-bezier(0.4,0,0.2,1)` 近似 —— 微小曲线差本批接受，
- *   且**不引入第二套 ease 定义**）。两侧共享的**硬性质** = 「不是回弹」（单调不减、无过冲、无二次反方向），
+ *   bezier（`0.215,0.61,0.355,1`，即 `power2.out` 的 bezier 近似）；「精密仪器」两侧只是**粗近似**
+ *   （CSS 没有 GSAP 的 ease 族，`power3.inOut` 用 `cubic-bezier(0.4,0,0.2,1)` 近似，且**不引入第二套 ease 定义**）。
+ *   🔴 **量化**（T8+T9 合并评审的**独立测量**，归一化进度轴上的采样对拍；不是「微小」）：
+ *   · `--ed-ease-instrument`（`cubic-bezier(0.4,0,0.2,1)`，CSS 侧）vs GSAP `power3.inOut`：
+ *     **maxDiff ≈ 0.409 @ x = 0.40**（CSS 0.6136 vs GSAP 0.2048）—— 同一 x 上前 40% 的进度差 **41 个百分点**
+ *     （CSS 侧前段快出、GSAP 侧前段慢起）；两个值在**同一台仪器、同一次运行**内取得 ⇒ 本批**接受该差**。
+ *   · `--ed-ease-paper` vs GSAP `ed-paper-bleed`（`CustomEase`）：控制点均 `[0.215,0.61,0.355,1]` ⇒ **同一条曲线**，
+ *     101 点对拍 **maxDiff = 5.26e-4 · drops = 0** —— 即「活的纸」族**两路一致**，与 instrument 族 0.409 形成对照。
+ *   🔴 **下游纪律**：「本批接受该差」**不等于**可以两路横跳 —— **同一动效不得在 CSS 路与 GSAP 路之间横跳**：
+ *   一个落点的曲线要么全程取 CSS（`transition-timing-function: var(--ed-ease-instrument)`），要么全程取
+ *   GSAP timeline 的 `ease: "power3.inOut"`，**不许**同一处两路混用（否则该处会出现 0.409 量级的曲线跳变）。
+ *   两侧共享的**硬性质** = 「不是回弹」（单调不减、无过冲、无二次反方向），
  *   由 `tone.test.ts` 的 101 点单调性判据钉住 —— 那是本任务最有牙的一条。
  *
  * 副作用：无 —— 纯数据 + 纯函数，**不 import GSAP**（故本模块可被首屏静态引用，不进 `vendor-gsap` 懒 chunk）。
