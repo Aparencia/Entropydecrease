@@ -218,7 +218,7 @@ describe("z-index 棘轮", () => {
       const line = readFileSync(join(SRC, ...e.file.split("/")), "utf8").split(/\r?\n/)[e.line - 1] ?? "";
       expect(line, `${e.file}:${e.line} 不是注册表声称的那一行`).toContain(`zIndex: ${e.value}`);
     }
-    expect(hits.length, "仪器自检：对已知存在的 5 处应命中 5").toBe(ZINDEX_ACCOUNTS.length);
+    expect(hits.length, "仪器自检：对已知存在的 3 处应命中 3").toBe(ZINDEX_ACCOUNTS.length);
   });
 
   it("`ChatPage.tsx` 的委托面已由 T13-b 收口（裸值消失 ∧ 新家改走六档）", () => {
