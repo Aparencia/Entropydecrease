@@ -62,6 +62,7 @@
 - **为什么必须注册**（测试底座独有的事实）：`gsap` 的 `exports["."]` 把 `import → index.js`（ESM）与 `require → dist/gsap.js`（CJS）分成**两个物理文件**，而 `@gsap/react@2.1.2` 无 `exports`、`main` 指 CJS ⇒ Vitest external 后 `@gsap/react` 拿到 **CJS 运行时**、应用拿到 **ESM 运行时**，两个 `_context` ⇒ `context.revert()` **静默空转、无任何警告**。实测：未注册时 StrictMode 下 **2 个 tween**、卸载后 `transform` 残留；注册后 **1 个 tween**、卸载后 `transform=""`。**浏览器构建不受影响**（Vite 认 `module` 字段）。
 - **懒加载边界**：`app/src/**` 中**静态** import `gsap` / `@gsap/react` 的文件集合 ∩ **首屏静态可达闭包 = ∅**（结构性判据，不用易腐化的白名单）。连带：需要 `useGSAP` 的组件**自身必须位于动态 import 链上**（首屏静态页里的 GSAP 动画要抽成 `React.lazy` 子件）。
   - 🔴 **`app/src/motion/controls.ts` 的适用面（T35 补 · R41.3 经 R61 重述）**：**不许从「首屏静态可达」的模块静态 import `controls.ts`**（它内部静态 `import { gsap } from "./engine"`）⇒ **惰性视图（`React.lazy` / 注册表驱动）静态 import 它是安全的**。⚠️ 该文件头今天仍写着一句**过宽**的绝对规则（「本模块只许经 `await import()` 到达」）—— **属波 D 标签清扫的待改项**（改它 = 改 `app/**` 源码注释，**不在 T35 的零生产代码面内**，只登记）。
+    - 🔻 **T36 回写（2026-09-13，上面那句一字未改）**：该**待改项已关闭**。`app/src/motion/controls.ts` 的头注（`:22-32`）已由 **T35b**（`9c1f615c`）改成上面这条精确口径；`app/src/motion/engine.ts:30-36` 已由 **T35d**（`7d6d677b`）改成**同一条口径**（该行原文「本模块只能经 `await import()` 到达」是过宽绝对句 —— `motion/controls.ts:49` 今天就静态引入它，而该件 ∉ 首屏静态闭包 ⇒ 守卫绿）。⇒ 上面那句「今天仍写着…待改项」**按 2026-09-13 T35b 之前的过去时读**。**依据**：`task-35b-report.md` §1 与 `task-35d-report.md` §1；两处的闭包不变式终态 **89 / 333**（T35d 工作树 + 提交树各测一次）。
 - **插件静默退化**：未 `registerPlugin(CustomEase)` 时 `gsap.parseEase("自定义名")` 返回 `undefined`（只有一条 stderr 警告），动画**照跑**（走默认 ease）⇒ 依赖自定义 ease 的判据必须先断 `typeof parseEase(name) === "function"`。
 
 **token 真源与位移上限**：
