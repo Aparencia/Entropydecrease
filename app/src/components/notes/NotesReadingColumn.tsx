@@ -19,9 +19,10 @@
  *              三栏宽度分配）；空态占位的中文文案与硬编码色 `#9ca3af` 逐字保留
  *              （本批不 token 化）。
  * @ai-context: 等价红线——`outlineCol` 的 localStorage 键 `notes-outline` 与
- *              `{default:180,min:140,max:260,autoFoldBelow:1100}` 由页面逐字传入，
- *              本组件不得另建列状态；J1-3（只翻 manualFolded 的折叠死局）为既有
- *              缺陷，原样保留。
+ *              `{default:180,min:140,max:260,autoFoldBelow:breakpointFor("outlineCol")}`
+ *              （批 3 T5 前该实参逐字为 1100，现由 `shell/breakpoints.ts` 单一真源
+ *              给 1280）由页面逐字传入，本组件不得另建列状态；J1-3（只翻
+ *              manualFolded 的折叠死局）为既有缺陷，原样保留。
  */
 import type { RefObject } from "react";
 import type { Note, NoteGroup } from "../../types";

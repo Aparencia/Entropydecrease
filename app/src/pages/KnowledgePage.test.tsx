@@ -64,6 +64,11 @@ function withSystemMock() {
 }
 
 beforeEach(() => {
+  // 批 3 T5：体系列阈值 860→1100（规格 §6.2）——本仓 jsdom 默认视口恰为 1024，
+  // 落到阈值之下会**自动折叠左列**，system-global 便不再渲染。本文件测的是
+  // 「未折叠」三栏形态 ⇒ 显式声明默认窗宽 1280（规格 §1 决策 17）。
+  // 先例：SelectionActionMenu.test.tsx 同样显式声明 innerWidth。
+  window.innerWidth = 1280;
   invokeMock.mockReset();
   invokeMock.mockImplementation(async (cmd: string) => {
     switch (cmd) {

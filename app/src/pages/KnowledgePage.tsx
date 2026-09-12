@@ -33,6 +33,8 @@ import KnowledgeModelDialog from "../components/KnowledgeModelDialog";
 import ConceptCardRow from "../components/ConceptCardRow";
 import KnowledgeSampleView from "../components/KnowledgeSampleView";
 import KnowledgeGraphView from "../components/KnowledgeGraphView";
+// 批 3 T5：断点改走单一真源（规格 §6.2 阈值 860→1100，两列页）
+import { breakpointFor } from "../shell/breakpoints";
 
 type MiddleView = "tree" | "canvas" | "concept" | "model" | "graph";
 
@@ -57,7 +59,7 @@ interface Props {
 
 export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup, createSystemSignal }: Props) {
   // v0.15：左列可拖拽/记忆/窄窗折叠（默认 260=历史值）；详情面板宽度由父层持有
-  const leftCol = useColumnLayout("knowledge-left", { default: 260, min: 200, max: 360, autoFoldBelow: 860 });
+  const leftCol = useColumnLayout("knowledge-left", { default: 260, min: 200, max: 360, autoFoldBelow: breakpointFor("twoCol") });
   const detailCol = useColumnLayout("knowledge-detail", { default: 320, min: 260, max: 420 });
   const [systems, setSystems] = useState<KnowledgeSystem[]>([]);
   const [selectedSystemId, setSelectedSystemId] = useState<number | null>(null);

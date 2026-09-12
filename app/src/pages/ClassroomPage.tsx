@@ -47,10 +47,12 @@ import { useClassroomShortcuts } from "../hooks/useClassroomShortcuts";
 import type { Note, ProfileKind } from "../types";
 // Low 清扫：标题截断长度单一定义源（与 MaterialInputPanel 共享）
 import { NOTE_TITLE_MAX_LEN } from "../utils/constants";
+// 批 3 T5：断点改走单一真源（规格 §6.2 阈值 860→1100，两列页）
+import { breakpointFor } from "../shell/breakpoints";
 
 export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (sessionId: number) => void }) {
   // v0.15：左栏列状态（可拖拽 + 记忆 + 窄窗折叠；默认 320=历史值）
-  const leftCol = useColumnLayout("classroom-left", { default: 320, min: 240, max: 420, autoFoldBelow: 860 });
+  const leftCol = useColumnLayout("classroom-left", { default: 320, min: 240, max: 420, autoFoldBelow: breakpointFor("twoCol") });
   // 批 2b：采集生命周期单一状态源（挂载拉取+事件+看门狗在 provider；本页消费）
   const { active, sessionId, pausedReason, starting, stopping, pending, notice, start, pause, resume, stop } =
     useCaptureControl();
