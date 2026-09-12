@@ -15,6 +15,7 @@ import { useColumnLayout } from "../hooks/useColumnLayout";
 import { columnSpec } from "../shell/columnRegistry";
 import ColumnResizer from "../components/ColumnResizer";
 import ColumnBar from "../components/ColumnBar";
+import { useColumnFlip } from "../shell/useColumnFlip";
 import type { GoalCardView, GraduationReport } from "../types/goals";
 import GoalCard from "../components/GoalCard";
 import GoalDetail from "../components/GoalDetail";
@@ -36,6 +37,9 @@ export default function GoalsPage() {
   const [archiveOpen, setArchiveOpen] = useState<number | null>(null);
   // 批 3（规格 §6.2）：目标左列——今日硬编码 380，注册表口径改为默认 320（M4）
   const goalsCol = useColumnLayout("goals-left", columnSpec("goals-left"));
+  // T33：折叠 Flip 的跨元素身份（面板与窄条共用；见 `shell/useColumnFlip`）
+  const FLIP_ID = "col-goals-left";
+  useColumnFlip(FLIP_ID, goalsCol.folded);
 
   const load = useCallback(async () => {
     try {
@@ -89,9 +93,9 @@ export default function GoalsPage() {
         {/* 批 3：折叠态与其它列同款（26px 窄条，点击走 expand()——不是 setManualFolded，
             否则窄窗自动折叠下点了不展开） */}
         {goalsCol.folded ? (
-          <ColumnBar icon="🎯" title="目标列表" onClick={goalsCol.expand} />
+          <ColumnBar flipId={FLIP_ID} icon="🎯" title="目标列表" onClick={goalsCol.expand} />
         ) : (
-        <div style={{ width: goalsCol.width, overflow: "auto", padding: 12, borderRight: "1px solid #e5e7eb", boxSizing: "border-box", flexShrink: 0 }}>
+        <div data-flip-id={FLIP_ID} style={{ width: goalsCol.width, overflow: "auto", padding: 12, borderRight: "1px solid #e5e7eb", boxSizing: "border-box", flexShrink: 0 }}>
           {err && <StatusLine kind="error">{err}</StatusLine>}
           {loaded && cards.length === 0 && (
             <div style={{ padding: 24, textAlign: "center" }}>

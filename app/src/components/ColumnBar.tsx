@@ -8,12 +8,16 @@ interface Props {
   icon: string;
   title: string;
   onClick: () => void;
+  /** 列折叠 Flip 的**跨元素身份**（T33：折叠前后两棵子树各带同一个 `data-flip-id`，GSAP Flip 据此配对；
+   *  缺省 ⇒ 本窄条不参与 Flip —— 既有 8 个调用点因此零改动） */
+  flipId?: string;
 }
 
-export default function ColumnBar({ icon, title, onClick }: Props) {
+export default function ColumnBar({ icon, title, onClick, flipId }: Props) {
   return (
     <div
       data-testid="column-bar"
+      data-flip-id={flipId}
       onClick={onClick}
       title={title}
       style={{

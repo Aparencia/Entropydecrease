@@ -49,7 +49,13 @@ gsap.registerPlugin(useGSAP, Flip, ScrollToPlugin, CustomEase);
  */
 CustomEase.create("ed-paper-bleed", "M0,0 C0.215,0.61 0.355,1 1,1");
 
-export { gsap, useGSAP };
+/**
+ * `Flip` 与 `gsap` / `useGSAP` 一并转出（T33 落地；控制方 2026-09-13 裁决「授权路径 B」）：
+ * 列折叠的跨元素配对（`data-flip-id`）需要 Flip，而本文件是**唯一**允许出现 gsap 家族说明符的地方
+ * （判据 = `engine.guard.test.ts` ③′ 的 importer 集合相等 + ③‴ 的动态说明符域）⇒ 新增第二个 importer
+ * 文件会当场红，故只能经本文件转出。`registerPlugin` 的插件集合与顺序**一字未动**。
+ */
+export { gsap, useGSAP, Flip };
 
 /**
  * `gsap.core.Timeline` 的**转出**（计划 T10 Interfaces 逐字：`export type { gsap }` 转不出命名空间成员）。

@@ -21,6 +21,7 @@ import { columnSpec } from "../shell/columnRegistry";
 import { useColumnLayout, type ColumnLayout } from "../hooks/useColumnLayout";
 import ColumnBar from "./ColumnBar";
 import ColumnResizer from "./ColumnResizer";
+import { useColumnFlip } from "../shell/useColumnFlip";
 
 /** 任务类型标签（refine/enrich → 中文 + 图标；模块内消费——审查修复：原
  *  export 无外部消费方，收窄为非导出） */
@@ -73,6 +74,10 @@ export default function ChatSidebar(props: ChatSidebarProps) {
   // `useColumnLayout("键", columnSpec("键"))`，换行写法会让那条判据静默空转。
   const ownCol = useColumnLayout("chat-sidebar", columnSpec("chat-sidebar"));
   const col = injectedCol ?? ownCol;
+  // T33（裁决「授权路径 B」）：折叠前后是两棵子树 ⇒ 靠 `data-flip-id` 让 GSAP Flip 认出「同一条列」。
+  // 面板与窄条各带一个（值逐字相同），既不需要 ref、也不需要动三元结构。
+  const FLIP_ID = "col-chat-sidebar";
+  useColumnFlip(FLIP_ID, col.folded);
   const itemBase: React.CSSProperties = {
     padding: "6px 8px",
     borderRadius: 6,
@@ -89,7 +94,7 @@ export default function ChatSidebar(props: ChatSidebarProps) {
   };
   // 批 3：折叠态与其它列同款——整列换成 ColumnBar 窄条（26px，点击走 expand()）
   const panel = (
-    <div style={{ width: col.width, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minHeight: 0 }}>
+    <div data-flip-id={FLIP_ID} style={{ width: col.width, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minHeight: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 8px 4px" }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: "#6b7280" }}>💬 对话</span>
         <div style={{ display: "flex", gap: 2 }}>
@@ -190,7 +195,7 @@ export default function ChatSidebar(props: ChatSidebarProps) {
   // 直接子元素（多包一层会改变宽度分配；`ColumnResizer` 恒 5px / flexShrink 0）。
   return (
     <>
-      {col.folded ? <ColumnBar icon="💬" title="对话" onClick={col.expand} /> : panel}
+      {col.folded ? <ColumnBar flipId={FLIP_ID} icon="💬" title="对话" onClick={col.expand} /> : panel}
       <ColumnResizer onResize={col.resizeBy} onReset={col.resetWidth} />
     </>
   );
