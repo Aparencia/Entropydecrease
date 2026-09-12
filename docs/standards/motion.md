@@ -1,7 +1,7 @@
 # 动效规范（L4）
 
 > **纲领原文（用户，2026-09-11）**：「我希望我的软件是充满动效的、充满创新设计、充满生命力的，而不是呆板、死板的。」
-> 本规范是 **L4 动效层**的唯一规范载体；上游规格 = [前端重构设计 · §8 L4 动效纲领](../superpowers/specs/2026-09-11-frontend-redesign-design.md)（本文件每条引用的行号锚点都指向该文件）。规格 §14（:836）登记的「`docs/standards/` 新增动效规范章节」即本文件。
+> 本规范是 **L4 动效层**的唯一规范载体；上游规格 = [前端重构设计 · §8 L4 动效纲领](../superpowers/specs/2026-09-11-frontend-redesign-design.md)（**凡引用规格处的行号锚点都指向该文件**；`docs/` 内同族规范用相对链接互引、**不带锚点**）。规格 §14（:836）登记的「`docs/standards/` 新增动效规范章节」即本文件。
 > 🔴 **执行序**：本规范**先于任何动效代码**落地 —— AGENTS.md §0.4「规范与代码冲突时以规范为准；规范过时时先改规范再改代码」。
 > 🔴 **`## 判据纪律（可测与不可测）` 一节是下游的机械输入**：其中的字符串被测试底座与守卫**逐字复用**，改写即判据失配。
 
@@ -70,6 +70,12 @@
 
 **`@keyframes` 桶边界（硬）**：循环环境动效**只留三处** —— `Loading` / `Skeleton` / `Probe`。`StatusLine` 归 **transition（无循环动画）**：状态行是**信息**不是「呼吸物」，循环动效会让它在长列表里变成噪音（「闲置时也有生命感」由 `Probe` 承担）。新循环动效**只能写进 `motion.css`** —— `Loading.css` / `Button.css` / `StatusLine.css` 三处均被既有守卫禁止新增 keyframes。
 
+**`usePresence`（既有事实 · 本批零改动）**：规格 §8.4（:518）第三段的落点 —— `app/src/ui/primitives/usePresence.ts` **已存在**（**200 行** · barrel 已导出 · 三相位 `enter/entered/exit` · 默认 `exitMs` 160 + `timeoutSlackMs` 80）。
+
+- 它只负责**卸载时机**（GSAP 不管这个）：`transitionend` 监听**只认本节点**（`event.target === event.currentTarget`；子元素冒泡不得卸载本节点）+ **超时兜底**（reduced-motion 下不会有 `transitionend`，缺兜底会「关不掉的弹层」）。
+- `matchMedia` **必须自带守卫**（`typeof window.matchMedia !== "function"`；vitest 全局 node 环境无此 API）。
+- **本批不动它**（不扩 `propertyName`、不改签名）；GSAP 路径的挂载 / 卸载时机另建 `app/src/motion/useMotionPresence.ts`（R2.4）。
+
 ## 双基调
 
 规格 §8.3（:511）逐字表：
@@ -95,7 +101,7 @@
 
 - **载体 = `data-motion` 写在 `<html>` 上**，取值逐字 `"eco"` | `"standard"` | `"rich"`，**默认 `"standard"`**；持久化键逐字 `motion:intensity`（照 `useViewMemory` 范式：纯函数 + 注入 `Storage` + 惰性读取 + 静默降级）。
 - **初值 = 跟随系统**：`prefers-reduced-motion: reduce` ⇒ `"eco"`，否则 `"standard"`。`matchMedia` **必须自带守卫**（`typeof window.matchMedia !== "function"`；jsdom 无此 API）。
-- 🔴 **系统 `prefers-reduced-motion` 优先于档位**（§8.5 逐字）。CSS 里靠**源序**实现（后写覆盖）⇒ **档位规则块必须写在 reduced-motion 块之前**；顺序写反 = 用户选的档位**盖掉**系统无障碍设置，违反规格 §8.6.1（:552）第 4 条「『活』不得以无障碍为代价」。
+- 🔴 **系统 `prefers-reduced-motion` 优先于档位**：本规范的**强制级**（非可选优化），规格 §8.5（:526）逐字；reduced-motion 下**整体静态**。CSS 里靠**源序**实现（后写覆盖，源序即优先级的实现）⇒ **档位规则块必须写在 reduced-motion 块之前**；顺序写反 = 用户选的档位**盖掉**系统无障碍设置，违反规格 §8.6.1（:552）第 4 条「『活』不得以无障碍为代价」。
 - **reduced-motion 覆盖率 100%**（规格 §11-5（:741））：名单是**双向的** —— ① 每类原语的**根类**（动效挂在它身上的选择器）必须在名单里；② **每一处 `animation` 声明的选择器原文（含伪元素）必须逐字进名单**。`animation-duration` / `animation-iteration-count` **不是可继承属性** ⇒ 只写宿主基类时伪元素（如 `.ed-skeleton::after`）**拿不到**覆盖（实测仍是 `1.2s / infinite`）。
 - 名单**只许加进 `app/src` 内那一条 reduced-motion 块**（`motion.css`），**不得**新开第二条媒体查询；块**位置唯一**，名单可增长。
 - 新动效落点的类名必须是 **`<既有基类>--<修饰>`** 形状（修饰类与基类同元素、已被同一条规则覆盖，**不进**基类名单；新起一个 `.ed-*` 基类名会撞既有守卫的选择器域）。
