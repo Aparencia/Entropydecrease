@@ -21,7 +21,7 @@
 | 文件 | 行数 | 豁免理由 | 拆分计划 |
 |---|---|---|---|
 | app/src/App.tsx | 584 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
-| app/src/pages/ChatPage.tsx | 578 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
+| app/src/pages/ChatPage.tsx | 579 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
 | app/src-tauri/src/db_migrations.rs | 573 | v0.20.11 批 6（REQ-315）再增：note_groups.pin ensure_column + note_group_orders 建表（+21，实测 573——登记值 492 过期；schema 单点收敛理由同左） | 若再增长：kb_* 与 chat_* 表 DDL 拆至 db_migrations_kb.rs |
 | app/src-tauri/src/lib.rs | 572 | crate 根 **322 `mod` + 15 `#[cfg]` = 337 行地板**（Task 1 评审实测更正：原写「321 `mod` + 16 `#[cfg]`」，总数 337 不变；322 含本任务新增的 `mod app_commands;`）；注册清单已移至 `app_commands.rs`（**数据文件**，同属 300–600 豁免带）—— 结构性下界，非欠账 | 已完成（批 0-C3 Task 1，2026-09-11）；余下 161 行模块理由注释 + 装配逻辑，无进一步拆分标的 |
 | app/src/types/knowledge.ts | 559 | 知识体系类型域（体系/节点/概念/模型/引用/审计/决策 + v0.13.8 画布契约 + v0.14.1 画布偏好枚举与下拉文案常量）——类型与文案常量同域防漂移（前端类型域拆分任务待执行） | 若再增长：画布偏好类型与文案拆至 types/canvas.ts |
@@ -35,7 +35,7 @@
 | app/src-tauri/src/video_profile_tests.rs | 522 | 档案测试域（12 档案断言矩阵 + 检测投票 + JSON 校准 + v0.13.6 领域记忆独立通道/旧 JSON 零迁移用例 + 审查回归（烘焙迁移/单字种子守卫））单模块 #[path] 挂载 | 若再增长：档案矩阵拆至 video_profile_data_tests.rs |
 | app/src-tauri/src/engine.rs | 521 | 引擎池句柄与同步 API（双 worker 编排 + ADR-009 设备状态 + M7 心跳/失败/缓存计数 + 有界等待变体）；三维复审 #5 超时排空机制（drain_asr/ocr_backlog）与 #3 ASR_FILE_TIMEOUT 文件级超时常量接入后，worker 主循环与请求协议按登记计划拆至 engine_worker.rs（见文末"已拆分"注记）回归本值 | 若再增长：排空机制与同步 API 变体拆至 engine_request.rs |
 | app/src/components/GroupSidebar.tsx | 518 | v0.20.12 批 7（REQ-316）拖拽归组/ⓘ 弹层移组清理留痕透传（509→519；登记值过期纠偏） | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
-| app/src/components/LiveActivityPanel.tsx | 517 | 实时活动面板：会话状态/转录流/OCR 预览/控制区多状态面板内聚（前端审查登记） | 若再增长：转录流与 OCR 预览拆至 LiveTranscriptStream.tsx / LiveOcrPreview.tsx |
+| app/src/components/LiveActivityPanel.tsx | 513 | 实时活动面板：会话状态/转录流/OCR 预览/控制区多状态面板内聚（前端审查登记） | 若再增长：转录流与 OCR 预览拆至 LiveTranscriptStream.tsx / LiveOcrPreview.tsx |
 | app/src-tauri/src/ai_client.rs | 505 | v0.11.6 M1（AiClient::from_provider / from_settings_with_store / is_fallbackable / fallback_provider_ids）+ 2026-09-11 DeepSeek V4.1 适配（chat_plain 探活路径 / build_plain_payload / json 前置条件兜底接线 / thinking 策略落点 / 4xx 错误体透出——纯策略与提取逻辑已拆至 ai_request_policy.rs）——Provider 解析与错误分类内聚于 AiClient 域，构造入口与降级链纯函数同文件便于单测。**旧登记 322 为过期快照，本次按实测纠偏** | 若再增长：fallback_provider_ids 拆至 ai_fallback.rs；payload 构造族拆至 ai_payload.rs |
 | app/src/components/GroupSidebar.test.tsx | 497 | 覆盖串组场景——切换 ⓘ 弹层目标组时表单态必须重置（key=group.id修复）：组 A 改了判类（未确认）→ 点组 B ⓘ → 弹层显示 B 且判类下拉回到 B.kind（防把 A 的选择误用到 B——路径: 改判误操作）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_sop.rs | 490 | v0.20.3（REQ-296/297）SOP 三表数据域（模板/run/步骤/保鲜/聚合）+ 审查加固（保链更新/幂等守卫/步数计数）内聚 | 若再增长：run 执行族拆至 db_sop_run.rs |
@@ -47,8 +47,8 @@
 | app/src-tauri/src/region_tracker.rs | 478 | v0.4.0 M2（REQ-037）起：ROI 跟踪状态机（播放区域检测/锁定聚簇/重扫/前台切换冻结）+ 纯函数单测内联；与 RoiTracker 状态强耦合 | 若再增长：lock_roi/prior_roi 纯函数拆至 region_lock.rs |
 | app/src-tauri/src/layout_analyzer.rs | 475 | v0.5.0 M3（REQ-047）：规则版版面分析（行/列投影 + 表格线检测 + 区域分类启发式）内聚于同一分类管线；审查加固（公式启发 + 低信息纯色方差滤除） | 若再增长：区域分类启发式拆至 layout_classify.rs |
 | app/src-tauri/src/commands_session_note.rs | 472 | 既有登记 314 为过期快照——2026-09-06 实测纠偏（v0.20 装载合成/web 分支/批量 inner 扩展后 +144） | 若再增长：convert_to_note 拆至 commands_session_note_convert.rs |
-| app/src-tauri/src/streaming_asr.rs | 466 | sherpa-onnx OnlineRecognizer（Zipformer transducer 中英双语流式），流程移植自原项目 streamingAsr.ts（生产调参验证）：partial 节流（≥150ms + 文本变化才推）→ 端点断句 → final →重建流；静音块隔块喂入（静音期低 CPU）；停止时尾句 flush 去重。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src/components/KnowledgeCanvasView.tsx | 467 | v0.13.8 画布主视图（RF 装配/拖拽防抖保存/视口持久化/自动排列）；v0.13.9 根卡 + 接线方向动态化；v0.14.1 布局/连线下拉 + 偏好读写（+72 行）+ 审查修复（布局 effect 原子化拆分建边 effect/prefsLoaded 控件门控/hasCore 统一 +31 行）——RF 状态与持久化编排内聚（元素构建已拆至 canvasElements/layout* 纯函数） | 若再增长：偏好读写与下拉拆至 useCanvasPrefs.ts；位置持久化拆至 useCanvasPositions.ts |
+| app/src-tauri/src/streaming_asr.rs | 466 | sherpa-onnx OnlineRecognizer（Zipformer transducer 中英双语流式），流程移植自原项目 streamingAsr.ts（生产调参验证）：partial 节流（≥150ms + 文本变化才推）→ 端点断句 → final →重建流；静音块隔块喂入（静音期低 CPU）；停止时尾句 flush 去重。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/streaming_asr_tests.rs | 462 | 流式 ASR 测试域（端点处理/静音判定/段切分回归）单模块 #[path] 挂载 | 若再增长：端点处理组拆至 streaming_endpoint_tests.rs |
 | app/src-tauri/src/structure_note_tests.rs | 458 | v0.7.6（REQ-177~181）：结构渲染层单测域（章节插入位置/命名窗口/词汇表排序上限锚点/零回归护栏/JSON 往返）单模块 #[path] 挂载 | 若再增长：词汇表组拆至 structure_note_glossary_tests.rs |
 | app/src-tauri/src/db_note_group_clean_tests.rs | 447 | REQ-316（批 7）测试域：判定表（自动/系列/手动/改判/五类残留/影响面外/级联卫生）+ 写路径集成 16 例，单模块 #[path] 挂载 | 若再增长：写路径集成组拆至 db_note_group_clean_flow_tests.rs |
@@ -74,9 +74,9 @@
 | app/src/components/ProfileDetector.tsx | 398 | 档案检测组件：投票/确认流/记忆偏好 UI + v0.11.5 Task 5 冲突提示内聚 + v0.13.6（REQ-219~222）形态 10 下拉/领域 20 下拉/细目多选 chips/分区映射形态优先 + 审查轮（onProfileChange ref/独立 try/fine_ids 同步，实测 2026-08-24） | 若再增长：确认流与细目 chips 拆至 ProfileConfirmFlow.tsx |
 | app/src-tauri/src/live_session_pause_tests.rs | 395 | plan_edge_observation 为纯函数（无 epoch/DB/emit 依赖——会话时刻由调用方以参数传入），可完整离线测真值表；事件对时刻单调性在此验证（DB 插入顺序 = events 顺序，单调即时间轴有序）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/live_session.rs | 394 | 会话装配/状态（LiveSessionParams 聚合 + run_session_after_engine 骨架 + ProfileOverride 细目字段）；v0.13.6 +2 | 若再增长：ProfileOverride 与参数分拆至 live_session_params.rs |
-| app/src/components/AiProviderSettings.tsx | 391 | v0.11.6 M1 code-review 修复（2026-08-22）：删除/清钥加 window.confirm、window.prompt 改卡片内联 password 输入（+2 state + 内联表单）、模型列表 input 改 textarea、fallbackOrder 透传 initial、run 置"处理中"反馈、预设双源 presetOptions 后端拉取——修复净增约 13 行越线（实测 329，含 4 行豁免头注释） | 若再增长：内联密钥表单拆至 AiProviderKeyInput.tsx |
 | app/src-tauri/src/fusion_tests.rs | 392 | 融合测试域（ADR-005 四规则 + REQ-062 概率加权 + REQ-103 音量透传 + REQ-111 切分对齐）单模块 #[path] 挂载 | 若再增长：REQ-111 切分对齐组拆至 fusion_split_tests.rs |
 | app/src-tauri/src/db_fragments.rs | 391 | REQ-316（批 7）：delete_fragment/update_fragment_group/promote 同事务空组自动清理接线（登记值 309 过期快照，实测纠偏） | 若再增长：promote_fragment_to_note 事务拆至 db_fragments_promote.rs（既有登记计划兑现） |
+| app/src/components/AiProviderSettings.tsx | 391 | v0.11.6 M1 code-review 修复（2026-08-22）：删除/清钥加 window.confirm、window.prompt 改卡片内联 password 输入（+2 state + 内联表单）、模型列表 input 改 textarea、fallbackOrder 透传 initial、run 置"处理中"反馈、预设双源 presetOptions 后端拉取——修复净增约 13 行越线（实测 329，含 4 行豁免头注释） | 若再增长：内联密钥表单拆至 AiProviderKeyInput.tsx |
 | app/src-tauri/src/import.rs | 385 | 导入域编排（音视频/图片导入流程 + 帧提取调度）内聚；与 import_frame/import_transcribe 分层 | 若再增长：导入参数校验拆至 import_validate.rs |
 | app/src-tauri/src/commands_proofread.rs | 383 | v0.20.2（REQ-270）LLM 校对命令域（预估/门控/分块请求/裁决源列表/失败记账）内聚；2026-09-06 实测登记（TD-2026-09-06-G） | 若再增长：record_proofread_failure 与载荷回写拆至 proofread_apply.rs |
 | app/src-tauri/src/capture/resample.rs | 381 | 音频重采样域（采样率转换/缓冲对齐/帧切分）内聚于捕获子模块，纯函数与捕获缓冲格式共享上下文 | 若再增长：帧切分拆至 resample_frames.rs |
@@ -98,17 +98,17 @@
 | app/src/components/NotePreviewView.tsx | 346 | 原料/产物/笔记预览三视图之一：过滤后笔记正文（标题+讲述内容+画面要点）+ 过滤统计卡（UI 垃圾 x/重复 y/碎片 z/低置信 w）+被过滤内容折叠对照（可复查误杀，点击定位原料）+ 一键落库（复用 session_to_note 单一管线）+「✨ AI 复核」按需触发（REQ-085：授权默认关——上传前确认；判定结果就地更新预览；merge 段以拼接形态展示，落库仍按原始段——原料不动原则）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/structure_models.rs | 343 | v0.5.0 模型版：模型清单/独立状态机下载器（进度事件/.part 原子写/按需启用三分类）+ 磁盘就绪判定（disk_done）内聚 | 若再增长：download_one 拆至 structure_download.rs |
 | app/src-tauri/src/db_ai_tasks.rs | 340 | 任务注册表在 AppState 内存（HashMap）——重启即失、未采纳结果无法恢复。本模块把任务记录落 SQLite（ai_tasks 表）：状态/结果 JSON/成本/耗时/模型/错误全量可查；应用启动时恢复未采纳的成功结果到注册表（重启不丢，任务面板可见历史）；采纳落库时标记 adopted（防重启后重复采纳产生重复笔记）。（自动摘取，待细化） | 若再增长：按职责拆分 |
+| app/src/components/NoteReadingView.tsx | 340 | v0.20.13 批 8（REQ-317）正文选区右键菜单接线（正文容器 ref 化 + 选区判定/全选 + 共享菜单渲染，259→316）——选区纯逻辑已拆 utils/noteSelectionMenu.ts 与 note-selection/SelectionActionMenu.tsx，本文件仅留宿主接线 | 若再增长：搜索态/选区态/大纲态拆至 useNoteReadingViewState.ts |
 | app/src-tauri/src/screen_merge_tests.rs | 339 | 屏级聚合/净化纯函数测试域（聚类/行合并/零跨度/图去重回归）单模块 #[path] 挂载 | 若再增长：净化组拆至 screen_merge_purify_tests.rs |
-| app/src/components/NoteReadingView.tsx | 339 | v0.20.13 批 8（REQ-317）正文选区右键菜单接线（正文容器 ref 化 + 选区判定/全选 + 共享菜单渲染，259→316）——选区纯逻辑已拆 utils/noteSelectionMenu.ts 与 note-selection/SelectionActionMenu.tsx，本文件仅留宿主接线 | 若再增长：搜索态/选区态/大纲态拆至 useNoteReadingViewState.ts |
 | app/src-tauri/src/db_notes_tests.rs | 337 | db_notes.rs 单测域（15 例：笔记 CRUD/updated 倒序/搜索通配符转义/会话关联与旧库 ensure_column 迁移；全部走内存库，环境隔离铁律）——测试模块由 `#[cfg(test)] #[path]` 单点挂载（db_notes.rs:365），H3 硬拆时由原 db.rs 的 tests 模块整体迁入（语义不变）。**本条目由生成器补登（该文件无 @ai-context 头注释），理由为 2026-09-11 重建时人工补写** | 若再增长：会话关联与迁移用例拆至 db_notes_link_tests.rs |
 | app/src-tauri/src/pause_state.rs | 336 | 批 2（REQ-308）暂停来源状态机域（PauseSource/PauseShared/request 单写点）——2026-09-09 审查纠偏实测 336（交付口径 250 失真），300-600 档登记 | 若再增长：条件真值表与 request API 拆至 pause_machine.rs |
 | app/src-tauri/src/commands_asr_pass2.rs | 333 | 实时链路只有端点句 SenseVoice 重打分；本命令把"导入同级的全窗离线质量"带给已结束会话：读取 S4 落盘音频（data_dir/session-audio/{id}.wav，16k PCM16）后台分窗重跑SenseVoice → 逐窗与现网轴比对 → 产 session_refine_drafts（pending），用户经 second_pass_list/decide 预览采纳/回退。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/commands_after.rs | 332 | v0.20.3（REQ-294/295/299/300）收尾命令域（批决议/导出/练习/问题）内聚；2026-09-06 实测登记（TD-2026-09-06-G） | 若再增长：批决议核心拆至 weekly_resolve.rs |
 | app/src-tauri/src/fusion.rs | 332 | 纯规则融合（无 LLM，本地优先降级路径）。规则按优先级：1) 字幕权威——字幕段覆盖时间窗内以字幕为准（准确率近 100%）2) ASR 补缝——字幕段之间 gap > gap_ms 的空隙用 ASR 填补3) 重叠校对——REQ-062 升级为概率加权：编辑距离高相似（sim ≥阈值，≈旧 ≤2 规则）一律字幕胜；相似度不足时比较P(字幕胜出)=conf_sub×(0.6+0.4×sim) 与 P(ASR 保留)=conf_asr×(0.4+0.6×sim)；双源低置信 → 输出低置信核对段（B3 落库标记）；置信度缺失（None=旧数据）→ 回退旧硬规则（距离>2 保留核对段）4) 时间轴对齐——重叠部分归属字幕，ASR 段被裁剪到空隙5) 空窗丢弃——两端无内容的静默窗不产出段@ai-context: 输入字幕段需已含 end_ms（编排按下一字幕出现时刻补齐）。（自动摘取，待细化） | 若再增长：按职责拆分 |
+| app/src/pages/SessionsPage.tsx | 332 | 本层为状态宿主与数据编排：会话列表/详情状态、事件驱动刷新（live:status/session:fused/切页 active）、转化与删除操作；左栏列表 UI 拆至 SessionListPanel、右栏详情拆至 SessionDetailPanel（豁免清单拆分计划落地，本文件 ≤300 行）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/capture/dxgi_capture.rs | 331 | 主路径用 DXGI 桌面复制（GPU 直取，性能最优）；new 或运行时捕获失败（远程桌面/锁屏/设备丢失）自动降级 GDI BitBlt（gdi_capture.rs），调用方无感知。帧输出 BGRA8，支持按窗口矩形裁剪与底部字幕区裁剪。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/commands_knowledge_decisions.rs | 331 | 本层只做参数校验、调用数据层、错误映射（AGENTS.md §6）；编排 `fn xxx_inner(db, …)`为纯函数（:memory: 可测），薄 `#[tauri::command]` 壳只取 state.db 调 inner。一表两面：kind 区分 decision（思辨面）/application（学习面·记一次使用），不双表双记、只记"我的决策"。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/structure_capture_tests.rs | 331 | 纯函数（网格换算/裁剪钳制/过滤上下文组装）+ 端到端集成（合成表格帧+字幕帧参考图集 → 直扫分析 → 只收表格拒字幕 + 幂等重跑+ 降级跳过）；tempfile + 内存库隔离（不触碰真实数据）。（自动摘取，待细化） | 若再增长：按职责拆分 |
-| app/src/pages/SessionsPage.tsx | 331 | 本层为状态宿主与数据编排：会话列表/详情状态、事件驱动刷新（live:status/session:fused/切页 active）、转化与删除操作；左栏列表 UI 拆至 SessionListPanel、右栏详情拆至 SessionDetailPanel（豁免清单拆分计划落地，本文件 ≤300 行）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_graph_tests.rs | 330 | 覆盖三类边聚合正确性——link（体系实体→内容，node_id 引用跳过）、trace（同源会话互连，2~6 张边界）、belong（笔记→组）；节点四表全量 + 笔记显式色解析。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/image_store.rs | 330 | 会话目录本地存图（关键图/参考图集/缩略图走廊三级）：原图 + 缩略图两级（WebP 压缩），去重（aHash）+每会话预算上限（默认 50 张）；图文对齐靠时间戳（产物块引用 frame_id）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/subtitle.rs | 328 | L1 外挂字幕（.srt/.ass/.vtt）纯文本解析，零第三方依赖——命中则免 ASR 零成本 100% 准确（本地优先降级路径的最上游）。（自动摘取，待细化） | 若再增长：按职责拆分 |
@@ -121,8 +121,8 @@
 | app/src-tauri/src/commands_ai_settings.rs | 318 | AI 设置命令域（视图/密钥/授权/目标 AI） + v0.19.1 ai_set_kb_qa 最小面命令（+28）——read-modify-write 同域先例（ai_set_goal_plan）内聚 | 若再增长：kb/goal 最小面命令拆至 commands_ai_settings_extra.rs |
 | app/src/components/AiConversationDock.tsx | 318 | 全局 AI 对话面板（REQ-274）+ 批 1 终态事件刷新接线——2026-09-09 审查纠偏实测登记（此前漏登），300-600 档 | 若再增长：会话列表段拆至 DockSessionList.tsx |
 | app/src-tauri/src/commands_ai_providers.rs | 317 | v0.11.6 M1：Provider 管理命令域（8 命令 + 视图映射 + 密钥解析口 resolve_default_provider_key/default_provider_ready）内聚于命令层；2026-09-11 探活改 chat_plain。`resolve_input`/`to_view` 与命令同域便于契约一致 | 若再增长：默认 Provider 解析与就绪门禁拆至 ai_provider_resolve.rs |
+| app/src/components/LiveProfileStrip.tsx | 316 | 采集时右栏由 LiveActivityPanel 独占、档案卡（ProfileDetector）被隐藏——但 M2（REQ-189）引入"会话中画面档每 2-3 分钟自动重评"后档位成为采集中动态信息，且降档需用户裁决。本组件在采集态常显档案摘要（形态×画面档×领域），并接线 live:tier-changed /live:tier-downgrade-request → confirm_tier_downgrade，补齐 M2 前端断链（此前降档请求无人应答，降档永不生效）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src/components/SessionListPanel.test.tsx | 316 | 覆盖批 4 选择/批量交互矩阵——选择模式进出（按钮+Esc）、单击勾选、Ctrl 加/减、Shift 区间、折叠组全选不含隐藏行（P3-1 修复：全选口径=可见行序 visibleOrder 而非 filtered）、列表变化自动裁剪选集、批量删除 pending 防连点与成功清选集（P3-2）、批量转eligible 过滤。invoke 全 mock；数据为本地 props 零后端往返（面板数据驱动经 props——父层 invoke 不在本组件）。（自动摘取，待细化） | 若再增长：按职责拆分 |
-| app/src/components/LiveProfileStrip.tsx | 315 | 采集时右栏由 LiveActivityPanel 独占、档案卡（ProfileDetector）被隐藏——但 M2（REQ-189）引入"会话中画面档每 2-3 分钟自动重评"后档位成为采集中动态信息，且降档需用户裁决。本组件在采集态常显档案摘要（形态×画面档×领域），并接线 live:tier-changed /live:tier-downgrade-request → confirm_tier_downgrade，补齐 M2 前端断链（此前降档请求无人应答，降档永不生效）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/ffmpeg.rs | 313 | ffmpeg 是文件导入（音轨/关键帧）与内嵌字幕（L2）的唯一外部依赖。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/note_filter_ocr.rs | 313 | BodySource::OcrDirect 分支的精简净化链——排序 → 净化链（① 行合并评分器 → ② 行级重识别判定 → ③ 跨帧增量合并，spec §3.1）→ 符号归一（跳过口语净化/口头禅/碎片规则——OCR文本是视觉识别产物，无 ASR 的结巴/填充词/重复）→ 相邻去重→ markdown 组装（"图文提取"标注段）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src/types/session.ts | 313 | 覆盖会话本体/转写段/OCR 块/画面要点屏、结构图与图内检索、过滤统计与笔记过滤结果（NoteFilterResult）、段搜索命中与 AI 复核。（自动摘取，待细化） | 若再增长：按职责拆分 |

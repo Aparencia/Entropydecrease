@@ -8,6 +8,11 @@
  *   本批**只冻结不迁移**（迁移另派 T16-B；字号映射登记给批 5/6）。没有棘轮，「还没迁完」就会
  *   退化成「永远在迁」：新代码继续手写这个灰与这个字号，而没有任何判据说话。
  *
+ * ★ T16-B 收紧（2026-09-12）：弱化灰 **249/100 → 63/44**（迁移 186 处；例外 63 处）。
+ *   棘轮一因此**加一组附则牙**：`RESIDUAL` 逐文件理由（无理由的冻结 ⇒ 红）+ **僵尸豁免**
+ *   （已迁走却还挂在豁免表里 ⇒ 红）+ 分类非空（分类表被清空 = 该判据空真）+ 键集双向相等。
+ *   字号越界侧**未动**（558/120）：迁移时越界值按 R2 原样留在行内。
+ *
  * ★ 计次口径（**口径本身是判据的一部分**；与 `textBaseline.ts` 的冻结值同源）
  *   域 = `app/src/**` 的 `.ts`/`.tsx` **减** `*.test.ts(x)` **减** `ui/primitives/**`
  *     （原语层是墨度与字阶的真源，不是待收敛的调用点 —— 同 `statusLineBaseline` / T1 的 `prod`）。
@@ -46,6 +51,8 @@ import {
   FROZEN_MUTED_GRAY_BY_FILE,
   FROZEN_MUTED_GRAY_FILES,
   FROZEN_MUTED_GRAY_TOTAL,
+  RESIDUAL,
+  type TextResidualKind,
 } from "./textBaseline";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -136,9 +143,12 @@ describe("棘轮一 · 弱化灰 #9ca3af（只许减 · 迁移后本表须手工
   });
 
   it("⑥ 防真空阳性对照：仪器**确实看得见** #9ca3af（静默失效时本判据必须红）", () => {
-    // 正样本（**真实文件** + 同一支仪器）：域内一个已知文件确实被数到 —— 若仪器静默返回全 0，
-    // 这里立刻红，而不是让 ①–⑤ 一起变成「空真绿」。
-    const positive = "components/action-center/ActionCenterPanel.tsx";
+    // 正样本（**真实文件** + 同一支仪器）：域内一个**仍有残余命中**的文件确实被数到 —— 若仪器静默
+    // 返回全 0，这里立刻红，而不是让 ①–⑤ 一起变成「空真绿」。
+    // ⚠️ T16-B 收紧时换过正样本：原来的 `components/action-center/ActionCenterPanel.tsx`（12 处）
+    // 已被本批**整文件迁走**（12 → 0）⇒ 拿它当正样本会变成「要求已迁文件仍有灰字」的怪判据。
+    // 新正样本 = 锚文件（5 处全是登记例外，B1 硬守卫 + 品牌青三元 ⇒ 不可能合法归零）。
+    const positive = ANCHOR_MUTED_GRAY.file;
     expect(GRAY.get(positive) ?? 0, `仪器在 ${positive} 上看不见 #9ca3af ⇒ 扫描静默失效`).toBeGreaterThan(0);
     expect(FROZEN_MUTED_GRAY_BY_FILE[positive]).toBe(GRAY.get(positive));
     // 词表自证：字面量确实是 `#9ca3af`（不是抄错的码位 ⇒ 词表静默变窄）
@@ -153,6 +163,48 @@ describe("棘轮一 · 弱化灰 #9ca3af（只许减 · 迁移后本表须手工
     expect(DOMAIN.includes("ui/tokens.css"), "域口径漂了：CSS 不该进来").toBe(false);
     // 本文件在域外（否则 ⑥ 自己的字面量会自命中）
     expect(DOMAIN.includes("ui/primitives/textRatchet.test.ts")).toBe(false);
+  });
+});
+
+describe("棘轮一附则 · RESIDUAL 例外声明（照 loadingBaseline 范式 —— 例外必须**带理由**且**此刻仍命中**）", () => {
+  it("① 冻结表每个键都有一条例外声明，且理由非空（不许「无理由的冻结」）", () => {
+    const declared = new Set(RESIDUAL.map((r) => r.file));
+    const unexplained = Object.keys(FROZEN_MUTED_GRAY_BY_FILE).filter((f) => !declared.has(f));
+    expect(unexplained, `这些文件被冻结却没有 RESIDUAL 理由：\n${unexplained.join("\n")}`).toEqual([]);
+    const thin = RESIDUAL.filter((r) => typeof r.reason !== "string" || r.reason.trim().length < 20).map((r) => r.file);
+    expect(thin, `例外理由过短（等于没写）：\n${thin.join("\n")}`).toEqual([]);
+    expect(RESIDUAL, "冻结文件数 ≠ 例外条目数（每个冻结文件恰一条）").toHaveLength(FROZEN_MUTED_GRAY_FILES);
+  });
+
+  it("② 僵尸豁免：豁免条目此刻必须**仍然命中**（已迁走却还挂在豁免表里 ⇒ 红）", () => {
+    const zombies = RESIDUAL.filter((r) => (GRAY.get(r.file) ?? 0) === 0).map((r) => r.file);
+    expect(zombies, `这些文件已无弱化灰命中，却仍挂在 RESIDUAL 里（僵尸豁免）：\n${zombies.join("\n")}`).toEqual([]);
+    // 反向：豁免条目必须指向**冻结表里的**文件（否则它是一张脱离棘轮的自述表）
+    const stray = RESIDUAL.filter((r) => !(r.file in FROZEN_MUTED_GRAY_BY_FILE)).map((r) => r.file);
+    expect(stray, `RESIDUAL 指向不在冻结表里的文件：\n${stray.join("\n")}`).toEqual([]);
+  });
+
+  it("③ 分类表不许被清空：每类至少一条（否则该分类判据是空真）", () => {
+    const kinds: readonly TextResidualKind[] = [
+      "interactive",
+      "ternary-no-equivalent",
+      "interactive-no-equivalent",
+      "nontext",
+      "tag",
+      "colorMap",
+      "b1-non-migrated",
+    ];
+    for (const k of kinds) {
+      expect(RESIDUAL.filter((r) => r.kind === k).length, `分类 ${k} 一条都没有（＝该类判据空真）`).toBeGreaterThan(0);
+    }
+    // 锚文件必须在豁免表里：它是「不可能合法下降」的那个文件（防锚被顺手换掉）
+    expect(RESIDUAL.map((r) => r.file)).toContain(ANCHOR_MUTED_GRAY.file);
+  });
+
+  it("④ 非弱化文本（background/border/stroke）在例外表里有落点（B19 第 5 条：登记而非消失）", () => {
+    const nontext = RESIDUAL.filter((r) => r.kind === "nontext").map((r) => r.file);
+    expect(nontext.length, "非弱化文本的例外登记被清空").toBeGreaterThanOrEqual(4);
+    for (const f of nontext) expect(FROZEN_MUTED_GRAY_BY_FILE[f], `${f} 不在冻结表里`).toBeGreaterThan(0);
   });
 });
 
