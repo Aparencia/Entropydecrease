@@ -14,6 +14,14 @@
 use std::io::{Seek, Write};
 use std::path::{Path, PathBuf};
 
+/// WAV 轴 ≡ 会话轴的对齐纯函数（T23/R5.5-b 的根治方案；纯逻辑、零 IO、零依赖）。
+///
+/// @ai-context: 由父模块自己声明（DISPATCH-TEMPLATE §二）；`pub(crate)` 是跨模块引用的
+///              必要条件（`live_session*` 与本模块的测试都要用）。
+#[path = "audio_align.rs"]
+#[allow(dead_code)] // 本提交只落纯函数 + 单测（尚未接线）；接线提交落地后即删
+pub(crate) mod audio_align;
+
 /// 默认保留期（天）。
 pub const DEFAULT_RETENTION_DAYS: u64 = 30;
 /// 默认磁盘预算（字节；1 小时 ≈ 115MB，预算 4GB ≈ 35 小时会话）。
