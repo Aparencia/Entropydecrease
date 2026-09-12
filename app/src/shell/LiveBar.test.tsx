@@ -146,6 +146,18 @@ describe("L4 · paused 的三处语义（受控：本件不自己翻转状态）
       LIVE_PAUSE_LABELS.paused,
     );
   });
+
+  it("可访问名与 `data-paused` **必须同步翻转**（只翻其中一个 ⇒ 本条红 —— 名翻转本身有牙）", () => {
+    const pairs = [false, true].map((p) => {
+      cleanup();
+      const el = renderBar({ paused: p });
+      return [el.getAttribute("data-paused"), byId("live-pause").textContent];
+    });
+    expect(pairs, "逐序成对 [data-paused, 可访问名]：两态都必须换（只翻属性不换名 = 屏幕阅读器读到旧动作）").toEqual([
+      ["false", LIVE_PAUSE_LABELS.running],
+      ["true", LIVE_PAUSE_LABELS.paused],
+    ]);
+  });
 });
 
 describe("L5 · live:audio-level 接线（内部订阅）与卸载退订", () => {
