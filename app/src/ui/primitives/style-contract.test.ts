@@ -234,3 +234,41 @@ describe("退场时长三方对拍：组件常量 == 组件 CSS 兜底字面量 
     }
   });
 });
+
+/* ─────────────── 批 5 Task 5（C14①）**追加**：ViewSwitcher 的类名枚举 + 零行内 style ───────────────
+ * 追加而非重写：**不动**上面 `CONTRACTS` 的 12 行、**不动**既有 6 个 `it`（R-2 裁决 ② 逐字）。
+ * 为什么不进 `CONTRACTS`：那张表判的是「**取值联合** ↔ CSS 档位」（`Record<U, string>` 提供编译期
+ * 双向约束）；`ViewSwitcher` 的类名**不是**从联合派生的 —— 它是 R-2 的**复用**（容器 + 段两类，基类
+ * `ed-btn` 的规则属 `Button.css`）。塞进 `CONTRACTS` 就要把「12」这条既有数字改掉，正是 R-2 禁止的。
+ * 类名空间的理由（段控件本质是成组的按钮 · 复用换来 0 处既有断言改动 · 诚实代价）写在
+ * `ViewSwitcher.tsx` 与 `ViewSwitcher.css` 的文件头。
+ */
+const VIEW_SWITCHER_CLASSES: readonly string[] = ["ed-btn-group", "ed-btn--segment"];
+
+describe("批 5（C14①）ViewSwitcher：类名枚举 ↔ CSS 规则 · 零行内 style", () => {
+  const src = read("ViewSwitcher.tsx");
+  // **先剥注释**：文件头大段解释类名空间与"为什么不写行内样式"，不剥会把解释算成产出/犯规
+  const clean = stripComments(src);
+  const css = stripComments(read("ViewSwitcher.css"));
+  /** tsx 里出现的全部 `.ed-*` 名字（剥注释后）—— 它必须与枚举块**双向相等** */
+  const produced: readonly string[] = [...new Set([...clean.matchAll(/\bed-[A-Za-z0-9_-]+/g)].map((m) => m[0]))].sort();
+
+  it("枚举块与 tsx 产出的类双向相等（基类 `ed-btn` 是**复用**、不进枚举）", () => {
+    expect(VIEW_SWITCHER_CLASSES, "枚举块被清空 = 本判据退化为空真").toHaveLength(2);
+    // R-2 的前提：段元素必须仍带基类 `ed-btn` —— 掉了它，motion-coverage 的覆盖与四态一起失效
+    expect(produced, "段元素不再带 `ed-btn` 基类（reduced-motion 覆盖会静默落空）").toContain("ed-btn");
+    expect(produced.filter((c) => c !== "ed-btn"), "tsx 加了类而枚举块没跟 ⇒ 这条红").toEqual([...VIEW_SWITCHER_CLASSES].sort());
+  });
+
+  it("① 产出的每个类都有规则：新增两类在 ViewSwitcher.css，复用的基类在 Button.css", () => {
+    for (const cls of VIEW_SWITCHER_CLASSES) {
+      expect(css, `ViewSwitcher.css 缺少 .${cls} 的规则（类名拼错 = 静默无样式）`).toMatch(new RegExp(`\\.${cls}\\s*\\{`));
+    }
+    expect(stripComments(read("Button.css")), "复用的基类 `.ed-btn` 在 Button.css 里没有规则").toMatch(/\.ed-btn\s*\{/);
+  });
+
+  it('② 零行内 style（ADR-033 §4）+ `import "./ViewSwitcher.css";` 在位', () => {
+    expect(clean.match(/style=\{/g) ?? [], "ViewSwitcher.tsx 出现行内 style（视觉权威必须留在类里）").toHaveLength(0);
+    expect(src, '缺 `import "./ViewSwitcher.css";` —— 类名照旧产出、样式静默失效').toContain('import "./ViewSwitcher.css";');
+  });
+});

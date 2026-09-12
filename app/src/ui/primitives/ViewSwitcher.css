@@ -1,0 +1,63 @@
+/*
+ * ViewSwitcher.css —— 视图切换器（分段控件）的**类名与状态契约**（批 5 Task 5；C14① + R-2）。
+ *
+ * ★ Why 复用 `ed-btn` 基座命名空间（R-2 的三条理由，与 `ViewSwitcher.tsx` 文件头逐字同源）：
+ *   ① 段控件本质是**成组的按钮** —— 元素就是 `<button>`，四态（hover / active / focus-visible /
+ *      disabled）与焦点环、按压微陷全部由 `.ed-btn` 免费提供，重写一份 = 两份必然漂移；
+ *   ② `motion-coverage.test.ts:113-123` 的「未登记基类」规则**逐字排除**「含 `--`」与
+ *      「`<基类>-…`」⇒ 本文件的 `.ed-btn-group` / `.ed-btn--segment` 不触发它；`.ed-btn` 已在
+ *      `motion.css` 的 reduced-motion 名单里，而段类与基类**同在一个元素上** ⇒ 已被同一条规则
+ *      覆盖（规格 §11-5 逐字：「修饰类（`--`）与子元素类不进名单 …… 它们与基类同在一个元素上、
+ *      已被同一条规则覆盖」）⇒ 不动 `BASE_CLASSES`、不动 `motion.css`、不动 `style-seams.test.ts:190`
+ *      的 12 个基类计数 ⇒ **本批对既有断言的改动数保持 0**（附 B.6 逐字成立）；
+ *   ③ **诚实代价**：段控件的类名因此落在**按钮基座命名空间**里 —— 这是一次**语义折中**（一个
+ *      「视图切换器」在类名上读起来像「一组按钮」），换来的是不改两处既有守卫。登记给 T18 的
+ *      「诚实代价」段（控制方 R-2 裁决 ③ 逐字要求）。
+ *
+ * ★ 状态承载（为什么是属性选择器而不是状态类）：选中态写在 `[aria-pressed="true"]` 上 ——
+ *   语义（辅助技术读到的）与样式（眼睛看到的）**同源**，不可能漂移；先例 = `Button.css` 的
+ *   `.ed-btn[aria-disabled="true"]`（那里同样用属性而非 `--disabled` 修饰类）。
+ *   代价：段元素的 `className` 在选中/未选中下**逐字相同**（`ed-btn ed-btn--segment`）——
+ *   因此本批的类名枚举只有两项（见 `style-contract.test.ts` 的 `VIEW_SWITCHER_CLASSES`）。
+ *
+ * ★ 响应层接缝（规格 §8.6.1 第 3 条；C14① 逐字要求覆盖）：三个属性各自**单属性、无时序、
+ *   `var(--ed-dur-micro, 120ms)`** —— 下一个输入直接接管当前过渡，不排队。批 6 的三档强度 /
+ *   双基调 / GSAP 不在本文件（B9：本批交付的是结构与内容，手感在批 6）。
+ *
+ * 边界（与 `Button.css` 同口径）：
+ *   ① 零颜色字面量（`style-seams.test.ts` 守卫①扫**全部** `primitives/*.css`）· 不写 `z-index`；
+ *   ② **不写 `@media`** —— reduced-motion 由 `motion.css` 的**唯一**块统一覆盖；重复写会让
+ *      「一处改对所有地方」失效，也是本文件**不得新增未被覆盖动效类**的落点；
+ *   ③ 无 `@keyframes`、无 `animation`（段控件是响应层，不是环境层）；
+ *   ④ 无任何 `translate*()` —— 按压微陷由 `.ed-btn:active` 提供，本文件不做位移（≤8px 上限自然成立）。
+ */
+
+.ed-btn-group {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--ed-radius-control, 5px);
+  background: var(--ed-bg-sunken);
+}
+
+.ed-btn--segment {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ed-ink-3);
+  transition: background var(--ed-dur-micro, 120ms), color var(--ed-dur-micro, 120ms), border-color var(--ed-dur-micro, 120ms);
+}
+
+.ed-btn--segment[aria-pressed="true"] {
+  background: var(--ed-bg-raised);
+  color: var(--ed-ink-1);
+  border-color: var(--ed-border);
+}
+
+.ed-btn--segment:hover:not([aria-pressed="true"]):not(:disabled) {
+  background: var(--ed-bg-canvas);
+}
+
+.ed-btn--segment:disabled {
+  opacity: .6;
+  cursor: default;
+}

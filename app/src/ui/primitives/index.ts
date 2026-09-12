@@ -43,3 +43,6 @@ export type { ToastAction, ToastKind, ToastPlacement, ToastProps } from "./Toast
 
 export { StatusLine } from "./StatusLine";
 export type { StatusKind, StatusLineProps } from "./StatusLine";
+
+export { ViewSwitcher } from "./ViewSwitcher";
+export type { ViewSwitcherOption, ViewSwitcherProps } from "./ViewSwitcher";
