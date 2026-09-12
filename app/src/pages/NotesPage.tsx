@@ -30,9 +30,9 @@ import { useNotesPageEditing } from "../hooks/useNotesPageEditing";
 import { useNotesBatchActions } from "../hooks/useNotesBatchActions";
 import { useNotesListData } from "../hooks/useNotesListData";
 import { useNotesDeepLink } from "../hooks/useNotesDeepLink";
-// 批 3 T5：断点改走单一真源——组列/列表列 860 与 700 统一为三列页 1024；
-// 大纲列 1100 抬到规格的 1280（最晚折叠，规格 §6.2）
-import { breakpointFor } from "../shell/breakpoints";
+// 批 3 T8：列规格（组列/列表列/大纲列三行的宽·夹取·阈值）改从 `shell/columnRegistry` 取
+// ——页面不再自建规格；断点值（t5 曾在此写 breakpointFor）现在住在注册表里
+import { columnSpec } from "../shell/columnRegistry";
 
 interface Props {
   focusNoteId?: number | null;
@@ -88,10 +88,12 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
     onReload: () => void list.load(list.keyword, list.tagFilter, list.sortMode),
     onStatus: list.setStatus,
   });
-  // v0.15：三栏列状态（可拖拽 + 宽度记忆 + 窄窗自动折叠；默认值=历史固定宽度）
-  const groupsCol = useColumnLayout("notes-groups", { default: 240, min: 180, max: 320, autoFoldBelow: breakpointFor("threeCol") });
-  const listCol = useColumnLayout("notes-list", { default: 320, min: 240, max: 420, autoFoldBelow: breakpointFor("threeCol") });
-  const outlineCol = useColumnLayout("notes-outline", { default: 180, min: 140, max: 260, autoFoldBelow: breakpointFor("outlineCol") });
+  // v0.15：三栏列状态（可拖拽 + 宽度记忆 + 窄窗自动折叠）
+  // 批 3 T8：三行规格来自 `columnRegistry`（240/180·320·1024、320/240·420·1024、
+  // 180/140·260·1280），执行仍由 hook 完成——页面不再自建规格
+  const groupsCol = useColumnLayout("notes-groups", columnSpec("notes-groups"));
+  const listCol = useColumnLayout("notes-list", columnSpec("notes-list"));
+  const outlineCol = useColumnLayout("notes-outline", columnSpec("notes-outline"));
 
   // A6：注意力跟踪
   useNoteAttention(selected?.id ?? null, selected?.title ?? "");

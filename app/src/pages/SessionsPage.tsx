@@ -23,8 +23,8 @@ import { useDbRefresh } from "../hooks/useDbRefresh";
 import type {
   BatchNoteResult, BatchSessionDeleteResult, CourseGroup, SessionDetail, SessionListItem,
 } from "../types";
-// 批 3 T5：断点改走单一真源（规格 §6.2 阈值 860→1100，两列页）
-import { breakpointFor } from "../shell/breakpoints";
+// 批 3 T8：列规格（宽/夹取/阈值 1100）改从 `shell/columnRegistry` 取——页面不再自建规格
+import { columnSpec } from "../shell/columnRegistry";
 
 interface Props {
   focusSessionId?: number | null;
@@ -46,8 +46,9 @@ interface Toast {
 }
 
 export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocusRefineTaskConsumed, onRefineTaskStarted, active, onOpenNote }: Props) {
-  // v0.15：左栏列状态（可拖拽 + 记忆 + 窄窗折叠；默认值=历史固定宽度 320）
-  const listCol = useColumnLayout("sessions-list", { default: 320, min: 240, max: 420, autoFoldBelow: breakpointFor("twoCol") });
+  // v0.15：左栏列状态（可拖拽 + 记忆 + 窄窗折叠；规格 §6.2 两列页阈值 1100）
+  // 批 3 T8：规格来自 `columnRegistry`，执行仍由 hook 完成
+  const listCol = useColumnLayout("sessions-list", columnSpec("sessions-list"));
   const [items, setItems] = useState<SessionListItem[]>([]);
   const [groups, setGroups] = useState<CourseGroup[] | null>(null); // REQ-078：课程分组模式
   const [grouped, setGrouped] = useState(false);

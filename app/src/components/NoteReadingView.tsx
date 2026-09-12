@@ -25,6 +25,10 @@ import {
   type SelectionNoteAction,
 } from "../utils/noteSelectionMenu";
 import SelectionActionMenu from "./note-selection/SelectionActionMenu";
+// 批 3 T8：大纲列的规格（默认宽 180）来自单一注册表，组件不再写死；
+// 列宽执行器仍是 useColumnLayout（A5 裁决：注册表持规格、hook 执行）
+import { columnSpec } from "../shell/columnRegistry";
+import ColumnResizer from "./ColumnResizer";
 
 interface Props {
   note: Note;
@@ -37,6 +41,14 @@ interface Props {
   headerExtra?: ReactNode;
   /** v0.15：大纲列折叠（统一列折叠体系——父层 useColumnLayout 驱动，替代悬浮按钮） */
   outlineFolded?: boolean;
+  /** v0.15 大纲列宽（批 3 T8：由 `columnSpec("notes-outline")` 的执行器经父层传入——
+   *  此前组件写死 180 ⇒ hook 的宽度记忆永不生效，即审计 J1-6「假可调」。
+   *  缺省 = 注册表默认值，故 `180` 全仓只剩注册表一处） */
+  outlineWidth?: number;
+  /** 大纲列拖拽手柄（缺省不渲染——未接执行器的调用点不会凭空多出 6px 手柄） */
+  onOutlineResize?: (delta: number) => void;
+  /** 手柄双击恢复默认宽（缺省=双击无动作） */
+  onOutlineReset?: () => void;
   /** v0.19.1（REQ-260）：外部注入的命中词搜索（引用跳转——key 递增可重触发；
    *  复用 A2 搜索高亮与定位，仅阅读态） */
   externalSearch?: { key: number; query: string } | null;
@@ -55,7 +67,8 @@ interface Props {
 
 export default function NoteReadingView({
   note, editing, editor, auxPanels, headerExtra,
-  outlineFolded = false, externalSearch = null, onToggleOutline,
+  outlineFolded = false, outlineWidth = columnSpec("notes-outline").default,
+  onOutlineResize, onOutlineReset, externalSearch = null, onToggleOutline,
   onEdit, onPinToggle, onDelete, onTagClick, onOpenSession, onTaskToggle, onImageOpen,
   onSelectionAction,
 }: Props) {
@@ -167,11 +180,13 @@ export default function NoteReadingView({
 
   return (
     <>
-      {/* v0.11.5/v0.15 大纲面板（统一列折叠体系：折叠 → 26px 窄条） */}
+      {/* v0.11.5/v0.15 大纲面板（统一列折叠体系：折叠 → 26px 窄条）
+          批 3 T8：宽度来自执行器（此前写死 180），并补上列拖拽手柄——与
+          NotesGroupsColumn/NotesListColumn 同款：手柄在**条件之外**（折叠态也渲染） */}
       {outlineFolded ? (
         <ColumnBar icon="📑" title="大纲" onClick={() => onToggleOutline?.()} />
       ) : (
-        <div style={{ width: 180, flexShrink: 0, borderRight: "1px solid #f3f4f6", overflowY: "auto", padding: "12px 8px", background: "#fafafa" }}>
+        <div data-testid="outline-panel" style={{ width: outlineWidth, flexShrink: 0, borderRight: "1px solid #f3f4f6", overflowY: "auto", padding: "12px 8px", background: "#fafafa" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, fontWeight: 600, color: "#6b7280", marginBottom: 8 }}>
             <span>大纲</span>
             <button
@@ -204,6 +219,8 @@ export default function NoteReadingView({
           ))}
         </div>
       )}
+      {/* 大纲列拖拽手柄（批 3 T8：折叠/展开两态都渲染——与其它列同款） */}
+      {onOutlineResize && <ColumnResizer onResize={onOutlineResize} onReset={onOutlineReset} />}
 
       {/* 正文区 */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>

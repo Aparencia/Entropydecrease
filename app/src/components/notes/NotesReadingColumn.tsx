@@ -19,10 +19,13 @@
  *              三栏宽度分配）；空态占位的中文文案与硬编码色 `#9ca3af` 逐字保留
  *              （本批不 token 化）。
  * @ai-context: 等价红线——`outlineCol` 的 localStorage 键 `notes-outline` 与
- *              `{default:180,min:140,max:260,autoFoldBelow:breakpointFor("outlineCol")}`
- *              （批 3 T5 前该实参逐字为 1100，现由 `shell/breakpoints.ts` 单一真源
- *              给 1280）由页面逐字传入，本组件不得另建列状态；J1-3（只翻
- *              manualFolded 的折叠死局）为既有缺陷，原样保留。
+ *              `columnSpec("notes-outline")`（批 3 T8 起：默认 180 / 140·260 /
+ *              autoFoldBelow `breakpointFor("outlineCol")`=1280）由页面逐字传入，
+ *              本组件不得另建列状态。批 3 T8 两处接线：① 宽度经 `outlineWidth`
+ *              注入 NoteReadingView（此前组件写死 180 ⇒ J1-6「假可调」）；
+ *              ② `onToggleOutline` 在**已折叠**时走 `expand()`——旧实现只翻
+ *              manualFolded，窄窗自动折叠下 `folded` 恒真 ⇒ J1-3「折叠后点窄条
+ *              永不展开」的死局；未折叠时（✕ 收起）仍是手动折叠，语义不变。
  */
 import type { RefObject } from "react";
 import type { Note, NoteGroup } from "../../types";
@@ -99,7 +102,18 @@ export default function NotesReadingColumn({
             ? { key: readerSearch.key, query: readerSearch.search }
             : null}
           outlineFolded={outlineCol.folded}
-          onToggleOutline={() => outlineCol.setManualFolded(!outlineCol.manuallyFolded)}
+          // 批 3 T8：大纲列宽/拖拽经 props 注入（此前 NoteReadingView 写死 180，
+          // hook 的宽度记忆与 min/max 夹取全部失效——审计 J1-6「假可调」）
+          outlineWidth={outlineCol.width}
+          onOutlineResize={outlineCol.resizeBy}
+          onOutlineReset={outlineCol.resetWidth}
+          // 批 3 T8（J1-3）：窄条（ColumnBar）点击必须走 expand()——它同时清自动/手动
+          // 折叠态；旧实现只翻 manualFolded，窄窗自动折叠下 folded 恒为真 ⇒ 点窄条
+          // 永不展开。未折叠时的 ✕「收起大纲」仍是手动折叠（与 NotesGroupsColumn 的
+          // bar=expand / onCollapse=setManualFolded 同款形态）
+          onToggleOutline={() =>
+            outlineCol.folded ? outlineCol.expand() : outlineCol.setManualFolded(true)
+          }
           editor={
             <RichEditorView
               key={selected.id}

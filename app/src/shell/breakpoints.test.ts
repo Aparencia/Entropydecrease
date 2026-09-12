@@ -26,6 +26,13 @@ describe("断点（规格 §1 决策 16 / §6.2 阈值口径）", () => {
     expect(BREAKPOINTS.nav).toBe(NAV_MIN_WIDTH);
   });
 
+  it("右侧动作簇档位（A7）≥ 导航满档，且逐字 = 1400", () => {
+    // 批 3 T8 新增用例（不改既有断言）：该档位是跨任务依赖（T7 顶栏右簇文字），
+    // 由 T7 的 CDP 探针实测推出（1353.8 的满档需求 > 默认窗 1280 ⇒ 右簇文字只能后置）。
+    expect(BREAKPOINTS.navActionsFull).toBe(1400);
+    expect(BREAKPOINTS.navActionsFull).toBeGreaterThan(BREAKPOINTS.navFull);
+  });
+
   it("breakpointFor 对所有键都返回正数（防漏键导致 undefined 静默成 NaN 比较）", () => {
     for (const k of Object.keys(BREAKPOINTS) as (keyof typeof BREAKPOINTS)[]) {
       expect(breakpointFor(k), k).toBeGreaterThan(0);
