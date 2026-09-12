@@ -20,12 +20,13 @@
 
 | 文件 | 行数 | 豁免理由 | 拆分计划 |
 |---|---|---|---|
-| app/src/pages/ChatPage.tsx | 593 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
+| app/src/pages/ChatPage.tsx | 599 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
 | app/src-tauri/src/db_migrations.rs | 573 | v0.20.11 批 6（REQ-315）再增：note_groups.pin ensure_column + note_group_orders 建表（+21，实测 573——登记值 492 过期；schema 单点收敛理由同左） | 若再增长：kb_* 与 chat_* 表 DDL 拆至 db_migrations_kb.rs |
 | app/src-tauri/src/lib.rs | 572 | crate 根 **322 `mod` + 15 `#[cfg]` = 337 行地板**（Task 1 评审实测更正：原写「321 `mod` + 16 `#[cfg]`」，总数 337 不变；322 含本任务新增的 `mod app_commands;`）；注册清单已移至 `app_commands.rs`（**数据文件**，同属 300–600 豁免带）—— 结构性下界，非欠账 | 已完成（批 0-C3 Task 1，2026-09-11）；余下 161 行模块理由注释 + 装配逻辑，无进一步拆分标的 |
 | app/src/types/knowledge.ts | 559 | 知识体系类型域（体系/节点/概念/模型/引用/审计/决策 + v0.13.8 画布契约 + v0.14.1 画布偏好枚举与下拉文案常量）——类型与文案常量同域防漂移（前端类型域拆分任务待执行） | 若再增长：画布偏好类型与文案拆至 types/canvas.ts |
 | app/src-tauri/src/capture/audio_loopback.rs | 558 | ADR-007 重连机制（重试循环/退避/恢复回调）内聚于捕获线程实现，拆出需跨函数传递 COM 生命周期参数，内聚性优先；2026-08 A1 硬暂停（端点 Stop/Start + 暂停时长补偿 + 残留缓冲清空）再增 | 若再增长：将 run_capture_inner 拆至 audio_loopback_session.rs |
 | app/src-tauri/src/screen_merge.rs | 548 | v0.7.3（REQ-155/158）：屏级聚合纯函数域（聚类/行合并/角色分类/块去重）+ v0.7.5 净化纯函数（单字符/边缘条带/零跨度合并/图去重/包含率）——纯逻辑内聚便于单测 | 若再增长：零跨度合并与图去重拆至 screen_fix.rs |
+| app/src/App.tsx | 548 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 | app/src/components/action-center/ActionCenterPanel.tsx | 537 | v0.20.5 行动中心独立页化：原 ActionCenterOverlay.tsx（509 行登记）更名迁移至 action-center/ 并去遮罩/关闭形态（refreshToken 切回重载）——编排内聚（TD-2026-09-06-G 预留目录兑现）；2026-09-06 实测登记 | 若再增长：队列/历史/SOP 三区拆至 action-center/ 子组件 |
 | app/src-tauri/src/commands_knowledge_core.rs | 529 | v0.13.1（REQ-202~205）：知识体系命令域（概念/模型/引用/审计——commands 9-18）内聚；源 commands_knowledge.rs（18 命令 + 校验）超限按规格 §四拆，本文件承接后半；commands 薄壳 + inner 纯函数 + @ai-context 注释内聚于命令域 | 若再增长：引用与审计拆至 commands_knowledge_links.rs |
 | app/src-tauri/src/live_frame_process.rs | 529 | v0.6.0 ADR-011 拆分产物：帧处理域（网格差异触发/两级判变/带外事件驱动/UI 面板抑制/字幕落库）内聚；process_frame 上下文参数 20+；H2 修复（OCR 热路径切超时变体）+ L2 修复（score 口径诚实化）行数微增 + v0.11.5 Task 2 新颖度变化区域接线再增 | 若再增长：handle_subtitle_frame 与 persist_voted_subtitle 拆至 live_subtitle_persist.rs |
@@ -35,7 +36,6 @@
 | app/src-tauri/src/engine.rs | 521 | 引擎池句柄与同步 API（双 worker 编排 + ADR-009 设备状态 + M7 心跳/失败/缓存计数 + 有界等待变体）；三维复审 #5 超时排空机制（drain_asr/ocr_backlog）与 #3 ASR_FILE_TIMEOUT 文件级超时常量接入后，worker 主循环与请求协议按登记计划拆至 engine_worker.rs（见文末"已拆分"注记）回归本值 | 若再增长：排空机制与同步 API 变体拆至 engine_request.rs |
 | app/src/components/GroupSidebar.tsx | 519 | v0.20.12 批 7（REQ-316）拖拽归组/ⓘ 弹层移组清理留痕透传（509→519；登记值过期纠偏） | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
 | app/src/components/LiveActivityPanel.tsx | 517 | 实时活动面板：会话状态/转录流/OCR 预览/控制区多状态面板内聚（前端审查登记） | 若再增长：转录流与 OCR 预览拆至 LiveTranscriptStream.tsx / LiveOcrPreview.tsx |
-| app/src/App.tsx | 509 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 | app/src-tauri/src/ai_client.rs | 505 | v0.11.6 M1（AiClient::from_provider / from_settings_with_store / is_fallbackable / fallback_provider_ids）+ 2026-09-11 DeepSeek V4.1 适配（chat_plain 探活路径 / build_plain_payload / json 前置条件兜底接线 / thinking 策略落点 / 4xx 错误体透出——纯策略与提取逻辑已拆至 ai_request_policy.rs）——Provider 解析与错误分类内聚于 AiClient 域，构造入口与降级链纯函数同文件便于单测。**旧登记 322 为过期快照，本次按实测纠偏** | 若再增长：fallback_provider_ids 拆至 ai_fallback.rs；payload 构造族拆至 ai_payload.rs |
 | app/src/components/GroupSidebar.test.tsx | 497 | 覆盖串组场景——切换 ⓘ 弹层目标组时表单态必须重置（key=group.id修复）：组 A 改了判类（未确认）→ 点组 B ⓘ → 弹层显示 B 且判类下拉回到 B.kind（防把 A 的选择误用到 B——路径: 改判误操作）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_sop.rs | 490 | v0.20.3（REQ-296/297）SOP 三表数据域（模板/run/步骤/保鲜/聚合）+ 审查加固（保链更新/幂等守卫/步数计数）内聚 | 若再增长：run 执行族拆至 db_sop_run.rs |

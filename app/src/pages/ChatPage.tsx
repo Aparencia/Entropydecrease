@@ -19,6 +19,9 @@ import ChatMessageList from "../components/ChatMessageList";
 import ChatComposer from "../components/ChatComposer";
 import TaskConversationView from "../components/TaskConversationView";
 import useChatStream from "../hooks/useChatStream";
+// 批 3（规格 §6.2）：AI 侧栏列——规格取自注册表，运行时与宽度记忆由 hook 执行
+import { useColumnLayout } from "../hooks/useColumnLayout";
+import { columnSpec } from "../shell/columnRegistry";
 // v0.16.1：对话「另存为笔记」——双入口（顶栏整段 / AI 消息级）+ 转写纯函数
 import ChatSaveNoteDialog from "../components/ChatSaveNoteDialog";
 import { buildConversationMarkdown } from "../utils/chatTranscript";
@@ -99,6 +102,8 @@ export default function ChatPage(props: Props) {
   // F3（审查竞态）：消息装载序号——并发装载只认最新（快速切会话时旧会话的
   // 异步返回不得覆盖新会话消息；与 selectChat 的同步 set 无关，纯防错序）
   const loadSeq = useRef(0);
+  // 批 3（规格 §6.2）：AI 侧栏列——宽度记忆/窄窗自动折叠由 hook 执行（本页不建规格）
+  const chatCol = useColumnLayout("chat-sidebar", columnSpec("chat-sidebar"));
 
   const loadMessages = useCallback(async (sessionId: number) => {
     const my = ++loadSeq.current;
@@ -402,6 +407,7 @@ export default function ChatPage(props: Props) {
   return (
     <div style={{ height: "100%", display: "flex", minHeight: 0 }}>
       <ChatSidebar
+        width={chatCol.width} folded={chatCol.folded} onExpand={chatCol.expand}
         sessions={sessions}
         tasks={tasks}
         activeChatId={activeChatId}

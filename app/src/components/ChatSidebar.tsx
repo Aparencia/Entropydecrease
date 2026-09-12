@@ -9,6 +9,10 @@ import type { AiTaskRecord, ChatSession } from "../types";
 // 2026-09-09 批 1：任务标题统一按类别解析（taskRefLabel——会话级/笔记级
 // 精修 ref_id 语义不同；enrich 恒笔记级），侧栏与对话页/dock 同口径
 import { taskRefLabel } from "../utils/entityLabel";
+// 批 3（规格 §6.2「AI 对话侧栏：接入列基础设施」）：列宽不再写死 240——
+// 规格住在 shell/columnRegistry，运行时由页面里的 useColumnLayout 执行
+import { columnSpec } from "../shell/columnRegistry";
+import ColumnBar from "./ColumnBar";
 
 /** 任务类型标签（refine/enrich → 中文 + 图标；模块内消费——审查修复：原
  *  export 无外部消费方，收窄为非导出） */
@@ -17,7 +21,19 @@ const OP_LABEL: Record<string, string> = {
   enrich: "📚 补充",
 };
 
-interface Props {
+/**
+ * 批 3（规格 §6.2）：本列已接入列基础设施。两个新 prop 均为可选 ⇒ 组件在
+ * 没有页面注入时行为自足（宽度回落到注册表默认值），但**折叠态必须注入
+ * onExpand**——否则 26px 窄条点了不展开（正是 J1-3 那类交互死局的形态）。
+ */
+export interface ChatSidebarProps {
+  /** 生效列宽（`useColumnLayout("chat-sidebar", …).width`，已按 200..320 夹取）；
+   *  缺省 = 注册表默认 260（接线前本组件写死 240，见 columnRegistry 的 M3 注） */
+  width?: number;
+  /** 生效折叠态（自动折叠或手动折叠任一成立）——为真时整列收成 26px 窄条 */
+  folded?: boolean;
+  /** 点窄条展开（`useColumnLayout.expand`：同时清自动/手动折叠态） */
+  onExpand?: () => void;
   sessions: ChatSession[];
   tasks: AiTaskRecord[];
   /** 当前选中（chat 段会话 id / task 段任务 id） */
@@ -41,12 +57,18 @@ function fmtTime(unix: number): string {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-export default function ChatSidebar(props: Props) {
+export default function ChatSidebar(props: ChatSidebarProps) {
   const {
+    width = columnSpec("chat-sidebar").default,
+    folded = false,
+    onExpand,
     sessions, tasks, activeChatId, activeTaskId,
     onSelectChat, onSelectTask, onNewChat, onNewKbChat, onRenameChat, onDeleteChat,
     sessionTitles, noteTitles,
   } = props;
+  // 批 3：折叠态与其它列同款——整列换成 ColumnBar 窄条（26px，点击走 expand()）。
+  // 顶层仍是**恰好一个**元素（不是 Fragment）：根 flex 的子元素数不变 ⇒ 不改 flex 分配。
+  if (folded) return <ColumnBar icon="💬" title="对话" onClick={() => onExpand?.()} />;
   const itemBase: React.CSSProperties = {
     padding: "6px 8px",
     borderRadius: 6,
@@ -62,7 +84,7 @@ export default function ChatSidebar(props: Props) {
     color: "#374151",
   };
   return (
-    <div style={{ width: 240, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minHeight: 0 }}>
+    <div style={{ width, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minHeight: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 8px 4px" }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: "#6b7280" }}>💬 对话</span>
         <div style={{ display: "flex", gap: 2 }}>

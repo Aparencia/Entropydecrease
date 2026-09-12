@@ -33,6 +33,10 @@ import AsrConfusionPanel from "../components/AsrConfusionPanel";
 import ProofreadToggle from "../components/ProofreadToggle";
 // v0.20.4（REQ-304）：web 扩展收件服务面板
 import WebInboxPanel from "../components/WebInboxPanel";
+// 批 3（规格 §6.2「设置 主列：现 720 左对齐 → 改居中（860）」）：阅读舒适宽取自注册表。
+// ⚠️ 本列**不走** useColumnLayout——注册表它的 min=max=0（不参与拖拽），
+//    clamp(860, 0, 0) 会得到 0 ⇒ 只取规格的 default 值
+import { columnSpec } from "../shell/columnRegistry";
 
 const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
 const groupTitle: React.CSSProperties = {
@@ -56,7 +60,7 @@ interface Props {
 export default function SettingsPage({ active = true }: Props) {
   return (
     <div style={{ height: "calc(100vh - var(--ed-nav-h))", overflowY: "auto" }}>
-      <div style={{ maxWidth: 720, padding: "12px 16px 24px" }}>
+      <div style={{ maxWidth: columnSpec("settings-main").default, margin: "0 auto", padding: "12px 16px 24px" }}>
         <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 4 }}>
           应用配置与管理。改动即时生效，课堂助手下次使用时读取最新值。
         </div>

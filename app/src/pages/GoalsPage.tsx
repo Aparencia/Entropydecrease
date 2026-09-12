@@ -9,6 +9,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useDbRefresh } from "../hooks/useDbRefresh";
+// 批 3（规格 §6.2「目标 左列：接入列基础设施；默认 380 → 320」）：本页不再自建列宽——
+// 规格取自注册表，运行时/宽度记忆由 hook 执行（默认 320，可拖 240..420，窄窗自动折叠）
+import { useColumnLayout } from "../hooks/useColumnLayout";
+import { columnSpec } from "../shell/columnRegistry";
+import ColumnResizer from "../components/ColumnResizer";
+import ColumnBar from "../components/ColumnBar";
 import type { GoalCardView, GraduationReport } from "../types/goals";
 import GoalCard from "../components/GoalCard";
 import GoalDetail from "../components/GoalDetail";
@@ -27,6 +33,8 @@ export default function GoalsPage() {
   // v0.18.1：毕业档案（快照永久保留——目标删除后仍可读；REQ-255/256）
   const [archives, setArchives] = useState<GraduationReport[]>([]);
   const [archiveOpen, setArchiveOpen] = useState<number | null>(null);
+  // 批 3（规格 §6.2）：目标左列——今日硬编码 380，注册表口径改为默认 320（M4）
+  const goalsCol = useColumnLayout("goals-left", columnSpec("goals-left"));
 
   const load = useCallback(async () => {
     try {
@@ -77,7 +85,12 @@ export default function GoalsPage() {
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
-        <div style={{ width: 380, overflow: "auto", padding: 12, borderRight: "1px solid #e5e7eb", boxSizing: "border-box", flexShrink: 0 }}>
+        {/* 批 3：折叠态与其它列同款（26px 窄条，点击走 expand()——不是 setManualFolded，
+            否则窄窗自动折叠下点了不展开） */}
+        {goalsCol.folded ? (
+          <ColumnBar icon="🎯" title="目标列表" onClick={goalsCol.expand} />
+        ) : (
+        <div style={{ width: goalsCol.width, overflow: "auto", padding: 12, borderRight: "1px solid #e5e7eb", boxSizing: "border-box", flexShrink: 0 }}>
           {err && <p style={{ fontSize: 12, color: "#dc2626" }}>{err}</p>}
           {loaded && cards.length === 0 && (
             <div style={{ padding: 24, textAlign: "center" }}>
@@ -122,6 +135,8 @@ export default function GoalsPage() {
             </div>
           )}
         </div>
+        )}
+        <ColumnResizer onResize={goalsCol.resizeBy} onReset={goalsCol.resetWidth} />
         <div style={{ flex: 1, minWidth: 0 }}>
           {selectedId != null ? (
             <GoalDetail
