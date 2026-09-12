@@ -3,10 +3,13 @@
  *
  * @ai-context: 批 2 包体治理的原子层。Vite 的 `build.rollupOptions.output.manualChunks`
  *              接收模块 id，返回 chunk 名；返回 `undefined` 表示「交回 rollup 默认算法」。
- * @ai-context: 为什么**必须按「解析出的包名」精确匹配**，而不是 `id.includes("node_modules/react")`：
- *              本仓实测的子串碰撞 —— `node_modules/react` 同时是
- *              `react-dom` / `react-markdown` / `@xyflow/react` 的子串。用 includes 会把
- *              markdown 栈与画布栈并进 `vendor-react`，懒加载边界**静默失效**
+ * @ai-context: 为什么**必须按「解析出的包名」精确匹配**，而不是 `id.includes(...)`：
+ *              本仓实测（单测 `manualChunks.test.ts` 的「子串碰撞陷阱」段即机器判据）——
+ *              裸 token `react` 才是 `react-dom` / `react-markdown` / `@xyflow/react` 三者的
+ *              共同子串；`@xyflow/react` 的模块 id 里**没有**连续子串 `node_modules/react`
+ *              （中间隔着 `@xyflow/`）。于是两种朴素口径各错一半：裸 `includes("react")`
+ *              把 markdown 栈与画布栈一起吞进 `vendor-react`；`includes("node_modules/react")`
+ *              只吞前两者，把画布栈**漏回 rollup 默认算法**。两者都让懒加载边界**静默失效**
  *              （构建照样成功、gzip 照样降一点，但批 6 的 GSAP 独立 chunk 承诺当场落空）。
  *              这是批 1 六例「裸 includes 判活」教训在构建配置上的镜像。
  * @ai-context: 为什么 GSAP 现在就在表里（而依赖还没装）：规格 §13 风险表要求
@@ -29,8 +32,11 @@ export type VendorGroup =
   | "vendor-canvas"
   | "vendor-md";
 
-/** 精确包名 → 分组。**先于前缀族匹配**，因此 `rehype-katex` 不会被 `rehype-` 抢走。 */
-const EXACT: Readonly<Record<string, VendorGroup>> = {
+/** 精确包名 → 分组。**先于前缀族匹配**，因此 `rehype-katex` 不会被 `rehype-` 抢走。
+ *  导出**只为单测**：钉值表要能断言「本表每一条都有字面钉值、且键集与钉值表逐字一致」
+ *  （评审 Minor-2 —— 28/49 条无钉值时，把 `bail` 挪进 `vendor-katex` 不会变红）。
+ *  生产代码不得 import 它（分组只能经 `vendorGroupOf` / `manualChunks` 表达）。 */
+export const EXACT: Readonly<Record<string, VendorGroup>> = {
   // 批 6 预留（本批不安装；规则惰性，见文件头注释）
   gsap: "vendor-gsap",
   "@gsap/react": "vendor-gsap",

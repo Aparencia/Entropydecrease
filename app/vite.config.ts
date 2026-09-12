@@ -13,8 +13,11 @@ export default defineConfig(async () => ({
   // Why 放在这里而不是对象形式 `{ "vendor-react": ["react", …] }`：
   //   ① 对象形式在包未安装时**直接让构建失败**（rollup 解析不到入口），
   //      而本批必须为批 6 的 GSAP 预留一个「现在惰性、将来自动生效」的槽；
-  //   ② 函数形式可以按**解析出的包名**精确匹配，避开 `node_modules/react`
-  //      同时是 react-dom / react-markdown / @xyflow/react 子串的碰撞陷阱。
+  //   ② 函数形式可以按**解析出的包名**精确匹配：实测**裸 token `react`** 才是 react-dom /
+  //      react-markdown / @xyflow/react 三者的共同子串，而 `node_modules/react` **不是**
+  //      （`@xyflow/react` 的 id 中间隔着 `@xyflow/`）。用 id.includes 一类朴素口径会把
+  //      markdown 栈与画布栈一起吞进 react chunk、或把画布栈漏回 rollup 默认算法 ——
+  //      两种都让懒加载边界静默失效（判据见 src/build/manualChunks.test.ts）。
   // 规则与单测见 src/build/manualChunks.ts（纯函数，tsc 与 vitest 都覆盖得到）。
   build: {
     rollupOptions: {

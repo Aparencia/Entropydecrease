@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { manualChunks, packageNameOf, vendorGroupOf, type VendorGroup } from "./manualChunks";
+import { EXACT, manualChunks, packageNameOf, vendorGroupOf, type VendorGroup } from "./manualChunks";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -102,5 +102,150 @@ describe("覆盖闸：package.json 的每个运行时依赖都必须有归属", 
     expect(deps.length).toBeGreaterThan(0);
     const ungrouped = deps.filter((d) => vendorGroupOf(`/r/node_modules/${d}/index.js`) === undefined);
     expect(ungrouped).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 3 加固（评审 task-3-review.md Important-1 / Minor-2）。以上 40 条一字未动，
+// 以下全是**加测试**；实现侧只多一个 `export const EXACT` 供键集断言用，分组逻辑零改动。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * EXACT 表的**全量字面钉值**（Minor-2：原 49 条里 28 条无钉值 ⇒ 改错分组不报错）。
+ * 期望值必须**字面写死**、不能从实现里读出来比对：期望若取自被审查的同一张表，
+ * 「把 `bail` 挪进 `vendor-katex`」这类编辑会连期望值一起改，断言恒真（自指空转）。
+ * 键集一致断言（本段最后一条）补齐另一半：新增/删除登记行也必须同步改这里。
+ */
+const EXACT_PINS: readonly (readonly [string, VendorGroup])[] = [
+  ["gsap", "vendor-gsap"],
+  ["@gsap/react", "vendor-gsap"],
+  ["react", "vendor-react"],
+  ["react-dom", "vendor-react"],
+  ["scheduler", "vendor-react"],
+  ["@tauri-apps/api", "vendor-tauri"],
+  ["@tauri-apps/plugin-dialog", "vendor-tauri"],
+  ["katex", "vendor-katex"],
+  ["rehype-katex", "vendor-katex"],
+  ["hast-util-from-dom", "vendor-katex"],
+  ["hast-util-to-text", "vendor-katex"],
+  ["hast-util-from-html-isomorphic", "vendor-katex"],
+  ["hast-util-is-element", "vendor-katex"],
+  ["hast-util-parse-selector", "vendor-katex"],
+  ["hastscript", "vendor-katex"],
+  ["property-information", "vendor-katex"],
+  ["web-namespaces", "vendor-katex"],
+  ["codemirror", "vendor-editor"],
+  ["crelt", "vendor-editor"],
+  ["style-mod", "vendor-editor"],
+  ["w3c-keyname", "vendor-editor"],
+  ["classcat", "vendor-canvas"],
+  ["zustand", "vendor-canvas"],
+  ["use-sync-external-store", "vendor-canvas"],
+  ["react-markdown", "vendor-md"],
+  ["unified", "vendor-md"],
+  ["bail", "vendor-md"],
+  ["trough", "vendor-md"],
+  ["vfile", "vendor-md"],
+  ["vfile-message", "vendor-md"],
+  ["extend", "vendor-md"],
+  ["is-plain-obj", "vendor-md"],
+  ["devlop", "vendor-md"],
+  ["zwitch", "vendor-md"],
+  ["ccount", "vendor-md"],
+  ["longest-streak", "vendor-md"],
+  ["markdown-table", "vendor-md"],
+  ["trim-lines", "vendor-md"],
+  ["escape-string-regexp", "vendor-md"],
+  ["decode-named-character-reference", "vendor-md"],
+  ["comma-separated-tokens", "vendor-md"],
+  ["space-separated-tokens", "vendor-md"],
+  ["html-url-attributes", "vendor-md"],
+  ["style-to-js", "vendor-md"],
+  ["style-to-object", "vendor-md"],
+  ["inline-style-parser", "vendor-md"],
+  ["estree-util-is-identifier-name", "vendor-md"],
+  ["@ungap/structured-clone", "vendor-md"],
+  ["@types/katex", "vendor-katex"],
+];
+
+/**
+ * PREFIX 族的**有效**钉值（Minor-2：`^rehype-` / `^vfile` 原先没有任何由它们决定分组的
+ * 钉值 —— `rehype-katex` / `vfile` 都被 EXACT 抢走 ⇒ 改前缀的组不会变红）。
+ * 每个前缀一条代表；`EXACT[name]` 必须为 undefined 是**有效性判据**：代表一旦被 EXACT
+ * 接管，这条钉值就不再约束前缀表（原缺口正是这么产生的）。
+ */
+const PREFIX_PINS: readonly (readonly [string, VendorGroup])[] = [
+  ["@codemirror/view", "vendor-editor"],
+  ["@lezer/common", "vendor-editor"],
+  ["@marijn/find-cluster-break", "vendor-editor"],
+  ["@xyflow/system", "vendor-canvas"],
+  ["d3-zoom", "vendor-canvas"],
+  ["micromark", "vendor-md"],
+  ["mdast-util-to-hast", "vendor-md"],
+  ["hast-util-to-jsx-runtime", "vendor-md"],
+  ["unist-util-visit", "vendor-md"],
+  ["remark-gfm", "vendor-md"],
+  ["rehype-raw", "vendor-md"], // 未安装（惰性，同 gsap 行）：冻结 `^rehype-` 族归属本身
+  ["vfile-location", "vendor-md"], // 已随 react-markdown 装上且非 EXACT ⇒ 真由 `^vfile` 决定
+];
+
+describe("EXACT 表全量钉值（Minor-2：28/49 条原先无钉值）", () => {
+  for (const [name, group] of EXACT_PINS) {
+    it(`EXACT ${name} → ${group}`, () => {
+      expect(EXACT[name]).toBe(group); // 表内字面值
+      const id = `/r/node_modules/${name}/index.js`;
+      expect(vendorGroupOf(id)).toBe(group); // 解析路径：packageNameOf → EXACT
+      expect(manualChunks(id)).toBe(group); // 接线面：Task 4 接的正是它
+    });
+  }
+
+  it("EXACT 键集与钉值表逐字一致（新增/删除登记行必须同步钉值）", () => {
+    expect(Object.keys(EXACT).sort()).toEqual(EXACT_PINS.map(([n]) => n).sort());
+  });
+});
+
+describe("PREFIX 族有效钉值（每个前缀至少一条由它决定分组）", () => {
+  for (const [name, group] of PREFIX_PINS) {
+    it(`PREFIX ${name} → ${group}`, () => {
+      expect(EXACT[name]).toBeUndefined(); // 有效性：确实由前缀表决定，未被 EXACT 接管
+      expect(vendorGroupOf(`/r/node_modules/${name}/index.js`)).toBe(group);
+    });
+  }
+});
+
+describe("确定性与无状态（Important-1：原 40 条对跨调用/跨顺序零约束）", () => {
+  // 覆盖四类 id，且**走到末尾 `return undefined` 的未登记包恰为 2 个（偶数）**：
+  // 「逆序重放」只有在此数为偶数时才能观察到「按调用计数」的状态 —— 若为奇数，
+  // 正序与逆序给同一 id 的计数奇偶相同、抖动互相抵消，断言会假绿。
+  const ids: readonly string[] = [
+    "/r/node_modules/react/index.js", // EXACT
+    "/r/node_modules/bail/lib/index.js", // EXACT（加固前无钉值的 28 条之一）
+    "/r/node_modules/remark-gfm/index.js", // PREFIX ^remark-
+    "/r/node_modules/@xyflow/react/dist/index.js", // EXACT（裸 token 陷阱）
+    "/r/node_modules/katex/dist/katex.mjs", // EXACT
+    "/r/node_modules/not-a-real-package/index.js", // 未登记 ①（末尾 return undefined）
+    "/r/node_modules/zzz-also-not-real/index.js", // 未登记 ②（同上）
+    "/r/app/src/App.tsx", // 非 node_modules（提前 return，不计数）
+    "/r/vendor/node_modules_backup/react/index.js", // 伪路径（同上）
+  ];
+
+  it("同一 id 连续两次调用结果相同（计数器/缓存类跨调用状态必红）", () => {
+    for (const id of ids) expect(manualChunks(id)).toBe(manualChunks(id));
+  });
+
+  it("逆序重放后逐 id 映射与正序相同（无顺序依赖）", () => {
+    expect(ids.map(manualChunks)).toEqual([...ids].reverse().map(manualChunks).reverse());
+  });
+});
+
+describe("接线面全量一致（manualChunks 不许有第二套逻辑）", () => {
+  it("整份混合列表上 manualChunks 与 vendorGroupOf 逐元素相同", () => {
+    const ids = [
+      "/r/node_modules/react/index.js",
+      "/r/node_modules/bail/lib/index.js",
+      "/r/node_modules/not-a-real-package/index.js",
+      "/r/app/src/App.tsx",
+    ];
+    expect(ids.map(manualChunks)).toEqual(ids.map((id) => vendorGroupOf(id)));
   });
 });
