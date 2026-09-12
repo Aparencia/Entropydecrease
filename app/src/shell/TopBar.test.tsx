@@ -8,7 +8,9 @@
  *      这条规格要求是 **DOM 可断言的**；A2 裁决（emoji 出局）另有一条**带阳性对照**的判据；
  *   ③ 静态纪律：`TopBar.css` 里不得出现 transition / animation / @keyframes（动效属批 6）；
  *      高度消费 `--ed-nav-h`；两档断点与 `shell/breakpoints.ts` 同值；顶栏项不许被压缩（陷阱 #15）；
- *   ④ 裁决 A3：AI toast **不在**导航行里（它是 `App.tsx` 的 `MainShell` 最外层 fixed 覆盖层），
+ *   ④ 裁决 A3：AI toast **不在**导航行里（批 3 时它是 `App.tsx` 的 `MainShell` 最外层 fixed 覆盖层；
+ *      **批 4 T10 起交给 `ui/primitives/Toast`** ⇒ B13/B15 授权把定位/锚点/层级三条判据搬到原语层，
+ *      第四条（`ai-toast` 的 testid）改由 `components/toastMigration.test.tsx` 的**渲染级**断言保住），
  *      且两个常驻状态件（`dock-toggle` / 采集徽标）都还在 —— 防「一次提交里两个状态双双消失」。
  *
  * ⚠️ 仪器局限（必须如实单列）：**jsdom 不实现 CSS 媒体查询的计算** ⇒ 「≥1180 显示文字 / 1024–1179
@@ -41,6 +43,23 @@ const APP_TSX = readFileSync(join(HERE, "..", "App.tsx"), "utf8");
  * 「toast 已搬出导航行」这条判据只要注释还在就会**假绿**（正是本批反复打击的「测不到失败的检查」）。
  */
 const APP_CODE = APP_TSX.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+/**
+ * T10（B13/B15 授权的机械改写）：AI toast 的定位/锚点/层级判据搬到**原语层** —— 它们是
+ * `ui/primitives/Toast.{css,tsx}` 的事实，覆盖**所有** `Toast` 消费者（不再只覆盖 `App.tsx` 一处）。
+ * 取规则体用「`选择器 {` 到第一个 `}`」（同 `ui/primitives/Toast.placement.test.tsx:38`）：
+ * 防「同一个串写在别的规则里也算过」。
+ */
+const TOAST_CSS = readFileSync(join(HERE, "..", "ui", "primitives", "Toast.css"), "utf8")
+  .replace(/\r\n/g, "\n")
+  .replace(/\/\*[\s\S]*?\*\//g, "");
+const TOAST_TSX = readFileSync(join(HERE, "..", "ui", "primitives", "Toast.tsx"), "utf8");
+const toastRuleBody = (selector: string): string => {
+  const at = TOAST_CSS.indexOf(selector);
+  return at < 0 ? "" : TOAST_CSS.slice(at, TOAST_CSS.indexOf("}", at));
+};
+const TOAST_BASE_BODY = toastRuleBody(".ed-toast {");
+const TOAST_BELOW_NAV_BODY = toastRuleBody(".ed-toast--below-nav");
 
 /** emoji / 图形字符（A2 裁决的机器判据）。`\p{Extended_Pictographic}` 是 Unicode 属性类，覆盖 ✨📡🎙 等 */
 const PICTO = /\p{Extended_Pictographic}/u;
@@ -178,11 +197,24 @@ describe("TopBar（规格 §6.1）", () => {
 });
 
 describe("裁决 A3：AI toast 不在导航行里", () => {
-  it("toast 已是 fixed 覆盖层（四条声明缺一不可；改前 HEAD 全不成立）", () => {
-    expect(APP_CODE).toContain('data-testid="ai-toast"');
-    expect(APP_CODE, "toast 不是浮动定位 ⇒ 仍会参与导航行的宽度分配").toMatch(/position:\s*"fixed"/);
-    expect(APP_CODE, "toast 的纵向位置没有消费 --ed-nav-h").toMatch(/top:\s*"calc\(var\(--ed-nav-h\) \+ 8px\)"/);
-    expect(APP_CODE, "toast 层级没有走 ui/zIndex 标尺").toContain('zIndex("toast")');
+  it("toast 的定位/锚点/层级都在原语层（B13/B15 授权的机械改写）", () => {
+    // 原四条断言（`:182`–`:185`）断的是「`App.tsx` 源码里出现过自足 toast 的特征串」——批 3
+    // 的中间态。T10 把 AI toast 交给 `ui/primitives/Toast` 后那些串**必然**不在 `App.tsx` 里
+    // （计划 Task 10 Step 4 逐字：「迁移必然让 :183/:184/:185 失效」；B15 把 `:182` 一并纳入）。
+    // 改写后的判据搬到**原语层**，强度不降反升：覆盖面从「App.tsx 一处」扩到**全部** Toast 消费者
+    // （B13 逐字要求）；`ai-toast` 的 testid 语义改由**渲染级**断言保住（B15 ②），见
+    // `components/toastMigration.test.tsx` §⑤（断言的是渲染出的元素，不是源码里出现过该字符串）。
+    expect(TOAST_BASE_BODY, "原语基类不是 fixed 定位 ⇒ toast 仍会参与布局流向").toMatch(/position:\s*fixed/);
+    expect(APP_CODE, "App.tsx 没有把 AI toast 交给 belowNav 档").toContain('placement="belowNav"');
+    expect(TOAST_BELOW_NAV_BODY, "位置档的 top 没有消费壳层 token --ed-nav-h").toMatch(
+      /top:\s*calc\(\s*var\(--ed-nav-h/,
+    );
+    expect(TOAST_TSX, "toast 层级没有走 ui/zIndex 标尺").toContain('zIndex("toast")');
+    // 仪器自证（同一条正则对反例必须判否）——防「判据其实是永真的字符串包含」
+    expect(TOAST_BASE_BODY.length, "Toast.css 缺 `.ed-toast {` 规则体（选择器改名了？）").toBeGreaterThan(0);
+    expect(".ed-toast--below-nav {\n  top: 64px;\n}", "反例样本未被判否 ⇒ 锚点判据无牙").not.toMatch(
+      /top:\s*calc\(\s*var\(--ed-nav-h/,
+    );
   });
 
   it("toast 不在导航行内（旧的行内特征串与 `<nav>` 字面量都已消失）", () => {

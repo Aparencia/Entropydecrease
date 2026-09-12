@@ -11,7 +11,6 @@
  *              刷新列表 + 详情）；REQ-080 降级横幅透传详情面板。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -21,6 +20,10 @@ import ColumnResizer from "../components/ColumnResizer";
 import ColumnBar from "../components/ColumnBar";
 import { useColumnLayout } from "../hooks/useColumnLayout";
 import { useDbRefresh } from "../hooks/useDbRefresh";
+// 批 4 T10：页级 toast 的自绘实现（页内 useState + window.setTimeout + 固定定位 JSX + 内联三档配色）
+// 整段删除，改用 `useTransientToast`（它自己也已把渲染交给 L1 的 `Toast` 原语）——
+// 14 个 `showToast` 调用点的签名与文案一字未改（见 T10 报告的逐处对拍）。
+import { useTransientToast } from "../hooks/useTransientToast";
 import type {
   BatchNoteResult, BatchSessionDeleteResult, CourseGroup, SessionDetail, SessionListItem,
 } from "../types";
@@ -41,11 +44,6 @@ interface Props {
   onOpenNote: (noteId: number) => void;
 }
 
-interface Toast {
-  msg: string;
-  kind: "ok" | "err";
-}
-
 export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocusRefineTaskConsumed, onRefineTaskStarted, active, onOpenNote }: Props) {
   // v0.15：左栏列状态（可拖拽 + 记忆 + 窄窗折叠；规格 §6.2 两列页阈值 1100）
   // 批 3 T8：规格来自 `columnRegistry`，执行仍由 hook 完成
@@ -56,28 +54,24 @@ export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocu
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [fusingId, setFusingId] = useState<number | null>(null);
   const [degradedBanner, setDegradedBanner] = useState<string | null>(null);
-  const [toast, setToast] = useState<Toast | null>(null);
+  // 批 4 T10：页级 toast = `useTransientToast(3000)`（**显式**保留本页原来的 3s；渲染与层级归原语）。
+  // 它与被删掉的自绘实现逐条对齐：新消息覆盖旧消息 + 重置计时（hook 的「先清后排」）· 卸载清理
+  // （hook 的 cleanup 直接读 ref）· 单计时器。观感差异登记：落点从 `top:64/right:16` 改为原语
+  // `viewport` 档的右下 18px（§10「观感从批 4 开始变」），并因此不再与 AI toast 抢同一角落。
+  const { toast, showToast } = useTransientToast(3000);
   const [loading, setLoading] = useState(true);
   const [justFinished, setJustFinished] = useState(0); // 新完成会话数（一次性横幅）
   const openIdRef = useRef<number | null>(null);
   const prevFinishedRef = useRef<Set<number>>(new Set()); // 上次快照的已完成 id 集
-  const toastTimerRef = useRef<number | null>(null);
   // 段搜索定位滚动定时器（ref 持有 + 卸载清理——防卸载后 DOM 操作残留）
   const scrollTimerRef = useRef<number | null>(null);
   // TD-003 模式：请求序号防竞态——live:status 与 session:fused 可并发触发刷新，
   // 慢响应返回时不覆盖新结果（旧快照短暂回显 + justFinished 重复计数）
   const refreshSeqRef = useRef(0);
 
-  const showToast = useCallback((msg: string, kind: Toast["kind"]) => {
-    setToast({ msg, kind });
-    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = window.setTimeout(() => setToast(null), 3000);
-  }, []);
-
-  // toast 定时器 + 滚动定位定时器卸载清理（防卸载后 setState/DOM 操作）
+  // 滚动定位定时器卸载清理（防卸载后 DOM 操作）；toast 计时器的清理随实现搬进 hook
   useEffect(
     () => () => {
-      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
       if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
     },
     [],
@@ -330,27 +324,8 @@ export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocu
         )}
       </div>
 
-      {/* 操作反馈 toast（自绘，3s 自动消失） */}
-      {toast && (
-        <div
-          style={{
-            position: "fixed",
-            top: 64,
-            right: 16,
-            zIndex: zIndex("panel"),
-            maxWidth: 420,
-            fontSize: 12,
-            padding: "8px 14px",
-            borderRadius: 6,
-            color: toast.kind === "ok" ? "#065f46" : "#991b1b",
-            background: toast.kind === "ok" ? "#ecfdf5" : "#fef2f2",
-            border: `1px solid ${toast.kind === "ok" ? "#6ee7b7" : "#fca5a5"}`,
-            boxShadow: "0 2px 8px rgba(0,0,0,.12)",
-          }}
-        >
-          {toast.msg}
-        </div>
-      )}
+      {/* 操作反馈 toast（批 4 T10：`useTransientToast` 的节点 —— 自绘 3s 实现已删） */}
+      {toast}
     </div>
   );
 }

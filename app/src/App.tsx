@@ -19,7 +19,7 @@
  *              `ShellFallback` 首访加载态（此前懒 chunk 失败会一路抛到最外层 AppErrorBoundary ⇒
  *              整个导航壳被卸载、已访问页状态一起丢）。边界在 `shell/ShellFallback.tsx`。
  */
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -42,11 +42,12 @@ import { CommandPalette } from "./shell/CommandPalette";
 // 批 3 T13：壳层的**首访加载态**与**叶级错误边界**（批 2 §瓶颈清单转交的三条）——自足实现、
 // 刻意不 import 原语层（非目标 2，两个组件是批 4 换 `Loading` / `StatusLine` 的迁移点）。
 import { ShellFallback, SlotErrorBoundary } from "./shell/ShellFallback";
-// 批 3 T7（控制方裁决 A3）：AI toast 从 56px 导航行搬到**固定覆盖层** —— 层级走六档标尺，
-// 不许写裸数字（`ui/zIndex.guard.test.ts` 在看着）。实测 toast 是 1024 溢出的唯一主因
-// （单项 373.75 px = 视口的 36.5%；含它 1375.74 px、剔除它 997.99 px），而规格 §6.1 的顶栏
-// 清单里本来就没有它；自足内联实现（不 import `ui/primitives`）⇒ 不吃首屏余量。
-import { zIndex } from "./ui/zIndex";
+// 批 4 T10：AI toast 从自足内联实现交给 L1 的 `Toast` 原语（文件末尾 `AiToast` 处）。
+// @ai-context: 批 3 T7 曾把它从 56px 导航行搬到固定覆盖层（实测它是 1024 溢出的唯一主因：
+//   单项 373.75 px = 视口的 36.5%；含它 1375.74 px、剔除它 997.99 px），本任务承其结论不动落点，
+//   只把**定位 / 层级 / 三档墨度 / 退场**四项交给原语（fixed + `--ed-nav-h` 锚点 + `zIndex("toast")`
+//   全在原语层）。⚠️ 这是 B5 的 barrel 代价在首屏的第二个触发点（T9 先到则归 T9）。
+import { Toast } from "./ui/primitives";
 // REQ-274（v0.19.4）：全局 AI 对话面板（丙案——按需唤起 + 内容保活）
 // 批 2 包体治理：从静态 import 改为按需 import，并在它之前加一道「首开挂载」闸门。
 // @ai-context: 原语义（见文件末尾 dock 渲染处的注释）是「常驻挂载——开合仅切 display，
@@ -163,6 +164,41 @@ function PageSlot({ show, mounted, children }: { show: boolean; mounted: boolean
   );
 }
 
+/**
+ * AiToast — AI 任务完成/失败通知的**装配层**（批 4 T10：渲染交给 L1 `Toast`）。
+ *
+ * @ai-context: 状态仍由 `MainShell` 持有（监听 `ai:task-update`），本组件只做「状态 → 原语 props」
+ *   的映射，并把迁移前逐字保留的三样东西钉在一处：文案（含 ✨/❌，逐字沿用）、时长 **3500ms**、
+ *   testId **`ai-toast`**（批 3 裁决 A3 的语义锚；B15 要求它以**渲染级**断言保住 —— 本仓
+ *   `MainShell` 未导出，故判据渲染这个**真实**装配件，见 `components/toastMigration.test.tsx`）。
+ *   位置档 `placement="belowNav"`（读原语 `.ed-toast--below-nav`，消费壳层 token `--ed-nav-h`）：
+ *   调用点写行内 `top` 覆盖类语义被 ADR-033 §4 逐字禁止 ⇒ 走 B6 特殊条款加的那个具名 prop。
+ * 副作用：无（不读 store、不发请求、不写磁盘）。自动消失由原语计时（进入 `entered` 才开始，
+ *   边界①），到点走 140ms 退场后回调 `onDismiss` —— 父级自己置 `open=false` 不会收到回敬（边界②）。
+ * 边界：**同文案连续事件不重置窗口**（原语边界③ 以 `message`/`kind` 判「接管」）——迁移前
+ *   `MainShell` 的裸 `setTimeout` 是「每个事件都重新计时」；差异只在「两次 AI 任务在同一 3.5s 内
+ *   完成且文案逐字相同」时出现（该场景下可见时长可能比旧实现短，不会更长）。已登记在 T10 报告。
+ */
+export function AiToast({
+  toast,
+  onDismiss,
+}: {
+  toast: { text: string; kind: "ok" | "err" } | null;
+  onDismiss: () => void;
+}): React.ReactElement {
+  return (
+    <Toast
+      open={toast !== null}
+      message={toast?.text ?? ""}
+      kind={toast?.kind ?? "ok"}
+      durationMs={3500}
+      placement="belowNav"
+      testId="ai-toast"
+      onDismiss={onDismiss}
+    />
+  );
+}
+
 /** 主导航壳（唯一实例由 App 包入 provider——同窗单实例纪律；状态与事件监听
  *  保留挂载语义不变，TD-004） */
 function MainShell() {
@@ -253,9 +289,9 @@ function MainShell() {
   // v0.8.0 F2（2026-08-21）：AI 任务完成通知——全局监听 ai:task-update，
   // 跨页面可见（REQ-145"完成通知"落地；内联卡片之外的第二通道）
   const [aiToast, setAiToast] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
-  // 审查修复（2026-08-21）：toast 计时器用 ref 持有——组件卸载/新事件时
-  // 清理旧 timer（原实现每个事件都新起 timer，卸载后仍残留空转）
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 批 4 T10：本层原有的 `toastTimer` ref 与 `setTimeout(…, 3500)` 整段删除——计时权归
+  // `Toast` 原语（时长由 `AiToast` 的 `durationMs={3500}` 给，逐字保留），到点退场后回调
+  // `onDismiss` 置空。卸载清理也随之归原语（边界⑤：cleanup 直接读 ref，快照 ref = 死守卫）。
 
   useEffect(() => {
     let disposed = false;
@@ -274,11 +310,8 @@ function MainShell() {
             const [kind, msg] = Object.entries(reason)[0] ?? ["other", "未知错误"];
             setAiToast({ text: `❌ AI 任务失败（${kind}）：${msg}`, kind: "err" });
           }
-          // toast 自动消失（清理旧 timer 重新计时——连续任务只显示最新）
-          if (toastTimer.current) clearTimeout(toastTimer.current);
-          toastTimer.current = setTimeout(() => {
-            if (!disposed) setAiToast(null);
-          }, 3500);
+          // 批 4 T10：原先此处「清理旧 timer 重新计时」的两行已删——连续任务只显示最新这条
+          // 由原语边界③（显示中 message/kind 变化 = 接管并重排计时；先清后排 ⇒ 至多一个计时器）承担。
         }),
       );
       // 批 2b：live:status / session:fusing / live:paused / live:resumed /
@@ -305,7 +338,6 @@ function MainShell() {
     })();
     return () => {
       disposed = true;
-      if (toastTimer.current) clearTimeout(toastTimer.current);
       unlisteners.forEach((u) => u());
     };
   }, []);
@@ -492,36 +524,14 @@ function MainShell() {
           也没有它。落在 `MainShell` 最外层（**不是** nav 的子节点）⇒ 不参与顶栏宽度分配，
           1024 档的宽度验收因此**不必**把 toast 剔出去（剔除读数求通过是本批禁止的自我欺骗）。
           跨页面可见性不变：它挂在导航壳上，与页面切换无关。
-          Why 自足内联、不 import L1 的 `Toast` 原语：批 3 非目标 2 明令不许 import `ui/primitives`
-          （会把整层 CSS 与 `motion.css` 拉进首屏）。批 4 迁移原语时整条交给 `Toast`。
-          文案与三档配色逐字沿用迁移前（零观感变化）；唯一差别是**不再 ellipsis 单行裁切** ——
-          旧裁切只为在 56px 行里抢宽度，脱离行内后换行更可读。
-          ⚠️ 层级（登记给批 4）：`zIndex("toast")` = 500，而对话面板今日仍是裸数字 900
-          （zIndex.guard 冻结名单里的一项）⇒ 面板展开时 toast 可能被它盖住；批 4 把面板迁到
-          `zIndex("panel")`（=100）后按六档标尺自然消解。本任务不擅自改面板层级。 */}
-      {aiToast && (
-        <div
-          data-testid="ai-toast"
-          role="status"
-          style={{
-            position: "fixed",
-            // 顶栏之下 8px：纵向位置消费 --ed-nav-h（M1 的单一真源），不写死 56
-            top: "calc(var(--ed-nav-h) + 8px)",
-            right: 16,
-            zIndex: zIndex("toast"),
-            maxWidth: 420,
-            fontSize: 12,
-            fontWeight: 500,
-            borderRadius: 12,
-            padding: "6px 12px",
-            color: aiToast.kind === "ok" ? "#047857" : "#b91c1c",
-            background: aiToast.kind === "ok" ? "#ecfdf5" : "#fef2f2",
-            border: `1px solid ${aiToast.kind === "ok" ? "#a7f3d0" : "#fecaca"}`,
-          }}
-        >
-          {aiToast.text}
-        </div>
-      )}
+          批 4 T10：**渲染交给 L1 的 `Toast` 原语**（`<AiToast>` 装配件，见本文件上方）——
+          自足内联的定位 / 三档配色 / `zIndex("toast")` / 计时器整段删除；`.ed-toast` 的 fixed 定位、
+          `.ed-toast--below-nav` 的 `--ed-nav-h` 锚点、层级标尺都在原语层（判据随之搬到
+          `shell/TopBar.test.tsx` 的原语层断言 + `components/toastMigration.test.tsx`）。
+          ⚠️ 观感差异三处（全部登记）：① 横向 16 → 18px（原语基类的 `right`）② 圆角/内边距/字号走
+          原语类与 `Text` 字阶（不再逐字沿用旧内联值）③ 多出 180ms 进场 / 140ms 退场（B9「迁移即
+          上线动效」）。文案与 testId `ai-toast` 逐字保留。 */}
+      <AiToast toast={aiToast} onDismiss={() => setAiToast(null)} />
       {/* 批 3 T11/T12：⌘K 命令面板（规格 §6.1）。它是**壳级覆盖层**，与 toast 一样挂在导航壳最外层、
           不是任何页面的子节点（切页不重挂、也不参与页面布局）。
           `onPick` 收口三类动作（回调实参不被信任）：页面级 `setPage`（key 仍经 `isPageKey` 运行期校验）·

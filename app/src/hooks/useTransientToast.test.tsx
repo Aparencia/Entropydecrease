@@ -52,9 +52,12 @@ describe("useTransientToast 计时器生命周期", () => {
     // Act：第二条重置计时（旧计时器清掉、只挂一个）
     act(() => result.current.showToast("第二条覆盖", "err"));
     expect(vi.getTimerCount()).toBe(1);
-    // 注：fake timers 下断言 state（toast 内容在元素 props.children）
-    const props = result.current.toast?.props as { children?: string } | undefined;
-    expect(props?.children).toBe("第二条覆盖");
+    // 注：fake timers 下断言 state（toast 内容在**原语节点的 `message` prop** 上）。
+    // 批 4 T10（控制方 2026-09-12 授权，按 B13/B15 先例的机械改写）：迁移前 hook 返回的是自绘
+    // `<div>{msg}</div>`，文案在 `props.children`；迁移后渲染交给 `ui/primitives/Toast`（文案走
+    // `message` prop）⇒ 读取口径随之搬家。语义（「第二条覆盖旧消息」）与强度不变，用例数不变。
+    const props = result.current.toast?.props as { message?: string } | undefined;
+    expect(props?.message).toBe("第二条覆盖");
     // Assert：重置后的 3s 内仍在展示，越过则消失
     act(() => vi.advanceTimersByTime(2500));
     expect(result.current.toast).not.toBeNull();

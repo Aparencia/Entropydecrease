@@ -21,7 +21,7 @@
 | 文件 | 行数 | 豁免理由 | 拆分计划 |
 |---|---|---|---|
 | app/src/pages/ChatPage.tsx | 599 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
-| app/src/App.tsx | 574 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
+| app/src/App.tsx | 584 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 | app/src-tauri/src/db_migrations.rs | 573 | v0.20.11 批 6（REQ-315）再增：note_groups.pin ensure_column + note_group_orders 建表（+21，实测 573——登记值 492 过期；schema 单点收敛理由同左） | 若再增长：kb_* 与 chat_* 表 DDL 拆至 db_migrations_kb.rs |
 | app/src-tauri/src/lib.rs | 572 | crate 根 **322 `mod` + 15 `#[cfg]` = 337 行地板**（Task 1 评审实测更正：原写「321 `mod` + 16 `#[cfg]`」，总数 337 不变；322 含本任务新增的 `mod app_commands;`）；注册清单已移至 `app_commands.rs`（**数据文件**，同属 300–600 豁免带）—— 结构性下界，非欠账 | 已完成（批 0-C3 Task 1，2026-09-11）；余下 161 行模块理由注释 + 装配逻辑，无进一步拆分标的 |
 | app/src/types/knowledge.ts | 559 | 知识体系类型域（体系/节点/概念/模型/引用/审计/决策 + v0.13.8 画布契约 + v0.14.1 画布偏好枚举与下拉文案常量）——类型与文案常量同域防漂移（前端类型域拆分任务待执行） | 若再增长：画布偏好类型与文案拆至 types/canvas.ts |
@@ -90,7 +90,6 @@
 | app/src-tauri/src/db_notes.rs | 366 | REQ-316（批 7）：delete_note/update_note_group 改显式事务 + 同事务空组自动清理接线（结果契约扩展 + 旧组读出，净增 ~60 行；此前 305 未登记属漏登，本次补） | 若再增长：移组/删除事务族拆至 db_notes_group_ops.rs |
 | app/src-tauri/src/ocr_cache.rs | 358 | OCR 结果缓存域（内容指纹键/容量淘汰/命中率统计）内聚；缓存策略与指纹算法共享上下文 | 若再增长：指纹算法拆至 ocr_fingerprint.rs |
 | app/src-tauri/src/commands_window.rs | 357 | 浮窗窗口命令域（v0.12.3 架构升级计划：全部窗口操作集中单文件）+ v0.12.6（ADR-025）显隐链路与全局快捷键三态切换核心（open/close/locked/topmost/toggle 核心 fn + 命令薄包装 + 状态机/序列化单测内联）；拆分需跨 fn 传递 AppHandle/State，内聚性优先 | 若再增长：浮窗核心逻辑拆至 float_core.rs（命令薄包装保留本文件） |
-| app/src/pages/SessionsPage.tsx | 356 | 本层为状态宿主与数据编排：会话列表/详情状态、事件驱动刷新（live:status/session:fused/切页 active）、转化与删除操作；左栏列表 UI 拆至 SessionListPanel、右栏详情拆至 SessionDetailPanel（豁免清单拆分计划落地，本文件 ≤300 行）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_sessions_tests.rs | 354 | 由 db_sessions.rs 以 #[cfg(test)] #[path] 引入，保持实现文件 ≤300 行（AGENTS.md §3 模块化）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/live_session_pause.rs | 353 | 批 2 暂停边沿收敛域 + 审查修复轮 1（own_pending 吸收/丢采样恢复沿补发）净增——2026-09-09 纠偏实测 353（交付口径 258 失真），300-600 档登记 | 若再增长：合成事件对构造拆至 live_session_pause_synth.rs |
 | app/src-tauri/src/ai_client_tests.rs | 352 | ai_client.rs 单测域（22 例：payload 构造族 build_chat_payload/build_plain_payload、JSON 前置条件提示、chat_completions_url 拼接、响应提取与弱化解析、fallback_provider_ids；env 变量以静态 Mutex 串行化，不触网）——测试模块由 `#[cfg(test)] #[path]` 单点挂载（ai_client.rs:504），纯函数用例与实现同域便于契约对齐。**本条目由生成器补登（该文件无 @ai-context 头注释），理由为 2026-09-11 重建时人工补写** | 若再增长：payload 构造组拆至 ai_client_payload_tests.rs |
@@ -108,6 +107,7 @@
 | app/src-tauri/src/capture/dxgi_capture.rs | 331 | 主路径用 DXGI 桌面复制（GPU 直取，性能最优）；new 或运行时捕获失败（远程桌面/锁屏/设备丢失）自动降级 GDI BitBlt（gdi_capture.rs），调用方无感知。帧输出 BGRA8，支持按窗口矩形裁剪与底部字幕区裁剪。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/commands_knowledge_decisions.rs | 331 | 本层只做参数校验、调用数据层、错误映射（AGENTS.md §6）；编排 `fn xxx_inner(db, …)`为纯函数（:memory: 可测），薄 `#[tauri::command]` 壳只取 state.db 调 inner。一表两面：kind 区分 decision（思辨面）/application（学习面·记一次使用），不双表双记、只记"我的决策"。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/structure_capture_tests.rs | 331 | 纯函数（网格换算/裁剪钳制/过滤上下文组装）+ 端到端集成（合成表格帧+字幕帧参考图集 → 直扫分析 → 只收表格拒字幕 + 幂等重跑+ 降级跳过）；tempfile + 内存库隔离（不触碰真实数据）。（自动摘取，待细化） | 若再增长：按职责拆分 |
+| app/src/pages/SessionsPage.tsx | 331 | 本层为状态宿主与数据编排：会话列表/详情状态、事件驱动刷新（live:status/session:fused/切页 active）、转化与删除操作；左栏列表 UI 拆至 SessionListPanel、右栏详情拆至 SessionDetailPanel（豁免清单拆分计划落地，本文件 ≤300 行）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_graph_tests.rs | 330 | 覆盖三类边聚合正确性——link（体系实体→内容，node_id 引用跳过）、trace（同源会话互连，2~6 张边界）、belong（笔记→组）；节点四表全量 + 笔记显式色解析。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/image_store.rs | 330 | 会话目录本地存图（关键图/参考图集/缩略图走廊三级）：原图 + 缩略图两级（WebP 压缩），去重（aHash）+每会话预算上限（默认 50 张）；图文对齐靠时间戳（产物块引用 frame_id）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/subtitle.rs | 328 | L1 外挂字幕（.srt/.ass/.vtt）纯文本解析，零第三方依赖——命中则免 ASR 零成本 100% 准确（本地优先降级路径的最上游）。（自动摘取，待细化） | 若再增长：按职责拆分 |
