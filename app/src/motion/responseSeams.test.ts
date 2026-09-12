@@ -42,9 +42,23 @@ const CSS_FILES: readonly string[] = readdirSync(PRIMITIVES).filter((f) => f.end
  * `--ed-dur-*` · `--ed-ease` · `--ed-ease-instrument` · `--ed-ease-paper`。
  * ⚠️ 写成**转义**形态（`var\(`）⇒ `motionTokens.consumption.test.ts` 的全树扫描不会把本文件当消费点
  * （本文件头注边界②）。
+ *
+ * 🔴 **名字字符集含数字 / 大写 / 下划线**（T13b 修，合并评审 I-1 的上送项）：T13 只统一了「四类名」的口径，
+ * `[a-z-]` 仍把 `--ed-dur-micro2` / `--ed-ease-instrument2` / `--ed-ease-Instrument` 三形态**全部漏掉**
+ * （终止符前瞻 `(?=[\s,)])` 回溯到底也不成立，T13b 实测三形态解析器命中数 = 0）。真源名册今天全是
+ * 小写连字符 ⇒ 无现实影响；但将来真源引入带数字 / 大写的 name 时，**整条消费点会静默漏检**。
  */
-const DURATION_VALUE = new RegExp(String.raw`^var\((--ed-dur-[a-z-]+),\s*(\d+ms)\)$`);
-const EASING_VALUE = new RegExp(String.raw`^var\((--ed-ease(?:-[a-z-]+)?),\s*(cubic-bezier\([^)]*\))\)$`);
+const DURATION_VALUE = new RegExp(String.raw`^var\((--ed-dur-[A-Za-z0-9-]+),\s*(\d+ms)\)$`);
+const EASING_VALUE = new RegExp(String.raw`^var\((--ed-ease(?:-[A-Za-z0-9-]+)?),\s*(cubic-bezier\([^)]*\))\)$`);
+/**
+ * **形态计数**用的名字模式（T13b 追加）：与上面两台解析器**独立**，字符集再放宽到下划线。
+ * Why 需要它：两台解析器只看得见 `transition-duration` / `transition-timing-function` 两个属性的**值**
+ * ⇒ 一处落在别的属性（`transition` 简写 / `transition-delay`）里的 token 消费**完全不被看见**（静默）；
+ * 名字带数字 / 大写时也只是以笼统的「形态不符」面貌出现。本模式只做**计数**：响应层里每处
+ * `var(--ed-dur-*` / `var(--ed-ease*` 都必须被解析器吃下 —— 数得到却认不出 ⇒ 当场红。
+ * ⚠️ 写成**转义**形态（`var\(`）⇒ 本文件不会被 `motionTokens.consumption.test.ts` 当成消费点（边界②）。
+ */
+const TOKEN_SHAPE = /var\(--ed-(?:dur-|ease)[A-Za-z0-9_-]*(?=[\s,)])/g;
 
 describe("⑤ 三档同行为 + 桶边界 + 单一真源（§8.5「节能档只留响应层」）", () => {
   it("响应层节里零 `[data-motion`，且全仓没有任何 `[data-motion]` 规则碰这些元素", () => {
@@ -94,17 +108,45 @@ describe("⑤ 三档同行为 + 桶边界 + 单一真源（§8.5「节能档只�
       if (dur !== null) {
         const m = DURATION_VALUE.exec(dur);
         if (!m) bad.push(`${r.selector}: transition-duration 不是「token + 同值兜底」形态 → ${dur}`);
+        else if (!truth.has(m[1])) bad.push(`${r.selector}: ${m[1]} 是死兜底（真源名册里没有这个 token 名）`);
         else if (truth.get(m[1]) !== m[2]) bad.push(`${r.selector}: ${m[1]} 兜底 ${m[2]} ≠ 真源 ${truth.get(m[1])}`);
       }
       const ease = declarationValue(r.body, "transition-timing-function");
       if (ease !== null) {
         const m = EASING_VALUE.exec(ease);
         if (!m) bad.push(`${r.selector}: transition-timing-function 不是「token + 同值兜底」形态 → ${ease}`);
+        else if (!truth.has(m[1])) bad.push(`${r.selector}: ${m[1]} 是死兜底（真源名册里没有这个 token 名）`);
         else if (truth.get(m[1]) !== m[2]) bad.push(`${r.selector}: ${m[1]} 兜底 ${m[2]} ≠ 真源 ${truth.get(m[1])}`);
       }
     }
     expect(bad, `响应层的时长 / 缓动脱离了唯一真源：\n${bad.join("\n")}`).toEqual([]);
     expect(truth.size, "真源名册读空了 ⇒ 上面两条是空真").toBe(DURATION_TOKENS.length + EASING_TOKENS.length);
+  });
+
+  /* T13b 追加（合并评审 I-1 的「形态计数」建议）：上面那台解析器只看得见**两个属性的值**
+   * ⇒ ① 名字带数字 / 大写时它以笼统的「形态不符」出现（实测：三形态解析命中数 = 0）；
+   * ② 落在别的属性（`transition` 简写 / `transition-delay`）里的 token 消费**连看都不看**（静默）。
+   * 这条把「数得到却认不出」变成显式红：数目是数得出来的，吃不下就不许过。 */
+  it("T13b 形态计数：响应层每处 `var(--ed-dur-*` / `var(--ed-ease*` 都必须被解析器吃下", () => {
+    const shaped = [...SECTION.matchAll(TOKEN_SHAPE)].map((m) => m[0]);
+    expect(SECTION.length, "响应层节读空了 ⇒ 本条是空真").toBeGreaterThan(500);
+    expect(shaped.length, "响应层一处 token 消费都没有 ⇒ 本条是空真").toBeGreaterThan(0);
+    // 「解析成功」按**声明体去重**计：`RULES` 的逗号选择器已展开，逐条计会把同一处数成多次
+    let parsed = 0;
+    for (const body of new Set(RULES.map((r) => r.body))) {
+      for (const prop of ["transition-duration", "transition-timing-function"]) {
+        const v = declarationValue(body, prop);
+        if (v !== null && (DURATION_VALUE.test(v) || EASING_VALUE.test(v))) parsed += 1;
+      }
+    }
+    expect(
+      shaped.length,
+      `响应层有 ${shaped.length} 处 token 消费点，两台解析器只吃下 ${parsed} 处 ⇒ 名字带数字 / 大写、或落在别的属性里的消费点被**静默跳过**：\n${shaped.join("\n")}`,
+    ).toBe(parsed);
+    // 双侧自证（防空真）：宽字符集必须真能数到数字 / 大写名，而 T13b 之前的窄字符集一个都数不到
+    const nextGen = ["var" + "(--ed-dur-micro2, 120ms)", "var" + "(--ed-ease-Instrument, cubic-bezier(0.4, 0, 0.2, 1))"].join("; ");
+    expect([...nextGen.matchAll(TOKEN_SHAPE)].length, "形态计数看不见数字 / 大写的名字 ⇒ 它比它看守的解析器还弱").toBe(2);
+    expect([...nextGen.matchAll(/var\(--ed-(?:dur-|ease)[a-z-]*(?=[\s,)])/g)].length, "窄字符集（T13b 之前的口径）本就数不到这两个名字 —— 这就是盲区本身").toBe(0);
   });
 
   /* T13 追加（控制方 2026-09-13 指令）：「两条正则只认旧名」是与 `motionTokens.consumption.test.ts`

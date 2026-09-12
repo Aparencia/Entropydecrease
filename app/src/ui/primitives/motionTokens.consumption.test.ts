@@ -20,7 +20,11 @@
  *   `ease` 后接 `-` 处正是词边界（`e` 是词字符、`-` 不是）⇒ `var(--ed-ease-instrument` 会被**前缀吞成**
  *   `--ed-ease`，`fallbackAfter` 随后读到 `-instrument` 就返回 `null` ⇒ ② 把一处**写了兜底**的消费
  *   报成「没有兜底」（**误红**）。今天该名 0 消费点所以没触发，波 B/C 一加消费点就炸 ⇒ 名字必须
- *   **整段吃完**（`ease(?:-[a-z-]+)?`）并以终止符前瞻收尾（`var()` 里名字后只能是空白 / 逗号 / 右括号）。
+ *   **整段吃完**（`ease(?:-[A-Za-z0-9-]+)?`）并以终止符前瞻收尾（`var()` 里名字后只能是空白 / 逗号 / 右括号）。
+ *   ⑤ 🔴 **数字 / 大写也是判据**（T13b 修，合并评审 I-1）：`[a-z-]` 会把
+ *   `var(--ed-dur-micro2` / `var(--ed-ease-instrument2` / `var(--ed-ease-Instrument` 整条**静默跳过**
+ *   （前瞻回溯到底也不成立）⇒ 该消费点连 ②③④ 都看不见（实测 **exit 0 · 7/7 全绿**）。**静默不可见
+ *   比误红更坏**（误红会被发现）⇒ 名字字符集含数字 / 大写，并另加 **⑦ 形态计数**做显式出口。
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -38,10 +42,20 @@ const SELF = "ui/primitives/motionTokens.consumption.test.ts";
  * 消费点：`var(--ed-dur-<name>` / `var(--ed-ease[-<name>]`。
  * 🔴 **不许**改回 `\b` 收尾（T8 实测）：`ease` 后接 `-` 处正是词边界 ⇒ `var(--ed-ease-instrument`
  *   被前缀吞成 `--ed-ease`、兜底解析成 `null`、② 误报「没有兜底」。名字必须整段吃完 + 终止符前瞻。
+ * 🔴 名字字符集含**数字 / 大写**（T13b 修，见文件头 ⑤）：`[a-z-]` 会让带数字 / 大写的新名
+ *   **整条静默不可见**（②③④ 全不触发）—— 那比误红更坏。
  */
-const CONSUMER = /var\(--ed-(?:dur-[a-z-]+|ease(?:-[a-z-]+)?)(?=[\s,)])/g;
+const CONSUMER = /var\(--ed-(?:dur-[A-Za-z0-9-]+|ease(?:-[A-Za-z0-9-]+)?)(?=[\s,)])/g;
 /** 带逗号的消费（与 `CONSUMER` **独立**的形态计数：兜底换了写法也不会被解析器静默漏掉） */
-const WITH_COMMA = /var\(--ed-(?:dur-[a-z-]+|ease(?:-[a-z-]+)?)(?=\s*,)/g;
+const WITH_COMMA = /var\(--ed-(?:dur-[A-Za-z0-9-]+|ease(?:-[A-Za-z0-9-]+)?)(?=\s*,)/g;
+/**
+ * **形态计数**用的名字模式（T13b 追加，⑦）：与 `CONSUMER` **独立**，字符集再放宽到下划线。
+ * 判据 = 「域里每处这个形态的命中都必须被 `CONSUMER` 认到」—— 数得到却认不出 ⇒ 当场红（不再静默）。
+ * ⚠️ **不能**用评审建议的逐字形态 `var\(--ed-[a-z0-9-]+`：那是**全族**（含 `var(--ed-ink-1)` /
+ *   `var(--ed-space-2)` …），与消费点数天然不等（T13b 实测：该形态 **338** 处 vs 消费点 **83** 处）
+ *   ⇒ 照抄会把本判据变成**常红**。家族前缀（`dur-` / `ease`）是必需的收窄。
+ */
+const TOKEN_SHAPE = /var\(--ed-(?:dur-|ease)[A-Za-z0-9_-]*(?=[\s,)])/g;
 /** 真源 = **生成器导出**（不是产物）⇒「真源改值而兜底不改」必红（R13.2 的第三条变异体） */
 const TRUTH = new Map<string, string>([
   ...DURATION_TOKENS.map((t) => [`--ed-dur-${t.name}`, `${t.ms}ms`] as const),
@@ -148,6 +162,19 @@ describe("动效 token 消费点：兜底字面量必须等于生成器真源（
       "cubic-bezier(0.215, 0.61, 0.355, 1)",
     ]);
     expect([...sample.matchAll(WITH_COMMA)].length, "形态计数（带逗号）必须同样认得 `ease-<name>`").toBe(4);
+    // T13b 追加：**数字 / 大写**的名字也必须整段被吃下 —— 漏掉时该消费点连 ②③④ 都看不见（静默，比误红更坏）
+    const nextGen: ReadonlyArray<readonly [string, string, string]> = [
+      ["var" + "(--ed-dur-micro2, 120ms)", "--ed-dur-micro2", "120ms"],
+      ["var" + "(--ed-ease-instrument2, cubic-bezier(0.4, 0, 0.2, 1))", "--ed-ease-instrument2", "cubic-bezier(0.4, 0, 0.2, 1)"],
+      ["var" + "(--ed-ease-Instrument, cubic-bezier(0.4, 0, 0.2, 1))", "--ed-ease-Instrument", "cubic-bezier(0.4, 0, 0.2, 1)"],
+    ];
+    for (const [value, name, fallback] of nextGen) {
+      const one = [...value.matchAll(CONSUMER)].map((m) => ({
+        name: m[0].replace(/^var\(/, ""),
+        fallback: fallbackAfter(value, (m.index ?? 0) + m[0].length),
+      }));
+      expect(one, `数字 / 大写的名字必须被**整段**吃下（否则该消费点整条静默不可见）：${value}`).toEqual([{ name, fallback }]);
+    }
   });
 
   it("② 兜底齐备：每个消费点都带兜底（漏一个 ⇒ 那一处静默失去时长）", () => {
@@ -182,5 +209,22 @@ describe("动效 token 消费点：兜底字面量必须等于生成器真源（
     const text = DOMAIN.map((rel) => maskComments(readFileSync(join(SRC, rel), "utf8"), rel.endsWith(".css"))).join("\n");
     expect([...text.matchAll(CONSUMER)].length, "域内 0 命中 ⇒ 是域选错了，不是判据绿").toBeGreaterThan(0);
     expect([...text.matchAll(/var\(--ed-zzz-not-a-token\b/g)].length, "无意义串也命中 ⇒ 这台仪器在乱报").toBe(0);
+  });
+
+  /* T13b 追加（合并评审 I-1「形态计数」建议）：`CONSUMER` 与 `WITH_COMMA` 共用同一套名字字符集，
+   * 于是「名字带数字 / 大写」时**整条消费点对所有判据都不可见**（实测 exit 0 · 7/7 全绿）。
+   * 这条用一台**独立**的、字符集更宽的仪器去数：数得到却认不出 ⇒ 红。 */
+  it("⑦ 形态计数（T13b）：域里每处 `var(--ed-dur-*` / `var(--ed-ease*` 都必须被 `CONSUMER` 吃下", () => {
+    const text = DOMAIN.map((rel) => maskComments(readFileSync(join(SRC, rel), "utf8"), rel.endsWith(".css"))).join("\n");
+    const shaped = [...text.matchAll(TOKEN_SHAPE)].map((m) => m[0]);
+    expect(shaped.length, "域里一处 token 消费都没有 ⇒ 本条是空真").toBeGreaterThan(0);
+    expect(
+      shaped.length,
+      `域里有 ${shaped.length} 处 token 消费，\`CONSUMER\` 只认到 ${HITS.length} 处 ⇒ 名字带数字 / 大写 / 下划线的消费点**整条静默不可见**（②③④ 都不触发）：\n${shaped.join("\n")}`,
+    ).toBe(HITS.length);
+    // 双侧自证（防空真）：宽字符集必须真能数到数字 / 大写名，而 T13b 之前的窄字符集一个都数不到
+    const nextGen = ["var" + "(--ed-dur-micro2, 120ms)", "var" + "(--ed-ease-Instrument, cubic-bezier(0.4, 0, 0.2, 1))"].join("; ");
+    expect([...nextGen.matchAll(TOKEN_SHAPE)].length, "形态计数看不见数字 / 大写的名字 ⇒ 它比它看守的解析器还弱").toBe(2);
+    expect([...nextGen.matchAll(/var\(--ed-(?:dur-|ease)[a-z-]*(?=[\s,)])/g)].length, "窄字符集（T13b 之前的口径）本就数不到这两个名字 —— 这就是盲区本身").toBe(0);
   });
 });
