@@ -49,7 +49,10 @@ describe("token 门面一致性", () => {
 
   it("SCALE_TOKENS 的间距与圆角与规范一致", () => {
     expect([...SCALE_TOKENS.spaceScale]).toEqual([4, 8, 12, 16, 24, 32, 48]);
-    expect(SCALE_TOKENS.radiusScale.map((r) => r.px)).toEqual([3, 5, 8, 10]);
+    // 第 5 档 `pill` 是批 4 B17 的药丸档（规格 §4.2 只写四档）；**999 取自原语层既有兜底值**
+    // `Surface.css:58` 的 `var(--ed-radius-pill, 999px)`，不是自创数字（批 6 R2.3 / R11.8 第 2 条）。
+    // 真源侧（生成器 `SCALE_SOURCE`）的同值断言在 `scripts/gen-tokens.test.mjs` —— 两处独立、必须同时改。
+    expect(SCALE_TOKENS.radiusScale.map((r) => r.px)).toEqual([3, 5, 8, 10, 999]);
   });
 
   // 生成器只持有数据、不含任何 WCAG 计算；此处用 Task 2 的权威实现校验这份数据。

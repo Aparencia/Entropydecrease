@@ -10,9 +10,15 @@
  * 其产物 src/note-mark.css 目前**无漂移守卫** —— 已登记于批 0-A 计划「交接给 0-B/0-C/0-D 的硬前置」，
  * 待并入或显式豁免。
  */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { COLOR_TOKENS, CONTRAST_BASELINE, SCALE_SOURCE, SHADOW_TOKENS, TYPE_SCALE, renderAll } from "./gen-tokens.mjs";
 import { contrastRatio } from "../src/ui/contrast.ts";
+
+/** 生成器所在目录（批 6 T5 起：`pill` 档要与原语层 `Surface.css` 的兜底值对拍，需要读文件） */
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 describe("gen-tokens 规范数据", () => {
   it("每个 token 名唯一", () => {
@@ -111,8 +117,23 @@ describe("renderAll", () => {
     expect(SCALE_SOURCE.fontFamilyBody).toContain("Source Han Serif SC");
     expect(SCALE_SOURCE.fontFamilyMono).toContain("JetBrains Mono");
     expect(SCALE_SOURCE.spaceScale).toEqual([4, 8, 12, 16, 24, 32, 48]);
-    expect(SCALE_SOURCE.radiusScale.map((r) => r.px)).toEqual([3, 5, 8, 10]);
+    // 批 6 T5（R2.3/G14）：第 5 档 `pill` = 999 —— 与 `src/ui/tokens.drift.test.ts:52` 是**两处独立
+    // 真源断言**（R11.8 第 5 条），凡改 `radiusScale` 必须同时处理两处。
+    expect(SCALE_SOURCE.radiusScale.map((r) => r.px)).toEqual([3, 5, 8, 10, 999]);
     expect(SCALE_SOURCE.typeScale.length).toBeGreaterThanOrEqual(6);
+  });
+
+  /**
+   * `pill` 的唯一消费者是原语层 `Surface.css`（它今天写 `var(--ed-radius-pill, 999px)` 兜底）。
+   * 本条把**真源值**与**消费者兜底字面量**对拍：任一侧单独改动都会红 —— 若只改真源，兜底值就变成
+   * 一个「与真源不同的死数字」（未定义变量不报错，会静默退回 999）；若只改兜底，真源就不再是权威。
+   * 仪器自带防真空：兜底字面量抓不到 ⇒ `undefined` ⇒ 第 1 条断言红；`pill` 档丢失 ⇒ `undefined` ≠ 数字 ⇒ 红。
+   */
+  it("`pill` 档的 px 等于原语层唯一的兜底字面量（真源 ↔ 消费者同值）", () => {
+    const surface = readFileSync(join(HERE, "..", "src", "ui", "primitives", "Surface.css"), "utf8");
+    const fallback = /var\(--ed-radius-pill,\s*(\d+)px\)/.exec(surface)?.[1];
+    expect(fallback, "Surface.css 缺 `var(--ed-radius-pill, <n>px)` —— 唯一消费者被改？").toBeDefined();
+    expect(SCALE_SOURCE.radiusScale.find((r) => r.name === "pill")?.px, "pill 真源值 ≠ 原语层兜底值").toBe(Number(fallback));
   });
 
   // 规范 §4.2 字阶逐字为「25/600 · 17/600 · 15.5/1.9 · 13/20 · 12/18 · 11.5/16 mono（下界 12px）」：

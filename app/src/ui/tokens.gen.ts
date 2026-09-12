@@ -49,7 +49,7 @@ export const SCALE_TOKENS = {
   typeScale: ["25px/34px·600","17px/24px·600","15.5px/29.5px·400","13px/20px·400","12px/18px·500","11.5px/16px·500"],
   typeScaleVars: [{"size":25,"line":34,"weight":600},{"size":17,"line":24,"weight":600},{"size":15.5,"line":29.5,"weight":400},{"size":13,"line":20,"weight":400},{"size":12,"line":18,"weight":500},{"size":11.5,"line":16,"weight":500}],
   spaceScale: [4,8,12,16,24,32,48],
-  radiusScale: [{"name":"stamp","px":3},{"name":"control","px":5},{"name":"panel","px":8},{"name":"overlay","px":10}],
+  radiusScale: [{"name":"stamp","px":3},{"name":"control","px":5},{"name":"panel","px":8},{"name":"overlay","px":10},{"name":"pill","px":999}],
   overlayAlpha: 0.34,
   iconGrid: 24,
   iconStroke: 1.75,

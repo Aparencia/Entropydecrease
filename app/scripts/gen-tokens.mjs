@@ -116,12 +116,19 @@ export const SCALE_SOURCE = {
   typeScale: TYPE_SCALE.map((t) => `${t.size}px/${t.line}px·${t.weight}`),
   /** 间距：4 为半档，其余落 8px 网格 */
   spaceScale: [4, 8, 12, 16, 24, 32, 48],
-  /** 圆角：3 印章 · 5 控件与卡 · 8 面板 · 10 浮层 */
+  /**
+   * 圆角：3 印章 · 5 控件与卡 · 8 面板 · 10 浮层 · 999 药丸（批 4 B17 的第 5 档；规格 §4.2 只写四档）。
+   *
+   * `pill` 的 999 **不是本任务自创的数字**：它是原语层 `ui/primitives/Surface.css:58` 里既有的兜底值
+   * `var(--ed-radius-pill, 999px)`（全仓唯一命中，R2.3「取既有原语层兜底值」）。批 6 T5 把它升为
+   * 真源档位后，真源与唯一消费者同值 —— 由 `gen-tokens.test.mjs` 的「== 原语层兜底值」对拍钉住。
+   */
   radiusScale: [
     { name: "stamp", px: 3 },
     { name: "control", px: 5 },
     { name: "panel", px: 8 },
     { name: "overlay", px: 10 },
+    { name: "pill", px: 999 },
   ],
   /** 遮罩透明度（配 overlay 基色） */
   overlayAlpha: 0.34,
