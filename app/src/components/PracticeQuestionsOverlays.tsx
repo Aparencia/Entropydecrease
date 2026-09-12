@@ -5,9 +5,13 @@
  *              练习=内建习得行动（打点入完成史 practice_tick，宽容缺勤）；
  *              问题=Me 问题化（open/answered/archived + 答沉淀回链——供输出创作
  *              前翻看与复盘）。
+ * @ai-context: 批 4 T8 迁移：自建遮罩/居中几何（原 560 px 面板 → `Modal` 的 `l` 档）与自绘
+ *              头部（标题 + 关闭钮）交给 `Modal`（barrel 导入，B5）——遮罩、ESC、焦点陷阱、
+ *              层级、body 滚动锁都是它的独占职责（ADR-033 §7）。开合态仍由父层持有
+ *              （`ActionCenterPanel` 的条件挂载）⇒ `open` 恒为 `true`，160ms 退场相位不触发。
  */
 import { useCallback, useEffect, useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 
 /** 响应结构（PracticeItem/QuestionItem 均 serde camelCase——字段须 camel 读取） */
@@ -32,41 +36,20 @@ interface QuestionView {
   answerRef: string | null;
 }
 
-const overlayStyle: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,.45)",
-  zIndex: zIndex("modal"),
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-const cardStyle: React.CSSProperties = {
-  background: "#fff",
-  borderRadius: 12,
-  width: 560,
-  maxWidth: "92vw",
-  maxHeight: "80vh",
-  overflow: "auto",
-  padding: 16,
-  fontSize: 13,
-};
 const btn: React.CSSProperties = { padding: "4px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6 };
 const okBtn: React.CSSProperties = { ...btn, background: "#0d9488", color: "#fff", border: "none" };
 const ghostBtn: React.CSSProperties = { ...btn, background: "#fff", border: "1px solid #e5e7eb", color: "#374151" };
 
-function shell(title: string, subtitle: string, onClose: () => void, children: React.ReactNode) {
+/**
+ * 两个弹层共用的壳。标题（去纯装饰 emoji）与关闭钮归 `Modal` 的 head，`subtitle` 逐字保留为
+ * 正文首行（原为标题右侧的 `<span>`；字号/色值原样 ⇒ 只是换行位置变了）。
+ */
+function shell(testId: string, title: string, subtitle: string, onClose: () => void, children: React.ReactNode) {
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={cardStyle} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 10, gap: 8 }}>
-          <h3 style={{ margin: 0, fontSize: 15 }}>{title}</h3>
-          <span style={{ fontSize: 11, color: "#9ca3af" }}>{subtitle}</span>
-          <button style={{ ...ghostBtn, marginLeft: "auto" }} onClick={onClose}>关闭</button>
-        </div>
-        {children}
-      </div>
-    </div>
+    <Modal open onClose={onClose} title={title} size="l" testId={testId}>
+      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 10 }}>{subtitle}</div>
+      {children}
+    </Modal>
   );
 }
 
@@ -113,7 +96,7 @@ export function PracticeOverlay({ onClose }: { onClose: () => void }) {
 
   const dueCount = items.filter((i) => i.nextDue != null && i.nextDue <= Math.floor(Date.now() / 1000)).length;
 
-  return shell("🎯 练习条目", `该练了 ${dueCount} · 闪卡之外第二条复利曲线（宽容缺勤只记史）`, onClose, (
+  return shell("practice-overlays", "练习条目", `该练了 ${dueCount} · 闪卡之外第二条复利曲线（宽容缺勤只记史）`, onClose, (
     <>
       {msg && <div style={{ fontSize: 11, color: "#047857", marginBottom: 6 }}>{msg}</div>}
       {err && <div style={{ fontSize: 11, color: "#dc2626", marginBottom: 6 }}>{err}</div>}
@@ -204,7 +187,7 @@ export function QuestionsOverlay({ onClose }: { onClose: () => void }) {
   const open = items.filter((q) => q.status === "open");
   const answered = items.filter((q) => q.status === "answered");
 
-  return shell("❓ 问题清单", "Me 洞见问题化——open/answered/archived（输出创作前翻看/复盘原料）", onClose, (
+  return shell("questions-overlays", "问题清单", "Me 洞见问题化——open/answered/archived（输出创作前翻看/复盘原料）", onClose, (
     <>
       {msg && <div style={{ fontSize: 11, color: "#047857", marginBottom: 6 }}>{msg}</div>}
       {err && <div style={{ fontSize: 11, color: "#dc2626", marginBottom: 6 }}>{err}</div>}
