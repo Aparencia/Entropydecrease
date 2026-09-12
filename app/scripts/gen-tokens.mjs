@@ -98,6 +98,16 @@ export const SCALE_SOURCE = {
   iconGrid: 24,
   iconStroke: 1.75,
   iconSizes: [16, 20, 24],
+  /**
+   * 顶栏高度（规格 §1 决策 16「`--nav-h` 变量」）。
+   *
+   * Why 进 SCALE_SOURCE 而不是留在调用点：它是**壳层与 9 个页面共用的纵向基准**
+   * （8 个页面的 `calc(100vh - 56px)` + `AiConversationDock` 的 `top: 56` + 顶栏自身 `height`），
+   * 散落时改一次高度要同步 10 处，且没有任何门禁看得见漏改的那一处。
+   * 值 56 是**实测的既有值**（v0.18.0 起 8 Tab 就是 56，见 App.tsx 顶栏样式），本批不改高度、只把它变成变量。
+   * 与 §6.3「采集态 58px LIVE 仪表」**不同**：那是相变态的另一根高度，属批 6。
+   */
+  navHeight: 56,
 };
 
 const CSS_HEADER = `/*
@@ -148,6 +158,9 @@ ${SHADOW_TOKENS.map((t) => `  --ed-${t.name}: ${t.light}; /* ${t.usage} */`).joi
   /* 遮罩 */
   --ed-overlay-alpha: ${SCALE_SOURCE.overlayAlpha};
 
+  /* 壳层纵向基准（规格 §1 决策 16）：顶栏高度 —— 页面用 calc(100vh - var(--ed-nav-h)) 消费 */
+  --ed-nav-h: ${SCALE_SOURCE.navHeight}px;
+
   /* 图标 */
   --ed-icon-stroke: ${SCALE_SOURCE.iconStroke};
 }
@@ -197,6 +210,7 @@ export const SCALE_TOKENS = {
   overlayAlpha: ${SCALE_SOURCE.overlayAlpha},
   iconGrid: ${SCALE_SOURCE.iconGrid},
   iconStroke: ${SCALE_SOURCE.iconStroke},
+  navHeight: ${SCALE_SOURCE.navHeight},
   iconSizes: ${JSON.stringify(SCALE_SOURCE.iconSizes)},
 } as const;
 

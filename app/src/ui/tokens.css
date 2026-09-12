@@ -69,6 +69,9 @@
   /* 遮罩 */
   --ed-overlay-alpha: 0.34;
 
+  /* 壳层纵向基准（规格 §1 决策 16）：顶栏高度 —— 页面用 calc(100vh - var(--ed-nav-h)) 消费 */
+  --ed-nav-h: 56px;
+
   /* 图标 */
   --ed-icon-stroke: 1.75;
 }

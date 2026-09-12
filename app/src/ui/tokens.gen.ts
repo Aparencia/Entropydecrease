@@ -53,6 +53,7 @@ export const SCALE_TOKENS = {
   overlayAlpha: 0.34,
   iconGrid: 24,
   iconStroke: 1.75,
+  navHeight: 56,
   iconSizes: [16,20,24],
 } as const;
 
