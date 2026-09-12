@@ -77,7 +77,7 @@ export interface EasingToken {
 /** 批 6 T5 起：动效时长真源（9 条）—— 迁移自 primitives/motion.css 的临时接缝 */
 export declare const DURATION_TOKENS: readonly DurationToken[];
 
-/** 批 6 T5 起：缓动真源（今日 1 条；T8 追加双基调两条） */
+/** 批 6 T5 起：缓动真源（今日 3 条 = 全站唯一曲线 + T8 的双基调两条） */
 export declare const EASING_TOKENS: readonly EasingToken[];
 
 /* 注：合并名册 `MOTION_TOKENS` 只存在于**产物** `src/ui/tokens.gen.ts`（由 `renderTs()` 生成），

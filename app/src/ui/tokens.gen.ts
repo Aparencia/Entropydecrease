@@ -65,7 +65,7 @@ export interface DurationToken {
 }
 
 export interface EasingToken {
-  /** 不含 `--ed-` 前缀（今日只有全站唯一曲线 `ease`） */
+  /** 不含 `--ed-` 前缀（第 1 条是全站唯一曲线 `ease`；后两条是 T8 追加的双基调落点） */
   readonly name: string;
   readonly value: string;
   readonly usage: string;
@@ -87,9 +87,11 @@ export const DURATION_TOKENS = [
 /** 时长短名的字面量联合：门面收窄入参用（拼错必须编译期报错，不是运行期静默取不到值） */
 export type DurationTokenName = (typeof DURATION_TOKENS)[number]["name"];
 
-/** 缓动曲线（规格 §8.4）—— 批 6 的 T8 会追加双基调的两条，只许追加 */
+/** 缓动曲线（规格 §8.4 的全站唯一曲线 + §8.3 双基调的两条）—— 第 1 条恒不可改，后两条由 T8 追加 */
 export const EASING_TOKENS = [
   { name: "ease", value: "cubic-bezier(0.2, 0, 0, 1)", usage: "全站唯一曲线（规格 §8.4）" },
+  { name: "ease-instrument", value: "cubic-bezier(0.4, 0, 0.2, 1)", usage: "双基调·精密仪器 —— power3.inOut 的 bezier 近似" },
+  { name: "ease-paper", value: "cubic-bezier(0.215, 0.61, 0.355, 1)", usage: "双基调·活的纸 —— power2.out 的 bezier 近似，与 engine 的具名 ease ed-paper-bleed 同曲线" },
 ] as const satisfies readonly EasingToken[];
 
 /**
@@ -110,6 +112,8 @@ export const MOTION_TOKENS = [
   { name: "dur-reveal", cssVar: "--ed-dur-reveal", kind: "duration", value: "500ms" },
   { name: "dur-page", cssVar: "--ed-dur-page", kind: "duration", value: "150ms" },
   { name: "ease", cssVar: "--ed-ease", kind: "easing", value: "cubic-bezier(0.2, 0, 0, 1)" },
+  { name: "ease-instrument", cssVar: "--ed-ease-instrument", kind: "easing", value: "cubic-bezier(0.4, 0, 0.2, 1)" },
+  { name: "ease-paper", cssVar: "--ed-ease-paper", kind: "easing", value: "cubic-bezier(0.215, 0.61, 0.355, 1)" },
 ] as const;
 
 export type MotionTokenName = (typeof MOTION_TOKENS)[number]["name"];

@@ -39,4 +39,14 @@ import { CustomEase } from "gsap/CustomEase";
 
 gsap.registerPlugin(useGSAP, Flip, ScrollToPlugin, CustomEase);
 
+/**
+ * 双基调的**具名 ease**（裁决 R3.4 · 规格 §8.3 的「活的纸」/「洇开」曲线，计划 T8 Step 3）。
+ * 控制点与 CSS 侧 `--ed-ease-paper` **同值**（`0.215,0.61,0.355,1` = `power2.out` 的 bezier 近似）
+ * ⇒ 两侧不只是共享「不是回弹」这一性质，而是**同一条曲线**（回弹/过冲会被 `tone.test.ts` 的
+ * 101 点单调性判据拦下）。名字与 `motion/tone.ts` 的 `TONE_EASE_NAME.paper` 逐字对应 ——
+ * 两边分叉时那条判据当场红（`parseEase` 对未注册名**静默**返回 `undefined`）。
+ * ⚠️ 必须在 `registerPlugin(CustomEase)` **之后**：未注册时 `CustomEase.create` 进不了 GSAP 的 ease 表。
+ */
+CustomEase.create("ed-paper-bleed", "M0,0 C0.215,0.61 0.355,1 1,1");
+
 export { gsap, useGSAP };

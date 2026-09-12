@@ -101,10 +101,21 @@ export const DURATION_TOKENS = [
 /**
  * 缓动 token（规格 §8.4「`--ease cubic-bezier(0.2,0,0,1)`」）—— 与时长**分开列**：
  * 变量名是 `--ed-ease`（没有 `dur-` 段），而时长恒为 `--ed-dur-<name>`，两者的拼法不同名。
- * 批 6 的 T8 会在此追加双基调的两条缓动（`data-tone` 的仪器 / 纸），**只许追加、不许改本条**。
+ * 批 6 的 T8 已在此追加双基调的两条（`data-tone` 的仪器 / 纸，裁决 R3.4）—— **只许追加、第 1 条不许改**。
+ *
+ * 双基调的两条（规格 §8.3 的两张面；两侧的同源机理见 `src/motion/tone.ts` 的头注）：
+ * · `ease-instrument`（精密仪器 · 有「读数」的界面：采集 / 复习 / 时间轴 / 到期刻度）：GSAP 侧是
+ *   `power3.inOut`，而 CSS 没有 ease 族 ⇒ 这里**只能是 bezier 近似**（微小曲线差本批接受、不引入
+ *   第二套 ease 定义）；值取计划 T8 Step 2 的逐字值 `cubic-bezier(0.4, 0, 0.2, 1)`。
+ * · `ease-paper`（活的纸 · 有「文字」的界面：笔记 / 会话 / 体系）：`power2.out` 的 bezier 近似，
+ *   与 `engine.ts` 里 `CustomEase.create("ed-paper-bleed", …)` 用**同一组控制点** ⇒ 两侧是同一条曲线。
+ * 🔴 两条都**不是回弹**（规格 §8.7 明确不做回弹/弹性）：单调不减由 `motion/tone.test.ts` 的 101 点判据
+ *   钉住 —— 改这里的 `value` 时那条判据会红（y 控制点必须满足 `0 ≤ y1 ≤ y2 ≤ 1`）。
  */
 export const EASING_TOKENS = [
   { name: "ease", value: "cubic-bezier(0.2, 0, 0, 1)", usage: "全站唯一曲线（规格 §8.4）" },
+  { name: "ease-instrument", value: "cubic-bezier(0.4, 0, 0.2, 1)", usage: "双基调·精密仪器 —— power3.inOut 的 bezier 近似" },
+  { name: "ease-paper", value: "cubic-bezier(0.215, 0.61, 0.355, 1)", usage: "双基调·活的纸 —— power2.out 的 bezier 近似，与 engine 的具名 ease ed-paper-bleed 同曲线" },
 ];
 
 /** 非颜色 token：两档共用（规范 §4.2） */
@@ -199,7 +210,7 @@ ${SHADOW_TOKENS.map((t) => `  --ed-${t.name}: ${t.light}; /* ${t.usage} */`).joi
   /* 壳层纵向基准（规格 §1 决策 16）：顶栏高度 —— 页面用 calc(100vh - var(--ed-nav-h)) 消费 */
   --ed-nav-h: ${SCALE_SOURCE.navHeight}px;
 
-  /* 动效（规格 §8.4）：9 个时长 + 1 个缓动 —— 批 6 从 primitives/motion.css 的临时接缝迁入，值逐字不变 */
+  /* 动效：9 个时长（规格 §8.4，逐字迁自 primitives/motion.css 的临时接缝）+ 3 个缓动（全站唯一曲线 + 双基调两条） */
 ${DURATION_TOKENS.map((t) => `  --ed-dur-${t.name}: ${t.ms}ms;`).join("\n")}
 ${EASING_TOKENS.map((t) => `  --ed-${t.name}: ${t.value};`).join("\n")}
 
@@ -279,7 +290,7 @@ export interface DurationToken {
 }
 
 export interface EasingToken {
-  /** 不含 \`--ed-\` 前缀（今日只有全站唯一曲线 \`ease\`） */
+  /** 不含 \`--ed-\` 前缀（第 1 条是全站唯一曲线 \`ease\`；后两条是 T8 追加的双基调落点） */
   readonly name: string;
   readonly value: string;
   readonly usage: string;
@@ -293,7 +304,7 @@ ${durationRows}
 /** 时长短名的字面量联合：门面收窄入参用（拼错必须编译期报错，不是运行期静默取不到值） */
 export type DurationTokenName = (typeof DURATION_TOKENS)[number]["name"];
 
-/** 缓动曲线（规格 §8.4）—— 批 6 的 T8 会追加双基调的两条，只许追加 */
+/** 缓动曲线（规格 §8.4 的全站唯一曲线 + §8.3 双基调的两条）—— 第 1 条恒不可改，后两条由 T8 追加 */
 export const EASING_TOKENS = [
 ${easingRows}
 ] as const satisfies readonly EasingToken[];

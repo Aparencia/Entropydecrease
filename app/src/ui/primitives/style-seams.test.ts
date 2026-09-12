@@ -185,7 +185,7 @@ describe("动效 token 真源契约（批 6 起临时接缝已迁走 ⇒ 钉唯�
     for (const [name, value] of expected) expect(source).toContain(`${name}: ${value};`);
     // 真源侧计数：把「一个不多一个不少」钉在生成器的名单上（不再钉临时接缝）
     expect(DURATION_TOKENS).toHaveLength(9);
-    expect(EASING_TOKENS).toHaveLength(1);
+    expect(EASING_TOKENS.map((t) => t.name), "缓动真源追加须同步本条").toEqual(["ease", "ease-instrument", "ease-paper"]); // G18（T8）：1 → 3 条，逐序数组相等（R14.7 I-2；净增 0 行）
   });
 
   it("规格 §8.4：原语 CSS 的位移一律 ≤ 8px（8px 是注释不变量，本条是它的机器判据）", () => {
