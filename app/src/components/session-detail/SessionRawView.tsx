@@ -21,6 +21,19 @@
  *              ③ 术语表 `<details>` 的整圈边框用 **token 变量** `var(--ed-border)` —— 不迁
  *                 `Surface`：`Surface.css` 是 `.ed-surface` 类族，而本元素是 `<details>` 折叠块
  *                 （`SurfaceTag` 不含 `details`；加档=改原语契约，不在本任务范围）。
+ * @ai-context: **批 6 T28 —— #2「显影编排」（§8.6 第 2 行）的落点就在本文件**：R5.2 逐字把落点裁在
+ *              **课后**（`detail.segments.map`，即 `:87-102` 那一段），采集期落点
+ *              （`LiveActivityPanel`）**登记转批 7**。本件只做三件事，**不改**既有 DOM 结构与文案：
+ *              ① 段落容器加 `ref` + `data-tone="paper"`（§8.3：会话是「有文字的界面」）；
+ *              ② 每段加 `data-seg-id`（`useRevealChoreography` 的逐段锚点 = `[data-seg-id]`）；
+ *              ③ 段正文 `<Text>` 追加 `lowConfidenceClass(seg.confidence)` —— 这是 R11.3 /
+ *              R12.4 点名要落地的**低置信墨度起伏**（环境层第 ③ 件）的**生产过程调用点**：
+ *              它与显影**共用同一个元素**，所以两者必须**互不覆盖** —— 那条 CSS `animation` 动
+ *              `opacity`，显影的 GSAP 只动 `transform`（见 `useRevealChoreography.ts` 的文件头）。
+ *              ④ `data-reveal-epoch` 把「持有的世代号」暴露到 DOM（R8.5：结构锚点优先于时间判据）。
+ *              ⚠️ 因此本件新增一条 import 边：`components/structuredBlocks.ts`（它顶层 `import katex`
+ *              + `katex.min.css`）⇒ **KaTeX 会成为会话详情惰性 chunk 的依赖**（首屏静态闭包不含本件，
+ *              `check-bundle-budget` 的首屏口径不变；代价逐字登记在 `task-28-report.md` 的诚实边界）。
  * @ai-context: **逐条自审（控制方回执③）后仍保留的字面量**：`fontSize: 13`（三处 `<h3>` 标题，
  *              合法档 —— 规格 §4.2 字阶下界是 12px）· `fontSize: 12`（术语表折叠块）·
  *              `borderRadius: 8`（= `radiusScale.panel` 档）· `background: "#fafafa"`（**未迁移**：
@@ -29,8 +42,11 @@
  *              等**逐字继承自原面板、未被我改写**且**不在任何棘轮集合内**的字面量。⇒ 五类棘轮
  *              （圆角 / 字号 / 弱化灰 / 卡片边框 / 三红）在本件全 0 命中。
  */
+import { useRef } from "react";
 import SessionScreenCards from "./SessionScreenCards";
 import ImageGallery from "../ImageGallery";
+import { lowConfidenceClass } from "../structuredBlocks";
+import { useRevealChoreography } from "./useRevealChoreography";
 import type { GlossaryTerm, SessionDetail, SessionOcrBlock } from "../../types";
 import { fmtMs } from "../../utils/fmt";
 import { Text } from "../../ui/primitives";
@@ -73,11 +89,22 @@ export default function SessionRawView({
   glossary,
 }: Props) {
   const sessionId = detail.session.id;
+  // 🔴 #2「显影编排」的挂载点（R5.2 的课后落点）。本件**只提供容器与锚点**：起始态物化、逐段
+  // 错开、可中断/可反向全在 hook 里（视图保持零副作用 —— 与 T25 的容器单一真源同一条纪律）。
+  const revealBox = useRef<HTMLDivElement | null>(null);
+  const reveal = useRevealChoreography(revealBox, detail.segments);
   return (
     <>
       {/* 转写时间轴（字幕为主，语音/融合弱化；段 id 锚点供大纲/搜索跳转） */}
       <h3 style={{ fontSize: 13, margin: "12px 0 6px" }}>转写时间轴</h3>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {/* `data-tone="paper"` = #2 的基调登记（R3.4 逐字「每个动效落点显式声明基调」）；
+          `data-reveal-epoch` = 持有的重播世代（R8.5 的结构锚点） */}
+      <div
+        ref={revealBox}
+        data-tone="paper"
+        data-reveal-epoch={reveal.revealEpoch}
+        style={{ display: "flex", flexDirection: "column", gap: 4 }}
+      >
         {/* v0.11.7：图文会话空态语义区分（无讲述内容）；其余会话维持原文案 */}
         {detail.segments.length === 0 && (
           <Text as="p" size={5} tone="ink-3">
@@ -85,7 +112,12 @@ export default function SessionRawView({
           </Text>
         )}
         {detail.segments.map((seg) => (
-          <div key={seg.id} id={`seg-${sessionId}-${seg.id}`} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+          <div
+            key={seg.id}
+            id={`seg-${sessionId}-${seg.id}`}
+            data-seg-id={seg.id}
+            style={{ display: "flex", gap: 8, alignItems: "baseline" }}
+          >
             <Text tone="ink-3" style={{ width: 78, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
               {fmtMs(seg.start_ms)} – {fmtMs(seg.end_ms)}
             </Text>
@@ -95,7 +127,15 @@ export default function SessionRawView({
             >
               {SOURCE_LABEL[seg.source] ?? seg.source}
             </Text>
-            <Text as="span" size={5} tone="ink-2" style={{ color: seg.source === "fused" ? "var(--ed-due)" : undefined }}>
+            {/* 低置信段（`confidence < 0.5`，阈值真源 = `structuredBlocks.lowConfidenceClass`）追加
+                `ed-text--low-confidence`（R11.3 ③ 的环境层落点；样式规则在 `ui/primitives/Text.css`）。 */}
+            <Text
+              as="span"
+              size={5}
+              tone="ink-2"
+              className={lowConfidenceClass(seg.confidence)}
+              style={{ color: seg.source === "fused" ? "var(--ed-due)" : undefined }}
+            >
               {seg.text}
             </Text>
           </div>
