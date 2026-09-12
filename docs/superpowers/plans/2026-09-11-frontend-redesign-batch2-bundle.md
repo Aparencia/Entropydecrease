@@ -54,6 +54,8 @@
   | `cd app/src-tauri; cargo clippy --all-targets` | exit 0 · **19 条，集合与开工基线 identical** |
 
   > **每个任务都必须以这六条全绿收尾**，不可「稍后一起跑」。本批改动**不碰 Rust**，故 `cargo` 两条**必须逐字不动**；一旦变动即说明改错了面。`ffmpeg::tests::run_captured_handles_large_output` 是**装载敏感偶发失败**（内含 10s 墙钟超时）⇒ 门禁**串行执行**，或单独复跑该用例再下结论。
+
+  > **2026-09-12 更正（Task 12 回写）—— clippy 的判据只能是「集合」，不能是「sha256」**：Task 1 把开工基线冻结为 `.superpowers/.../tmp/clippy-baseline.txt`（**BOM + CRLF**，1724 B），而抽取器的输出是**无 BOM + LF**（1702 B）⇒ **比 sha256 会永远假红**（Task 3 实测 `F889CA71…` vs `76319132…`，**集合本身 19/19 逐行相同**）。⇒ 本表第四列「identical」一律理解为 **`诊断文本 @ 文件:行:列` 排序去重后的集合逐行相等**（Task 12 复跑：`baseline rows: 19 | now rows: 19 · only in baseline: 0 · only in now: 0 · SET-IDENTICAL`，比对器自检注入 1 条伪造诊断 ⇒ 报 1 处差异）。
 - **⚠️ 判退出码的固定口径（PS 5.1）**：`cargo` 往 stderr 写 warning 时，`2>&1 | …` 会被 PS 5.1 包成 `NativeCommandError`，让**成功的命令报 exit 1**（`docs/versions/v0.22.md:156` 实测）。⇒ 原生命令一律 `2>file` 重定向或直接读 `$LASTEXITCODE`，**绝不 `2>&1 |`**；需要回看输出时**重定向到文件再读回**。
 - **★ 仪器纪律（批 1「收口三」的四条硬纪律 + 本批新增第 5 条，逐条适用）**
   1. **任何「0 命中」结论必须点名仪器，并先证明该仪器能命中一个已知存在的串、且对无意义串报 0。**（批 1 实测 6 次假绿/假阴性。）本批每个「0 命中」型声明都必须附这样一对自检。
@@ -61,6 +63,16 @@
   3. **`\b` 在全角 `）`（U+FF09）前永不匹配**；需要边界时用显式字符类（如 `(?<![A-Za-z0-9_])`）。
   4. **PowerShell 的 `-Include` 在没有 `-Recurse` 时不生效**：`Get-ChildItem "app\src" -File -Include *.tsx` 返回 **0 个文件**（2026-09-12 控制方实测踩到，把「页面 import」误报成 0 命中）。正确写法 = `Get-ChildItem -Recurse -File | Where-Object { $_.Extension -in '.tsx','.ts' }`。这是批 1 记录的第 7 类假阴性仪器。
   5. **全树扫描必须排除 `.superpowers/`**：各批 `tmp/` 下解包的历史归档副本会被当成命中源（批 1 一次假 313 命中）。本批的扫描命令统一加 `--glob '!.superpowers/**'` 或先 `Get-ChildItem -Exclude .superpowers`。
+
+  > **2026-09-12 追加（Task 12 回写）：本批实测又新增 8 类仪器陷阱（累计 13 类），后续批次一律照用。**
+  > 6. **`\b`/正则遇全角 `）` 与中文**：含中文的搜索模式**不得经 PowerShell 字符串层传递**（PS 5.1 按 GBK 误解码 ⇒ 把中文模式搜成 `瀛愪覆`，**给出 0 命中的假阴性**）；用 Node/Python 或 UTF-8 读文件。同族：**无 BOM 的 UTF-8 `.ps1` 含中文会被 GBK 解码**（`-File` 执行时连脚本内的 `cmd` 行一起毁掉）⇒ 交给 `-File` 的脚本保持纯 ASCII。
+  > 7. **整树 ripgrep 会遵守 `.gitignore`** ⇒ 对**被忽略目录整体失明**（本批实测：`app/src/build/manualChunks.ts` 里的 `vendorGroupOf` 在 `app/` 下报 **0 命中**，窄域 grep 报 **19**）。⇒ 用 `rg --no-ignore` / `git grep --no-index` / 显式遍历。
+  > 8. **PS `-Include` 无 `-Recurse` 时静默返回 0 个文件**（`Get-ChildItem app\src -File -Include *.tsx` = 0；正确写法 `-Recurse -File | Where-Object Extension`）。
+  > 9. **PS 5.1 `>` 重定向写 UTF-16LE** ⇒ Node `JSON.parse` 读 `--json` 捕获文件会失败；用 `cmd /c "… > f"` 或 `Out-File -Encoding utf8`。
+  > 10. **Tauri 命令名不是唯一的 chunk 标记**（`close_capture_float` 在 `ClassroomPage.tsx` 里也有）⇒ 用「panel-only 标记 + 不跟随动态边」；**chunk 依赖边是模块图的性质，不是归属表的性质** —— 迁移模块必须连它自己的依赖闭包一起迁，否则边还在（本批 md↔katex 环的根因）。
+  > 11. **`git archive` 在未跟踪子目录产出 10240 字节空归档 + exit 0**；**解包树里 `git grep` 静默 0 命中**（无 `.git`）⇒ 一律在仓库根 + 绝对 `-o`。
+  > 12. **`Copy-Item` 保留 mtime** ⇒ cargo 回放陈旧诊断，还原文件后先 `touch`。
+  > 13. **A/B Δ 恰为 0 时先当仪器故障**（不是「无差异」）：先自证仪器能测出已知差异，再下结论。
 - **★ 连通性判据（批 1「收口一」第 1 条，本批的技术底座）**：**「这个模块看起来还有人用」不是保留依据**；判一块代码是否仍连着，唯一可靠的方法是**从入口反向做可达性分析**。本批四个任务（1 / 2 / 9 / 10）全部采用同一把尺：**从 `app/src/main.tsx` 出发、只沿静态 ESM `import`/`export … from` 走、把 `import(…)` 当作断点**，得到「首屏可达模块集合」。探针脚本已在 `tmp/probe-eager-graph.mjs`，Task 1 会把它固化成 `scripts/bundle-eager-graph.mjs`。
 - **★ 文本扫描型守卫会被注释/测试名里的字面量误伤**（批 0-D Task 10 实测）：若某个测试必须提到本批新增/改动的字符串，**用拼接写法**（`"vendor-" + "gsap"`）**或改述**，**绝不为了绕开守卫去改守卫本身**。
 - **★ 提交纪律**：`git commit --only -m "<msg>" -- <显式路径…>`（本仓**多 agent 并行**，裸 `git commit` 会扫走别人已暂存的条目，包括 `D` 删除条目 —— 已实际发生）。**禁止**：`git add -A` · `git add .` · `git stash` · `git checkout --` · `git restore` · `git clean` · `git reset --hard` · `--no-verify`。提交信息 Conventional Commits：`<type>(<scope>): <subject>`，subject ≤50 字、动词开头、无结尾句号。**本批禁止任何删除操作**（无文件删除、无依赖卸载）—— 若某任务确需删除，STOP 并报控制方。
@@ -123,6 +135,11 @@ dist/assets/index-BctYHBP-.js                         2,106.46 kB │ gzip: 654.
 | `app/dist` 合计 | 3,157.49 kB | |
 | 构建耗时 | 4.18s · 746 modules | |
 | 独立复算 | `zlib.gzipSync(buf,{level:6}).length` = **654,722 字节** | 与 vite 打印值**逐字相等** ⇒ 该口径可作机器判据 |
+
+> **2026-09-12 更正（Task 12 回写，本表两处单位错标）**：本表其余各行都是**十进制 kB（÷1000）**，但
+> · 「KaTeX 字体资产 **1,047.80 kB**」实为 **KiB** ⇒ 十进制是 **1,072,948 B = 1,072.95 kB**；
+> · 「`app/dist` 合计 **3,157.49 kB**」实为 **KiB** ⇒ 十进制是 **3,233,274 B = 3,233.27 kB**（批 2 终态 3,228,859 B = 3,228.86 kB）。
+> ⇒ 引用这两行**必须连单位一起抄**，否则会凭空多出 **≈25 kB 字体 / ≈76 kB dist** 的假 Δ。（子项 `.woff2`/`.woff`/`.ttf` 三行同源，也是 KiB。）
 
 > **规格漂移（第 1 处）**：规格 §2 现状基线写「JS 2,093.85 kB / gzip **651.25** kB」，实测 **2,106.46 / 654.72**（+12.61 kB 原始 / +3.47 kB gzip）。规格 §10 批 2 行与 §11 验收 9 的「651KB」同源过期。⇒ Task 12 回写。
 > **规格漂移（第 2 处）**：规格 §2 那句「单个 chunk，**零代码分割**」**成立**，但 §10 把「`manualChunks`」列为降首屏的手段 —— 实测/推理结论：**`manualChunks` 本身一个字节都不降首屏**。它只把同一批字节切成多个文件，入口仍静态依赖全部 chunk。它的真实价值是 ① 让批 6 的 GSAP 能落进独立懒加载 chunk（规格 §13 风险表要求）② 让 `import()` 产生的懒 chunk 有稳定的共享 vendor 边界、不被 rollup 默认算法复制或打散。⇒ Task 12 在规格 §10 批 2 行补一条口径注。
@@ -574,6 +591,11 @@ git commit --only -m "build(scripts): add first-screen bundle budget gate" -- sc
 | V3 | `node scripts/check-bundle-budget.mjs --no-build --json` | `firstScreen.totalKb` = `654.72`（±0.01）且 `firstScreen.chunks` 长度 = 1 |
 | V4 | 仪器自检的「无意义串」一条 | Step 2 第 3 项：不存在的 chunk 名必须抛错（**在报告里贴出这段代码与它被触发的输出**） |
 | V5 | `node scripts/line-limits.mjs --full` | exit 0 |
+
+> **2026-09-12 追加（Task 12 回写）—— 本守卫交付后实测出两个缺口，读本节的后续批次必须先看这两条：**
+> **(a) 嵌套输出路径盲区（真·静默假绿，已用真实构建复现）**：Step 1 的 `allChunks()` 只 `readdirSync(join(DIST,"assets"))` **平铺一层**，而 `firstScreen` 的正则 `[^"'/\\]+\.js` **排斥 `/`** ⇒ 若产物出现 `assets/vendor/*.js`，这些 chunk **既不计入首屏、也不计入懒加载**，守卫仍打印 `✅ 达标` + **exit 0**。Task 4 评审用「commit 自带规则表 + 一行 `"vendor/" + manualChunks(id)`」跑**真实 vite 构建**复现了这一假绿（产物 `assets/vendor/*.js`，守卫报「达标：余量 12.60 kB」，而真实首屏 650.34 kB）。**今天未触发**（产物全平铺、`VendorGroup` 返回值无 `/`、批 6 的 `vendor-gsap` 同样不含 `/`），但缺口是**活的**。
+> **(b) 输出文案在说谎**：守卫把「非首屏」一律标成「**懒加载 chunk（仅动态可达）**」，它**从未验证动态可达性** —— 放一个**孤儿 chunk** 也会被计成「仅动态可达 1 个」。判定与冻结基线读数不受影响，但**这句输出是假的**（与本批宗旨「守卫的说法必须为真」同一条）。
+> ⇒ 两条均**登记批 8**（修法建议：检测到 `assets/` 下有子目录或外部 `.js` 即 `fail()` exit 2 + `--self-test` 加一条嵌套夹具；文案改「非首屏 chunk（懒/孤儿未区分）」或真的验证动态可达性）。**完整证据见本计划 §收口回写 §瓶颈清单对应两行。**
 
 ---
 
@@ -1078,6 +1100,9 @@ git commit --only -m "test(build): guard reserved gsap vendor chunk slot" -- app
 - Modify: `app/src/App.tsx`（现 **439 行**，301–600 档已登记；改后预计 ~430 行，**仍须落在 ≤600 且如实复核**）
 - Create: `.superpowers/sdd/2026-09-11-frontend-redesign-batch2-bundle/tmp/build-task6.txt`（不入库）
 
+> **2026-09-12 更正（Task 12 回写，原文一律保留）**：本任务的 Files 清单**漏了一项必须的改动** —— `docs/standards/line-limit-exemptions.md`。`App.tsx` 实测 **439 → 519 行**（仍落 301–600 档），登记值必须由 `node scripts/line-limits.mjs --write` 刷新，否则 `line-limits --full` 的 (e)「登记值 == 实测值」当场变红。**Task 8 的 Files 清单有同一处遗漏**。
+> **2026-09-12 更正（Task 12 回写）**：本任务全篇写的「**9 页**按页 `lazy`」是**计划态**，**交付态是 8 懒 + 课堂页静态**（控制方 2026-09-12 裁决 2 末条：课堂是默认页，懒它等于首屏必拉一次动态 chunk，且该 chunk 首屏即被抓取却被记作 lazy ⇒ **首屏读数被低估 20.04 kB**）。受影响的行：**L1101**（预期「页面静态 import = 9」）、**L1104**（Step 3 标题）、**L1109**（注释「9 个页面」）、**L1114**（`ClassroomPage` 不在交付的 lazy 清单里）、**L1236**（提交 subject 实为 `perf(app): lazy-load eight pages on first visit`，见 `62c4c369`）、**L1243 V1**（实测 **8**）、**L1244 V2**（实测 **1**，不是 0）。
+
 **Interfaces:**
 - Consumes: Task 4 的 vendor chunk 拓扑
 - Produces: `PageSlot` 局部组件（文件内，不导出）—— Task 7/8 沿用同一模式改另两处。
@@ -1248,6 +1273,8 @@ git commit --only -m "perf(app): lazy-load nine pages on first visit" -- app/src
 | V6 | `cd app; npx vitest run` | **124 文件 / 1124 用例全绿**，且 `git status --short` 里**没有任何测试文件被改** |
 | V7 | `[System.IO.File]::ReadAllLines("app\src\App.tsx",[Text.Encoding]::UTF8).Count` | **≤600**（仍落在已登记的 301–600 档；若 >600 ⇒ 立即 STOP，红线违规） |
 
+> **2026-09-12 实测更正（Task 12 回写）**：**V1 = 8**（不是 9）· **V2 = 1**（不是 0，留下的是静态 `ClassroomPage`）—— 见上方 Files 节的两条更正。**V6 的 vitest 基线过期**：交付时是 **125 文件 / 1233 用例**（批 2 净增 1 个测试文件 `app/src/build/manualChunks.test.ts`，全批 **0 处断言修改 / 0 处新增 `await` / 0 处改 mock**，Task 6 自己前后逐字相同）。本表 V1–V7 其余各项实测通过；`App.tsx` 实际落在 **519 行**。
+
 ---
 
 ### Task 7: 两个窗口变体懒加载（`?float=1` / `?overlay=1`）
@@ -1316,6 +1343,10 @@ cd app; Get-ChildItem dist/assets -Filter "*.js" | Sort-Object Length -Descendin
 
 > **窗口变体首屏的度量**：本批不做第二套入口 HTML，因此窗口变体首屏 = `index.html` 入口 chunk 的 gzip（**同一份**）＋ **零** vendor 依赖（因为早返回在 `MainShell` 之前，9 个页面与 vendor 全部不会被拉）。⇒ 实测判据改为：`check-bundle-budget.mjs --json` 里 `firstScreen.chunks` 只有入口那一个 chunk 时，`totalKb` 就是窗口变体首屏的**上界**。把这条推理与实测值一起写进报告（Task 11 会引用）。
 
+> **2026-09-12 更正（Task 12 回写）—— 上面这条推理是错的，实测推翻**：变体首屏**不是**「入口 + 零 vendor」，而是 **入口 + 4 个 vendor chunk**（`vendor-react` / `vendor-md` / `vendor-katex` / `vendor-tauri`）。根因：**三个窗口共用同一份 `index.html`**（已证：恰 1 个 `<script type=module>`、`index.html` 里 0 处 `float=`/`overlay=`；Rust 用 `WebviewUrl::App("index.html?float=1")` 打开），⇒ **入口的静态闭包逐字节相同**，早返回只能切断**动态**边，**切不断静态**边。
+> **实测**（Task 7/Task 10）：`?float=1` **97.29 kB** · `?overlay=1` **94.19 kB**（口径 = 入口静态闭包 ∪ 本变体动态 chunk）。
+> ⇒ 连带作废的还有「变体 < 60 kB」这条**建议项**：`vendor-react` 单独就是 **60,367 B > 60 kB** ⇒ **任何渲染 React 的窗口都不可能 < 60 kB**，该值**结构性不可达**（幸好控制方裁决 3 已把它定为建议项而非硬门禁）。完整推理与两行实测见本计划 §收口回写 §瓶颈清单。
+
 - [ ] **Step 5: 全量门禁 + 提交**
 
 ```powershell
@@ -1324,6 +1355,8 @@ cd ..; node scripts/line-limits.mjs --full; node scripts/docs-check.mjs
 git diff --stat
 git commit --only -m "perf(app): lazy-load capture float and overlay panels" -- app/src/App.tsx
 ```
+
+> **2026-09-12 更正（Task 12 回写）**：上面这个 commit subject **53 字符，超 `AGENTS.md` §5 的 ≤50 字上限**。交付时改用 **42 字符**的 `perf(app): lazy-load window variant panels`（`63536018`，同一动作、同一显式路径）。⚠️ 本仓 pre-commit 有 commitlint 时该行**会**被拦；后续批次派发词里的提交命令请**先数字符数**。
 
 **Verification**
 
@@ -1344,6 +1377,8 @@ git commit --only -m "perf(app): lazy-load capture float and overlay panels" -- 
 **Files:**
 - Modify: `app/src/App.tsx`
 - Create: `.superpowers/sdd/2026-09-11-frontend-redesign-batch2-bundle/tmp/build-task8.txt`（不入库）
+
+> **2026-09-12 更正（Task 12 回写，与 Task 6 同源）**：本 Files 清单**同样漏了 `docs/standards/line-limit-exemptions.md`** —— Task 6/7/8 三次都改 `app/src/App.tsx`，交付终值 **519 行**（原 439），登记值必须 `node scripts/line-limits.mjs --write` 刷新。另：本任务 Verification 里的 vitest 期望 **124 / 1124** 已过期，交付态是 **125 文件 / 1233 用例**（批 2 净增 1 个测试文件）。
 
 **Interfaces:**
 - Consumes: Task 6 的 `Suspense` import 与挂载闸门模式
@@ -1429,6 +1464,8 @@ git commit --only -m "perf(app): mount conversation dock on first open" -- app/s
 > **为什么是「审计型」任务**：控制方交办要求「清理测量揭示的重复/重依赖」。计划者**已经测过**，结论是**四条候选里没有一条同时满足「只减尺寸 ∧ 零行为变化」**（见下表）。本任务的价值不是「动手删」，而是**在分裂之后重测一遍**（分裂改变了什么在首屏、什么在懒 chunk），把结论固化成 Task 11 瓶颈清单的一节，并**把每条登记给正确的批次**。
 > ⚠️ **纪律**：本任务**默认产物是 0 个代码改动**。若某条重测后**过闸**（同时满足「只减尺寸」与「零行为变化、零测试改动」），实施者**必须先 STOP 报控制方**，取得授权后再作为独立子步执行并单独提交。**不得自行扩大范围。**
 
+> **2026-09-12 更正（Task 12 回写，原文保留）**：计数写错了 —— 上文与 **L1438**（`Produces: … 四行结论表`）都说「**四**条候选」，而 Step 1 实际逐条测的是 **五**条：(1) `katex` 双版本 · (2) `structuredBlocks.ts` 孤儿 · (3) `@codemirror/lang-markdown` 传递链 · (4) `basicSetup` 附带件 · (5) 59 个 KaTeX 字体。交付态是**五行结论表**（`tmp/dep-audit.md`），Task 11 的瓶颈清单逐条引用了全部五条，**无一条过「size-only ∧ behavior-neutral」双闸**。
+
 **Files:**
 - Create: `.superpowers/sdd/2026-09-11-frontend-redesign-batch2-bundle/tmp/dep-audit.md`（不入库）
 - 预计 Modify: **无**
@@ -1478,6 +1515,12 @@ Select-String -Path app/src/components/RichEditorView.tsx -Pattern "basicSetup" 
 ```
 已测结论：`RichEditorView.tsx:15` 用 `basicSetup`，它连带 `@codemirror/autocomplete` 12.66 + `@codemirror/lint` 4.62 + `@codemirror/search` 6.83 = **≈24.11 kB gzip**。同样是**懒 chunk 内**，首屏影响 0；替换成显式扩展列表会**去掉自动补全/搜索/诊断**（行为变化）⇒ **不过闸**。**归属：批 4/5**。
 
+> **2026-09-12 更正（Task 12 回写，单位与口径）**：候选 3/4 的 `≈59.07` / `≈24.11 kB` 是**分裂前的探针读数**（§表 2 的「每包一 chunk」探针，其总量比真实构建膨胀 +6.3%），**不是**落地后的可省字节。分裂后由 Task 9 用真实构建做的 A/B 实测值是：
+> · 候选 3（stub `@codemirror/lang-markdown` 传递链 9 包）：`vendor-editor` 208,585 → **124,549 B = −84.04 kB**；
+> · 候选 4（stub `basicSetup`）：`vendor-editor` 208,585 → **163,484 B = −45.10 kB**；
+> 两者**都 100% 落在懒 chunk 内**，对首屏 **0 B**（判据是 `check-bundle-budget.mjs --no-build --dist <stub 产物>` 的 `lazy` 栏）。
+> ⇒ **引用时不得把 59.07 / 24.11 当作「可省的 kB 数」**；它们在探针口径下只是**归因占比**。Task 11 的瓶颈清单已用 −84.04 / −45.10 入账。
+
 **(5) 59 个 KaTeX 字体（1,047.80 kB：`.woff2` 19/250.16 · `.woff` 20/296.01 · `.ttf` 20/501.63）**
 
 ```powershell
@@ -1486,6 +1529,8 @@ node -e "const z=require('zlib'),f=require('fs');for(const e of ['.woff2','.woff
 Select-String -Path "node_modules/katex/dist/katex.min.css" -Pattern "font-face|src:" | Measure-Object | Select-Object -ExpandProperty Count
 ```
 已测结论：首屏与任何 JS chunk 都**不含**字体（CSS `@font-face` 按需取），**对 200 kB 预算影响 0**；只影响安装包体积。WebView2 支持 woff2 ⇒ 仅留 `.woff2` 可省 **≈797.64 kB 原始字节**。⇒ **不过闸**（要改的是第三方 CSS 的 `src:` 列表，属构建后处理，本批无此工具链）。**归属：批 8（治理收口）**，与「安装包体积」一并裁决。
+
+> **2026-09-12 更正（Task 12 回写，单位）**：本条的 `1,047.80` 与 `797.64` 是 **KiB**（Step 1 的探针命令自己写着 `… /1024).toFixed(2),'KiB'`），但被冠以 `kB`。**十进制（÷1000，vite 口径）**：字体总计 **1,072,948 B = 1,072.95 kB**；仅留 `.woff2` 可省 **816,780 B = 816.78 kB**。⇒ 按 `kB` 抄这行会**凭空少 25.15 kB**。`§表 1` 第 122/123 行有同一处单位错标（见该表下注）。
 
 - [ ] **Step 2: 写 `tmp/dep-audit.md`**
 
@@ -1563,6 +1608,8 @@ cd app/src-tauri; cargo test --test app_lib_tests 2>"..\..\.superpowers\sdd\2026
 cd app/src-tauri; cargo clippy --all-targets 2>"..\..\.superpowers\sdd\2026-09-11-frontend-redesign-batch2-bundle\tmp\clippy-after.txt"
 ```
 预期：与基线**逐字相同**（`0 / 123 / 123` · exit 0 · `312/312/0` · tsc 0 · **124 / 1124** · **2300/0/6** · clippy **19**）。
+
+> **2026-09-12 更正（Task 12 回写）**：`124 / 1124` 这条**不可能逐字相同** —— 批 2 自己净增 1 个测试文件（`app/src/build/manualChunks.test.ts`，Task 3 建、Task 5/补强单元扩），交付终态是 **125 文件 / 1233 用例**（Task 12 收口复跑：`Test Files 125 passed (125)` · `Tests 1233 passed (1233)` · exit 0）。**其余六项与基线逐字相同**（`0/123/123` · `312/312/0` · tsc 0 · **2300 passed / 0 failed / 6 ignored** · clippy 19 **集合 identical**）。⇒ 本表的 V4「与基线表逐字相同」**应读作「除 vitest 用例数外逐字相同」**，用例数判据是**只增不减**（0 处断言修改）。
 > 若 `ffmpeg::tests::run_captured_handles_large_output` 偶发失败：**单独复跑该用例**再下结论（装载敏感，10s 墙钟超时）。
 
 **Verification**
@@ -1819,3 +1866,54 @@ git commit --only -m "docs(batch2): close bundle governance batch" -- docs/super
 | 12 | 59 个 KaTeX 字体 1,072.95 kB（仅 `.woff2` 可省 816.78 kB） | 批 8 |
 | 13 | 批 6 装 GSAP **必须**用 `import()`，且核对 `vendor-gsap` 不在首屏（槽位已预留并被单测钉住，判据见 Task 5） | 批 6 |
 | 14 | 首屏三个 chunk 的**逐 chunk** 口径复核（本轮已由守卫 + 独立复算确认，无待办）—— 登记为「已复核」而非待办 | 已闭环 |
+
+---
+
+### Task 12 收口终态（2026-09-12 —— 六门禁实跑 · 回写台账 · follow-ups）
+
+> 本节由 Task 12（收口单元）在 Task 11 的清单之后追加。**上文一律保留不改**，本节只做**终态读数**与**归账**。
+
+**终态六门禁（HEAD `9921767c`，串行单跑，全部 exit 0）**
+
+| 门禁 | 终态实测 | 与开工基线（`f12aba6d`）的关系 |
+|---|---|---|
+| `node scripts/line-limits.mjs --full` | exit 0 · **`>600` 0 · 301–600 档 123 · 登记条目 123** | 逐字持平（`App.tsx` 439 → **519** 行，登记值已同步刷新） |
+| `node scripts/docs-check.mjs` | exit 0 · 扫描 273 个 Markdown、检查 173 个，5 项全 ✅ | 持平（新增本批文档与链接） |
+| `node scripts/check-command-registry.mjs` | exit 0 · **定义 312 / 注册 312 / 重复 0** | 逐字持平（本批 0 Rust 改动） |
+| `cd app && npx tsc --noEmit` | exit 0 · 0 错 | 持平 |
+| `cd app && npx vitest run` | exit 0 · **125 文件 / 1233 用例** | **+1 文件 / +109 用例**（唯一允许的偏离：批 2 新增 `manualChunks.test.ts`；**0 处既有断言修改**） |
+| `cd app/src-tauri && cargo test --test app_lib_tests` | exit 0 · **2300 passed / 0 failed / 6 ignored** | 逐字持平（本批 0 Rust 改动） |
+| `node scripts/check-bundle-budget.mjs`（含真实构建） | exit 0 · 首屏 **92,789 B = 92.79 kB** · 余量 **107.21 kB** · 懒 22 个 574.84 kB | **−561,933 B = −85.83%**（654.72 → 92.79 kB） |
+| `cd app/src-tauri && cargo clippy --all-targets` | exit 0 · **19 条诊断，集合 identical** | **集合比对**（禁止比 sha256，见 Global Constraints 注） |
+
+**回写落点（本轮逐条就地加注，原文均保留）**
+
+| # | 落点 | 更正内容 |
+|---|---|---|
+| 1 | Task 6 Files（+ Task 8 Files） | Files 清单**漏 `docs/standards/line-limit-exemptions.md`** 刷新 |
+| 2 | Task 6 Files / L1101 / L1104 / L1109 / L1114 / L1236 / V1 / V2 | 「9 页 lazy」→ 交付态 **8 懒 + 课堂静态**；提交 subject 实为 `eight pages`；V1=8、V2=1 |
+| 3 | Task 6 Verification 注 | vitest 基线 `124/1124` → 交付态 **125/1233** |
+| 4 | Task 7 Step 5 注 | 计划给的 commit subject **53 字符超 50 限**，实际用 42 字符 |
+| 5 | Task 7「窗口变体首屏」段 | 「入口 + **零** vendor」**为假**，实测 **入口 + 4 vendor = 97.29 / 94.19 kB**；`< 60 kB` **结构性不可达** |
+| 6 | Task 9 引言 / Produces | 「**四**条候选」→ 实为 **五**条（五行结论表） |
+| 7 | Task 9 候选 3/4 | `59.07 / 24.11 kB` 是**分裂前探针值**；落地 A/B 实测是 **−84.04 / −45.10 kB，且 100% 在懒 chunk 内** |
+| 8 | Task 9 候选 5 | `1,047.80 / 797.64` 是 **KiB**，十进制 **1,072.95 / 816.78 kB** |
+| 9 | §表 1 注 | 「字体 1,047.80 kB」「dist 3,157.49 kB」两行 **KiB 误标为 kB**，十进制 **1,072.95 / 3,233.27 kB** |
+| 10 | Task 10 终测注 | vitest `124/1124` 不可能逐字相同，判据改为**只增不减** |
+| 11 | Task 2 注 | 守卫的**嵌套路径盲区**（静默假绿，真实构建复现）+ 输出把「非首屏」说成「仅动态可达」的**假文案** |
+| 12 | Global Constraints 仪器纪律 | 追加**第 6–13 类仪器陷阱**（累计 13 类） |
+| 13 | Global Constraints 门禁基线注 | clippy 判据 = **集合比对**，**禁止比 Task 1 的 sha256**（BOM+CRLF vs LF，永远假红） |
+
+**规格与台账同步（Task 12 同批提交）**：规格 §2 包体行 / §10 批 2 行 + 口径注 + 瓶颈清单指针 / §11 验收 9 进度注 / §13 风险表 / §14 交付记录落点行；`docs/versions/v0.22.md` 新增 `### 批 2 · 包体治理` 节（含七段固定结构与 v0.22.2 行、验收门槛 9 的进度标记）。
+
+**Task 12 追加登记的 follow-ups（Task 11 表之外的补充，逐条具名归属）**
+
+| # | 未做项 | 归属 |
+|---|---|---|
+| 15 | `.gitignore` 的 `build/` **未锚定**（本批只做了点状取反 `!app/src/build/**`，未动锚定语义）⇒ 任何新出现的 `build/` 目录都会被静默吞掉 | 批 8 |
+| 16 | `scripts/**/*.mjs` **不在 `line-limits` 的扫描域**（`SOURCE_EXT` 不吃 `.mjs`、`SCAN_DIRS` 只有两处）⇒ 本批两个新脚本（299 / 86 行）**无门禁保护** | 批 8 |
+| 17 | `app/vite.config.ts` **同时**不在 `line-limits` 扫描域**与** `tsc --noEmit` 的 program（`--listFilesOnly` 879 文件 0 命中，正样本 `main.tsx` = 1）⇒ 只靠 `vite build` 兜底 | 批 8 |
+| 18 | 计划自带的「子串碰撞」反例**恒假红**（`@xyflow/react` 的 id 里没有连续子串 `node_modules/react`）· `@types/katex` 覆盖闸必然红（`dependencies` 实为 **14** 个，计划写 12）· V3 判据「Δ ≤3 kB」实测 −4.39 kB 突破 ⇒ 已改判为「**只许变小 ∧ modules 不变**」 | 已就地更正（批 8 只承接 F4：把 `@types/*` 挪 `devDependencies`） |
+
+> **Task 12 未验证（诚实单列）**：① 真 WebView 的时序 / 网络抓包 / 两窗变体实测（静态推理 + 守卫读数，未在真机跑）；② CSS 三文件加载顺序未做 WebView 实测；③ `dist` 未做安装包级实测（字体 1,072,948 B 一字节未动 ⇒ 安装包体积未改善）；④ 本批的 `Circular chunk` 归零只在**规则层**被守卫，**构建日志仍无门禁看管**（登记批 8）；⑤ 收口门禁跑在**工作树**而非导出提交树（`node_modules` 不在归档内，故 `tsc`/`vitest`/`cargo` 无法在导出树上复跑 —— 与 Task 1 同一限制）。
+
