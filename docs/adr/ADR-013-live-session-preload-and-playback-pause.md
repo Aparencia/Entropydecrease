@@ -88,3 +88,24 @@
 
 - `docs/archive/2026-08-19/2026-08-19-classroom-live-optimizations-design.md`（本批设计规格，[ ] 已归档 2026-08-19）
 - `docs/standards/line-limit-exemptions.md`（相关文件行数登记）
+
+## WAV 轴与会话轴的对齐（2026-09-13 加注，批 6 T23 / R5.5-b）
+
+> **上文一字未改**；本节是**新增**的运行时源码级探针结论与修复方案（出处：`.superpowers/sdd/2026-09-12-frontend-redesign-batch6-motion/probe-audio-runtime.md` ② 与同目录 `rulings.md` §五 R5.5-b）。
+
+**问题**：上文第 2 条的「不写 WAV」在**暂停期**成立（端点 Stop + 捕获循环 `continue`），但**暂停本身不产生偏移**（端点停采 ↔ 时间戳冻结严格抵消）。真正的偏移来自「写块路径纯追加」：WAV 轴 = 已写样本数 ÷ 16000，而会话轴 = 会话纪元 − 累计暂停。偏差清单（**量级由源码常量推导，非真机实测**）：
+
+| # | 偏差源 | 方向 | 量级 |
+|---|---|---|---|
+| D1 | WAV 的 0 点 = 第一个被捕获样本，会话纪元更早 | WAV 落后 | 内联启动路径秒级 / 预热路径 ≈数十 ms |
+| **D2** | **静默窗根本不产包**（`GetNextPacketSize == 0` ⇒ sleep + continue） | WAV 落后 | **= 没有声音的总时长，上不封界** |
+| D3 | 每次恢复丢未满 200 ms 的残块 | WAV 落后 | ≤199.9 ms / 次 |
+| D4 | 恢复时丢端点积压包 | WAV 落后 | ≈10–100 ms / 次 |
+| D5 | 停止时尾块丢弃（`ChunkAccumulator::flush` 无调用点） | 只影响末尾 | ≤199.9 ms |
+| D6 | 逐包重采样 `floor` 余数不回带 | WAV 落后（累积） | 48 kHz 整除包 = 0；44.1 kHz 未实测 |
+
+**修复（批 6 T23）**：写块按 `AudioChunk.timestamp_ms` 与「上块末端的会话时刻」之差**补等长静音**（PCM16 全 0）⇒ **WAV 轴 ≡ 会话轴**，一次收掉 D1/D2（**D3–D6 逐字登记为残余**）。`timestamp_ms` **已含暂停补偿**（`capture/audio_loopback.rs` 逐字 `epoch.elapsed() - total_paused_ms`，暂停时长在恢复成功时才累加）⇒ 补静音基准与 `segments[].start_ms` **同轴**，无需另立基准；补静音上限 10 分钟（超大空档宁可不对齐，也不写巨量静音）。
+
+**自证量与失效安全**：会话 `finalize` 时写 `{id}.wav.meta.json`（键 `version` / `aligned` / `firstTsMs` / `samplesWritten`）。`aligned` 是**自证量、禁止恒 `true`**：时间戳缺失/为负/回退/超大空档之一 ⇒ 永久置 `false` 并退回纯追加（不补静音、**样本一个不丢**、不阻断会话主链路）。**本修复之前录的 WAV 没有 sidecar ⇒ `aligned = false` —— 历史录音不对齐、无时间基准** ⇒ UI 对无基准的录音**不得假装精确**（只能近似定位或只读降级）。
+
+**AGENTS.md §10 额外审查记录（`live_session*.rs` 属隐私敏感面）**：① 本次改动**只加静音填充**、**不改采集语义**（`capture/` 零改动）；② **不新增系统调用**、不改变文件位置与权限（仍 `{data_dir}/session-audio/`）；③ **不新增依赖**；④ **不影响暂停语义**（暂停期 `write_chunk` 完全不被调用 ⇒ 补静音逻辑不执行）；⑤ 回滚 = 还原 1 个签名 + 1 个调用点 + 删 2 个新文件。真机播放/seek 本环境不可达 ⇒ **未验证**。

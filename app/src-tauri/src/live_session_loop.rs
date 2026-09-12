@@ -160,7 +160,7 @@ pub(crate) fn run_audio_loop(
                 // M4/REQ-068（S4）：原始样本落盘（预处理前——V4 两遍解码/
                 // AL3 漂移实测需原始音频；写盘失败内部降级不阻断）
                 if let Some(w) = ctx.audio_writer.as_mut() {
-                    w.write_chunk(&chunk.samples);
+                    w.write_chunk(&chunk.samples, i64::try_from(chunk.timestamp_ms).ok());
                 }
                 // M6/REQ-041 A1：预处理（默认直通零开销；开启后 AGC/削波/动态阈值）
                 let processed = audio_pre.process(&chunk.samples, SILENCE_RMS_THRESHOLD);

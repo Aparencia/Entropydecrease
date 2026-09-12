@@ -1,9 +1,16 @@
 //! 实时链路音频落盘（REQ-068 / v0.6.0 M4，S4 早期排）。
 //!
-//! @ai-context: 实时链路当前不落盘（已核查）——本模块按会话落 WAV
-//!              （16kHz 单声道 PCM16，~115MB/小时），为 AL3 漂移实测
-//!              （REQ-063 真机校准数据源）、V4 两遍解码（v0.7.0+）、
-//!              X1 回听（待议）铺路。
+//! @ai-context: 实时链路**已落盘**（2026-09-13 就地更正，批 6 T23）：接线点 =
+//!              `live_session.rs:258-262` 创建 · `live_session_loop.rs:162-164` 每 200ms
+//!              写块 · `:391-397` finalize。**旧注逐字「实时链路当前不落盘（已核查）」
+//!              与代码自相矛盾** ⇒ 保留一行作历史注记（标签不许说谎，批 3 A5/R-3 先例）。
+//! @ai-context: 本模块按会话落 WAV（16kHz 单声道 PCM16，~115MB/小时），为 AL3 漂移实测
+//!              （REQ-063 真机校准数据源）、V4 两遍解码（v0.7.0+）、X1 回听（待议）铺路。
+//! @ai-context: T23/R5.5-b：**WAV 轴 ≡ 会话轴** —— 写块按 `chunk.timestamp_ms` 的空档
+//!              等长补静音（纯函数 `audio_align`；基准轴 = 会话轴，暂停两侧抵消）；
+//!              失效安全（时间戳缺失/回退/超大空档 ⇒ 纯追加 + `aligned = false`，样本
+//!              一个不丢）；`finalize` 把自证量写进 `{id}.wav.meta.json`（读侧
+//!              `commands_audio::read_aligned`；**历史录音无 sidecar ⇒ false**）。
 //! @ai-context: 策略可配：默认开 / 保留期 30 天 / 磁盘预算上限（超限删最旧，
 //!              在会话结束时触发）；清理 UI 由命令层暴露（M6 前端消费）。
 //! @ai-context: 落盘失败不阻断会话主链路（本地优先铁律的降级方向：音频是
@@ -19,7 +26,6 @@ use std::path::{Path, PathBuf};
 /// @ai-context: 由父模块自己声明（DISPATCH-TEMPLATE §二）；`pub(crate)` 是跨模块引用的
 ///              必要条件（`live_session*` 与本模块的测试都要用）。
 #[path = "audio_align.rs"]
-#[allow(dead_code)] // 本提交只落纯函数 + 单测（尚未接线）；接线提交落地后即删
 pub(crate) mod audio_align;
 
 /// 默认保留期（天）。
@@ -63,11 +69,35 @@ pub struct CleanupSummary {
     pub freed_bytes: u64,
 }
 
-/// 会话音频写入器（有状态：目标文件 + 已写样本数）。
+/// 会话音频写入器（有状态：目标文件 + 已写样本数 + 对齐簿记 + sidecar 路径）。
 pub struct SessionAudioWriter {
     file: Option<std::fs::File>,
     samples_written: u64,
+    /// 对齐簿记（T23/R5.5-b：`aligned` 是自证量，禁止恒 true）
+    book: audio_align::AlignBook,
+    /// 对齐 sidecar 路径（`{id}.wav.meta.json`；`create` 时定下 ⇒ 不必再传 session_id）
+    meta_path: PathBuf,
 }
+
+/// 对齐自证量 sidecar 的写入面（键名 = 批 6 冻结快照；读侧 `commands_audio.rs:125-139`）。
+///
+/// @ai-context: 键名**不得**单方面改名 —— T22 的读侧按这份快照实现，改名会让它**静默
+///              回落 `false`**（R43④ 裁决：改名必须同提交改读侧）。
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AlignSidecar {
+    /// 契约版本（本批 = 1）
+    version: u32,
+    /// 自证量（**禁止恒 true**；见 `audio_align::AlignBook`）
+    aligned: bool,
+    /// 首个带时间戳的块的 `timestamp_ms`（`null` = 无基准）
+    first_ts_ms: Option<i64>,
+    /// 已写样本总数（含补的静音）
+    samples_written: u64,
+}
+
+/// 对齐 sidecar 契约版本。
+const ALIGN_SIDECAR_VERSION: u32 = 1;
 
 impl SessionAudioWriter {
     /// 创建会话音频文件（含 WAV 头；失败 → None——落盘降级不阻断主链路）。
@@ -84,27 +114,47 @@ impl SessionAudioWriter {
         if write_header(&mut file, 0).is_err() {
             return None;
         }
-        Some(Self { file: Some(file), samples_written: 0 })
+        Some(Self {
+            file: Some(file),
+            samples_written: 0,
+            book: audio_align::AlignBook::new(),
+            meta_path: session_audio_dir.join(format!("{}.wav.meta.json", session_id)),
+        })
     }
 
     /// 追加一块样本（f32 → PCM16；失败静默降级——落盘不阻断主链路）。
-    pub fn write_chunk(&mut self, samples: &[f32]) {
-        let Some(file) = self.file.as_mut() else { return };
-        let mut buf = Vec::with_capacity(samples.len() * 2);
+    ///
+    /// @ai-context: T23/R5.5-b：写前按 `timestamp_ms` 与会话轴的**空档等长补静音**
+    ///              （`audio_align::silence_gap_samples`）⇒ WAV 轴 ≡ 会话轴；时间戳
+    ///              缺失/回退/超大空档 ⇒ **失效安全**（不补、`aligned = false`、退回
+    ///              纯追加），**样本一个不丢**。补零与样本**一次 `write_all`**（写失败
+    ///              仍是「释放句柄、后续不再尝试」的既有降级）。
+    pub fn write_chunk(&mut self, samples: &[f32], timestamp_ms: Option<i64>) {
+        if self.file.is_none() {
+            return;
+        }
+        let pad = self.book.step(timestamp_ms, samples.len()).unwrap_or(0);
+        let mut buf = Vec::with_capacity((pad + samples.len()) * 2);
+        buf.resize(pad * 2, 0); // PCM16 静音 = 全 0 字节（小端 i16 的 0 即两字节 0）
         for s in samples {
             // f32 → i16 量化（round 半远离零——截断会引入 -0.5 偏置）
             let v = (s.clamp(-1.0, 1.0) * 32767.0).round() as i16;
             buf.extend_from_slice(&v.to_le_bytes());
         }
+        let Some(file) = self.file.as_mut() else { return };
         if file.write_all(&buf).is_err() {
             // 写盘失败：释放句柄（后续块不再尝试——降级为不落盘）
             self.file = None;
         } else {
-            self.samples_written += samples.len() as u64;
+            self.samples_written += (pad + samples.len()) as u64;
         }
     }
 
-    /// 结束会话：回填 WAV 长度字段（RIFF/data）并关闭文件。
+    /// 结束会话：回填 WAV 长度字段（RIFF/data）并关闭文件，随后写对齐 sidecar。
+    ///
+    /// @ai-context: T23：sidecar **最后写** ⇒ 它存在即说明 WAV 已 finalize（读侧
+    ///              `durationMs` 才有值）；句柄已释放（写盘失败）时连 WAV 长度都没回填
+    ///              ⇒ 不写 sidecar（读侧 `durationMs = None`，本就不该播）。
     pub fn finalize(&mut self) {
         let Some(mut file) = self.file.take() else { return };
         // data 长度 = 样本数 × 2 字节；RIFF 长度 = 36 + data 长度
@@ -115,6 +165,20 @@ impl SessionAudioWriter {
         let _ = file.seek(std::io::SeekFrom::Start(40));
         let _ = file.write_all(&(data_len as u32).to_le_bytes());
         let _ = file.sync_all();
+        self.write_align_sidecar();
+    }
+
+    /// 写对齐 sidecar（失败静默——与 WAV 写盘同向：落盘降级不阻断主链路）。
+    fn write_align_sidecar(&self) {
+        let sidecar = AlignSidecar {
+            version: ALIGN_SIDECAR_VERSION,
+            aligned: self.book.is_aligned(),
+            first_ts_ms: self.book.first_ts_ms,
+            samples_written: self.samples_written,
+        };
+        if let Ok(text) = serde_json::to_string(&sidecar) {
+            let _ = std::fs::write(&self.meta_path, text);
+        }
     }
 }
 

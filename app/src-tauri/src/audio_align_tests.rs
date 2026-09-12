@@ -101,7 +101,7 @@ fn book_stays_unusable_after_a_single_deviation() {
     // Assert：失效后基准不再推进（纯追加不改变已写样本的会话轴末端）
     assert_eq!(book.first_ts_ms, Some(T0));
     assert_eq!(book.last_end_ms, Some(T0 + 200));
-    assert_eq!(book.aligned, false);
+    assert!(!book.aligned);
 }
 
 // ⑩ 批量 ≡ 增量（对拍）：两条路径在 ≥7 条夹具上逐元素相等
