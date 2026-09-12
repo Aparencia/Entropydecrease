@@ -33,6 +33,7 @@ import { useNotesDeepLink } from "../hooks/useNotesDeepLink";
 // 批 3 T8：列规格（组列/列表列/大纲列三行的宽·夹取·阈值）改从 `shell/columnRegistry` 取
 // ——页面不再自建规格；断点值（t5 曾在此写 breakpointFor）现在住在注册表里
 import { columnSpec } from "../shell/columnRegistry";
+import { viewsFor } from "../views/registry";
 
 interface Props {
   focusNoteId?: number | null;
@@ -264,6 +265,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
         onOpenSession={onOpenSessions}
         onImageOpen={(src, title) => setPreviewImg({ src, title })}
         onCleanNotice={notifyCleanNotice}
+        views={viewsFor("note")}
       />
       {/* 覆盖层（AI 对话框 / 模型卡对话框 / 图片放大预览 / 清理留痕 toast）——
           条件门控与 key 语义见 components/notes/NotesOverlays */}
