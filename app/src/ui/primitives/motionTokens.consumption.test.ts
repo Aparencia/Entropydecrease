@@ -12,9 +12,15 @@
  *   不该误伤 —— 「注释字面量骗过整文件扫描器」本批已 3 例）。
  * 副作用：只读磁盘（`app/src` 全树 + `ui/tokens.css`），不修改任何文件。
  * 边界：① 域含**测试文件**（T5 读数 54 处里 12 处在测试里）⇒ **本文件自身也必须在域内贡献 0 命中**
- *   （正则与消息里一律不写裸串，由 ① 的最后一条判据盯着）；② 只判 `--ed-dur-*` / `--ed-ease` 两族
- *   （`--ed-type-*` / `--ed-space-*` 各有自己的兜底判据，见 `style-seams.test.ts`）；③ 计数**不是**
- *   冻结常量（T12/T13 会新增消费点）⇒ 判「齐备 + 同值」，**不判**「恰好 54」。
+ *   （正则与消息里一律不写裸串，由 ① 的最后一条判据盯着）；② 只判 `--ed-dur-*` / `--ed-ease*` 两族
+ *   —— `--ed-ease` 家族今天有**三名**（`ease` / `ease-instrument` / `ease-paper`，真源
+ *   `EASING_TOKENS`），`--ed-type-*` / `--ed-space-*` 各有自己的兜底判据（见 `style-seams.test.ts`）；
+ *   ③ 计数**不是**冻结常量（T12/T13 会新增消费点）⇒ 判「齐备 + 同值」，**不判**「恰好 54」；
+ *   ④ 🔴 **名字模式本身也是判据**（由 **①b** 盯住，T8 实测的教训）：`\b` 收尾在本族**不成立** ——
+ *   `ease` 后接 `-` 处正是词边界（`e` 是词字符、`-` 不是）⇒ `var(--ed-ease-instrument` 会被**前缀吞成**
+ *   `--ed-ease`，`fallbackAfter` 随后读到 `-instrument` 就返回 `null` ⇒ ② 把一处**写了兜底**的消费
+ *   报成「没有兜底」（**误红**）。今天该名 0 消费点所以没触发，波 B/C 一加消费点就炸 ⇒ 名字必须
+ *   **整段吃完**（`ease(?:-[a-z-]+)?`）并以终止符前瞻收尾（`var()` 里名字后只能是空白 / 逗号 / 右括号）。
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -28,10 +34,14 @@ const SRC = join(HERE, "..", "..");
 /** 域内必须有、且必须**真在消费**的锚文件（动态域的锚：改名 / 搬走必须被看见） */
 const ANCHORS = ["ui/primitives/Toast.css", "ui/primitives/Button.css", "ui/primitives/Modal.css"] as const;
 const SELF = "ui/primitives/motionTokens.consumption.test.ts";
-/** 消费点：`var(--ed-dur-<name>` / `var(--ed-ease`（`\b` 收尾 ⇒ `--ed-ease-in` 这类新名不会误配） */
-const CONSUMER = /var\(--ed-(?:dur-[a-z-]+|ease)\b/g;
+/**
+ * 消费点：`var(--ed-dur-<name>` / `var(--ed-ease[-<name>]`。
+ * 🔴 **不许**改回 `\b` 收尾（T8 实测）：`ease` 后接 `-` 处正是词边界 ⇒ `var(--ed-ease-instrument`
+ *   被前缀吞成 `--ed-ease`、兜底解析成 `null`、② 误报「没有兜底」。名字必须整段吃完 + 终止符前瞻。
+ */
+const CONSUMER = /var\(--ed-(?:dur-[a-z-]+|ease(?:-[a-z-]+)?)(?=[\s,)])/g;
 /** 带逗号的消费（与 `CONSUMER` **独立**的形态计数：兜底换了写法也不会被解析器静默漏掉） */
-const WITH_COMMA = /var\(--ed-(?:dur-[a-z-]+|ease)(?=\s*,)/g;
+const WITH_COMMA = /var\(--ed-(?:dur-[a-z-]+|ease(?:-[a-z-]+)?)(?=\s*,)/g;
 /** 真源 = **生成器导出**（不是产物）⇒「真源改值而兜底不改」必红（R13.2 的第三条变异体） */
 const TRUTH = new Map<string, string>([
   ...DURATION_TOKENS.map((t) => [`--ed-dur-${t.name}`, `${t.ms}ms`] as const),
@@ -111,6 +121,33 @@ describe("动效 token 消费点：兜底字面量必须等于生成器真源（
     expect(lazy, "锚清单里每一份都必须真的消费动效 token").toEqual([]);
     expect(DOMAIN, "本文件必须被域枚举到，否则最后一条是空真").toContain(SELF);
     expect(hitsIn(SELF), "本文件不得被自己的正则 / 消息里的字面量污染计数").toEqual([]);
+  });
+
+  it("①b 名字模式自证：四类 token 名必须被**整段**解析（`ease-…` 不得被前缀吞成 `--ed-ease`）", () => {
+    // 裸串一律**拼接写**（本文件自身必须贡献 0 命中，见 ① 的最后一条）
+    const sample = [
+      "var" + "(--ed-dur-micro, 120ms)",
+      "var" + "(--ed-ease, cubic-bezier(0.2, 0, 0, 1))",
+      "var" + "(--ed-ease-instrument, cubic-bezier(0.4, 0, 0.2, 1))",
+      "var" + "(--ed-ease-paper, cubic-bezier(0.215, 0.61, 0.355, 1))",
+    ].join("; ");
+    const hits = [...sample.matchAll(CONSUMER)].map((m) => ({
+      name: m[0].replace(/^var\(/, ""),
+      fallback: fallbackAfter(sample, (m.index ?? 0) + m[0].length),
+    }));
+    expect(hits.map((h) => h.name), "名字被前缀吞掉 ⇒ 兜底解析成 null ⇒ ② 随即误报「没有兜底」").toEqual([
+      "--ed-dur-micro",
+      "--ed-ease",
+      "--ed-ease-instrument",
+      "--ed-ease-paper",
+    ]);
+    expect(hits.map((h) => h.fallback), "四类的兜底都必须取到（`ease-<name>` 与 `ease` 走同一条路径）").toEqual([
+      "120ms",
+      "cubic-bezier(0.2, 0, 0, 1)",
+      "cubic-bezier(0.4, 0, 0.2, 1)",
+      "cubic-bezier(0.215, 0.61, 0.355, 1)",
+    ]);
+    expect([...sample.matchAll(WITH_COMMA)].length, "形态计数（带逗号）必须同样认得 `ease-<name>`").toBe(4);
   });
 
   it("② 兜底齐备：每个消费点都带兜底（漏一个 ⇒ 那一处静默失去时长）", () => {
