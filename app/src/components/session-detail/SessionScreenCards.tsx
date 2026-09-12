@@ -1,6 +1,12 @@
 /**
  * SessionScreenCards — 会话详情「画面要点」屏卡流（v0.7.3 REQ-155/158/160 + v0.7.7 REQ-184 框选截取）。
  *
+ * @ai-context 批 5 T3 拆件 B：**卡内容（标题 + 正文）抽至 `session-detail/SessionScreenCard`**（C3 的
+ *              「抽单卡子件供两个视图复用」；T9 的卡片流消费它）。锚点 id / 框选态 / 单屏 toast /
+ *              块级明细仍在本容器（C3 逐字）。**未搬的其余内容面不是遗漏**——它们携带的字面量被五类
+ *              棘轮的文件级台账锁定（搬迁或迁移都不绿，`*Baseline.ts` 本批只读）：实测读数与「绿色
+ *              方案 B」见 `task-3-report.md` 的 STOP 落点；边界理由写在 `SessionScreenCard` 文件头。
+ *
  * @ai-context: 自 SessionDetailPanel 拆出（原 L482–603 + 面板层 toast/框选状态）——屏卡展示
  *              屏号区间 + 标题 + 正文 + 标签 + 配图 + 结构徽标 + 可展开块级明细；v0.12.0 M5 补完成：
  *              视频会话（kind≠photo）画面要点 = 关键帧纯图，图文会话（kind=photo）保持 OCR 文本屏，
@@ -20,6 +26,7 @@
  */
 import { convertFileSrc } from "@tauri-apps/api/core";
 import BoxSelectOverlay from "../BoxSelectOverlay";
+import SessionScreenCard from "./SessionScreenCard";
 import type { SessionOcrBlock, SessionScreen } from "../../types";
 import { fmtMs } from "../../utils/fmt";
 import { Text } from "../../ui/primitives";
@@ -104,16 +111,9 @@ export default function SessionScreenCards({
                   </span>
                 ))}
             </div>
-            {s.title && (
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", marginBottom: 2 }}>
-                {s.title}
-              </div>
-            )}
-            {s.body.map((b, j) => (
-              <div key={j} style={{ fontSize: 12.5, color: "#374151", lineHeight: 1.6 }}>
-                {b}
-              </div>
-            ))}
+            {/* 卡内容（标题 + 正文）已抽至 session-detail/SessionScreenCard——本容器继续持有
+                锚点 id / 框选态 / 单屏 toast / 块级明细；剩余内容面的并入需控制方裁决（见 T3 报告） */}
+            <SessionScreenCard screen={s} />
             {s.labels.length > 0 && (
               <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
                 标签：{s.labels.join(" · ")}
