@@ -271,4 +271,20 @@ describe("批 5（C14①）ViewSwitcher：类名枚举 ↔ CSS 规则 · 零行�
     expect(clean.match(/style=\{/g) ?? [], "ViewSwitcher.tsx 出现行内 style（视觉权威必须留在类里）").toHaveLength(0);
     expect(src, '缺 `import "./ViewSwitcher.css";` —— 类名照旧产出、样式静默失效').toContain('import "./ViewSwitcher.css";');
   });
+
+  it("③ barrel（ADR-033 §1 的唯一公共入口）：组件 + 两个类型都在 `index.ts` 的导出语句里", () => {
+    const barrel = read("index.ts");
+    // 三条正则各自只认**那条** `export … from "./ViewSwitcher"` 语句（不是文件里随便出现一次）
+    expect(barrel, "`ViewSwitcher` 未从 barrel 导出（§1：调用点不得深导入 —— 深导入还不带 motion.css）").toMatch(
+      /export \{ ViewSwitcher \} from "\.\/ViewSwitcher";/,
+    );
+    for (const name of ["ViewSwitcherOption", "ViewSwitcherProps"]) {
+      expect(barrel, `\`${name}\` 未从 barrel 导出（漏导出 = 批 5 接线时才炸，今天还没有消费者）`).toMatch(
+        new RegExp(`export type \\{[^}]*\\b${name}\\b[^}]*\\} from "\\./ViewSwitcher";`),
+      );
+    }
+    // 阳性对照：同一批正则喂一条**不含** ViewSwitcher 的合成导出必须不命中 ⇒ 上面三条不是恒真
+    const synthetic = 'export { Text } from "./Text";';
+    expect(synthetic, "正则在错误样本上也命中 ⇒ 上面的断言空真").not.toMatch(/from "\.\/ViewSwitcher";/);
+  });
 });
