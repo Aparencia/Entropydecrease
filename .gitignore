@@ -9,6 +9,13 @@ __pycache__/
 # Build
 dist/
 build/
+# ⚠️ 上面的 `build/` 是**未锚定**模式，会匹配任意层级的 build 目录。
+#    `app/src/build/` 是**源码**目录（批 2 的 manualChunks 纯函数与单测），
+#    被它吞掉的后果是**静默**的：git status 不显示、整树 ripgrep 对该目录失明
+#    （实测：同仪器同会话在 app/ 下对确实存在的串报 0 命中，窄域 grep 19 命中）。
+#    取反必须「先目录、再内容」——git 不允许在父目录被排除时重新包含其中的文件。
+!app/src/build/
+!app/src/build/**
 *.exe
 *.wasm
 *.pdb
