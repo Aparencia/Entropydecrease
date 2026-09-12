@@ -1751,3 +1751,71 @@ git commit --only -m "docs(batch2): close bundle governance batch" -- docs/super
 - **类型一致性**：`VendorGroup` 的七个成员在 T3 定义、T4 接线、T5 断言、T9/T10 报表引用，**同名同形**；`manualChunks(moduleId: string): string | undefined` 在 T3 定义、T4 以 `(id: string) => manualChunks(id)` 消费；`scripts/check-bundle-budget.mjs` 的 `--no-build/--json/--self-test/--budget` 四个旗标在 T2 定义，T4–T12 消费，**无第五个**。
 - **占位符扫描**：T6 Step 5 里的 `… 原 props 逐字保留 …` 是**刻意**的（该处必须由实施者从现行文件搬运，写死会让 props 在并行改动后过期），并已在同一步给出**机器判据 V3**（`git diff` 里 props 行逐字相同）—— 它不是「TBD」，而是「以现行文件为准 + 有机器验收」。
 - **风险最高的两处**已就地标注：T6 的测试面（红即回退，绝不改测试）· T8 的达标判定（不达标是**合法**结果，转 T11）。
+
+---
+
+## 收口回写（Task 11/12，2026-09-12 —— 批 2 终态 · 瓶颈清单 · 给批 3+ 的输入）
+
+> 本节由**收口单元**写入。上文一律**保留不改**，本节只做**加注**与**归账**。
+> **批 3 的计划者：你需要的瓶颈清单就是本节 §瓶颈清单。** 规格 L534 明写后批细节依赖本清单。
+> 分工：**Task 11** 写 §瓶颈清单 · §达标结论 · §未做（登记）；**Task 12** 在本节追加终态六门禁读数与规格、台账的回写指针。
+
+### 瓶颈清单（首屏 JS gzip 判据 = `docs/standards/performance.md:28` 的 < 200 kB）
+
+**读数口径**：`kB` 一律**十进制 ÷1000**（vite 口径）；凡 ÷1024 一律写作 **KiB**，并同时给出十进制值。
+**数据源**：`final-numbers.md`（Task 10 终测，本清单**唯一数据源**）· `dep-audit.md`（Task 9）· `gsap-slot.md`（Task 5）。
+**占比** = 占首屏 **92.79 kB** 的比例；`—` = 非字节项（失败路径 / 行数 / 未做项），该列无意义。
+**「归属批次」列的 `—（硬底线，不派单）` 是明确决定**（不是漏填）：该行今天没有可执行的降本动作，要动它须先立 ADR。
+**`<T>`** = 下表复现命令里的留档目录 `.superpowers/sdd/2026-09-11-frontend-redesign-batch2-bundle/tmp`（**不入库**，故只写行内代码、不写成 Markdown 链接）；命令 cwd 除注明外均为仓库根。
+
+| 项 | 实测 gzip | 占比 | 为什么降不下去 | 归属批次 | 复现命令 |
+|---|---|---|---|---|---|
+| `index-C4ezj_on.js`（入口 chunk：`main.tsx` + `App.tsx` 导航壳 + 默认页） | 87,573 B 原始 → **27,874 B = 27.87 kB** | 30.0% | 入口必须首屏；**默认页 `ClassroomPage` 静态保留**（首屏必渲染页，改 lazy 只把同一批字节挪进动态 chunk，且让守卫读数失真 —— 控制方 2026-09-12 裁决 2 末条）。壳层内 5 类构成见下一行 | 批 3/4（壳层：页级错误边界 + 加载原语）· 批 5（默认页内视图级惰性挂载） | `node scripts/check-bundle-budget.mjs --no-build` |
+| `vendor-react-V0PkpIKo.js`（react + react-dom + scheduler） | 192,521 B 原始 → **60,367 B = 60.37 kB** | 65.1% | React 运行时是硬底线；**它单独就 60,367 B > 60 kB** ⇒ 计划「建议项 < 60 kB/窗变体」结构性不可达（见下方变体两行） | —（硬底线，不派单；要动只能改非 React 渲染或第二套入口 HTML，属架构变更、须先立 ADR —— 提请批 3/4 记录） | `node scripts/check-bundle-budget.mjs --no-build` |
+| `vendor-tauri-UIF4jgRy.js`（`@tauri-apps/api` + `plugin-dialog`） | 17,143 B 原始 → **4,548 B = 4.55 kB** | 4.9% | IPC 是全部页面的公共依赖（21 处静态引用方）；再分包只把它拆到更多文件，不减字节 | —（硬底线，不派单） | 同上 |
+| 应用源码中仍静态可达的部分（**47 文件 / 4 包**；入口 chunk 内 39 module · 161,368 B pre-minify） | 已计入首行那个 **27.87 kB** | 30.0% | 逐类（pre-minify `renderedLength`，仅表类别占比）：默认页依赖树 26 module / 128,923 B（79.9%，含 provider `useLiveCaptureControl.tsx` 6,610 B）· 壳层 `App.tsx`+`main.tsx` 2 / 16,673 B（10.3%）· `ClassroomPage` 1 / 5,268 B（3.3%）· `BrowserChrome`（浏览器痕迹抑制，须全局生效）1 / 4,327 B（2.7%）· vite 运行时垫片 3 / 3,045 B（1.9%）· `AppErrorBoundary`（须在任何渲染之前存在）1 / 2,039 B（1.3%）· types/utils/css 5 / 1,093 B（0.7%） | 批 3/4（壳层 / 错误边界 / 加载原语）· 批 5（默认页内视图惰性挂载） | `node scripts/bundle-eager-graph.mjs`（47 文件 / 4 包）· 类别占比仪器见 `<T>/task9/attrib-base.json` + `<T>/task11/xcheck-entry-attrib.mjs` |
+| Task 9-① `katex` 双版本（顶层 0.18.4 + 嵌套 0.16.47 ×2 目录） | 首屏 **0 B**（唯一渲染出字节的副本在懒 chunk `vendor-katex-7KF2nzwm.js` **79,916 B = 79.92 kB**） | 0% | 去重 = 0.16.47 → 0.18.4 = **换渲染库版本**（行为不中性）；实测去重首屏 Δ **0 B**（92,789 → 92,783 = 命名域噪声）、`vendor-katex` **+53 B**、全部 JS **+63 B** ⇒ 尺寸闸与行为闸**双双不过** | 批 7（版本偏斜 + `structuredBlocks` 存废 + `package.json` 的 `katex`/`@types/katex` 一并裁决） | `node -e "console.log(require('./app/node_modules/katex/package.json').version, require('./app/node_modules/rehype-katex/node_modules/katex/package.json').version)"` → `0.18.4 0.16.47`；A/B `<T>/task9/attrib.mjs dedup-katex` |
+| Task 9-② `app/src/components/structuredBlocks.ts`（生产孤儿） | 首屏 **0 B**，且**不在任何 chunk 的模块表里**（产物中不存在 ⇒ 无字节可省） | 0% | 删除会打断 `app/src/ui/primitives/motion-coverage.test.ts:60,68` 的钉值 ⇒ 非行为中性；存废须连它自身测试与 `katex` 直接依赖一起裁决 | 批 7 | `git grep -n "structuredBlocks" -- app/src` → 4 命中，**唯一 importer 是它自己的测试**（另 2 条是注释与 primitives 钉值）；产物级 `<T>/task9/recon.mjs` |
+| Task 9-③ `@codemirror/lang-markdown` 传递链（9 包：`@lezer/*` + `@codemirror/lang-{html,css,javascript}`） | 首屏 **0 B**；整链全在懒 chunk（stub 后 `vendor-editor` 208,585 → **124,549 B = −84.04 kB**） | 0% | 9 个包的懒 `renderedLength` = 338,319 B，**100% 落在懒 chunk**；去掉即改变编辑器内联 HTML/JS/CSS 的高亮与补全 ⇒ 非行为中性 | 批 4/5（编辑器体验裁决） | `node scripts/check-bundle-budget.mjs --no-build --dist <T>/task9/dist-stub-langmd --json`（`lazy` 里 `vendor-editor-*` = 124,549 B）；A/B `<T>/task9/attrib.mjs stub-langmd` |
+| Task 9-④ `codemirror` 的 `basicSetup` 附带件（`@codemirror/{autocomplete,search,lint}`） | 首屏 **0 B**；懒 chunk **208,585 → 163,484 B = −45.10 kB** | 0% | 换成显式扩展表 = 去掉自动补全 / 搜索 / 诊断 ⇒ 非行为中性；且与 ③ 耦合（stub 掉 `basicSetup` 后 `@codemirror/autocomplete` 仍因 ③ 保留 20,540 B）⇒ 两者必须一起裁决 | 批 4/5 | `node scripts/check-bundle-budget.mjs --no-build --dist <T>/task9/dist-stub-basicsetup --json`；A/B `<T>/task9/attrib.mjs stub-basicsetup` |
+| Task 9-⑤ 59 个 KaTeX 字体 | **1,072,948 B = 1,072.95 kB（= 1,047.80 KiB）**；对 200 kB **JS** 预算的作用面 **0** | 0%（不进 JS 预算） | 59 个文件里 `.js` = **0 个**（仪器自检）；字体只被 `vendor-katex-CEK31ho9.css` 的 59 处 `url()` 引用；仅留 `.woff2` 可省 **816,780 B = 816.78 kB（797.64 KiB）**，但要改第三方 CSS ⇒ 与安装包体积一并裁决 | 批 8（安装包体积） | `<T>/task9/cand2and5.mjs` |
+| `vendor-editor-CTQefJ4X.js`（懒 chunk 里最大的块） | **608,384 B 原始 / 208,585 B = 208.59 kB** gzip | 0%（懒 chunk，不计入判据） | vite `>500 kB` 警告仍在：它把编辑器栈并成一块；③+④ 全做可降 −129.14 kB，但两条都不行为中性；**拆成多文件不降字节**（总 JS 只多不少） | 批 4/5 | `cmd /c "cd /d <repo>\app && npm run build > <T>\task11\build.log 2>&1"` 后 `findstr /C:"larger than 500" <T>\task11\build.log`（现成留档 `<T>/build-after.txt:100`） |
+| Task 6 评审判定 M-1：`PageSlot` 的 `<Suspense fallback={null}>` 之上只有**全局** `AppErrorBoundary` ⇒ 懒 chunk 加载失败**卸载整个 `MainShell`**，已访问页状态（含笔记编辑态）一起丢 | —（失败路径，非字节项） | — | 不是白屏、也不是规范违背（有兜底 UI），但与裁决 2「保活 + 不丢稿」取向相反：保活是为了不丢状态，这条路径一次丢光。**这是本批新增的失败模式**（单 chunk 时代不存在 chunk 拉取失败） | 批 3/4（与「首访加载态」同批） | `git grep -n -e AppErrorBoundary -e 'Suspense fallback' -- app/src/App.tsx` → 唯一边界 `:119` 包 `MainShell`，`PageSlot` 的 Suspense 在 `:146`（HEAD `dea1a6a3`） |
+| Task 7 风险 1：两个窗口变体分支**没有错误边界**（`<Suspense fallback={null}>` + 无 `AppErrorBoundary`）⇒ chunk 加载失败 = 该窗**全空白** | —（失败路径）；变体首屏实测 `?float=1` **97.29 kB** / `?overlay=1` **94.19 kB** | — | 这两个分支**改动前后都没有边界**；本批新增的只是「chunk 可能加载失败」这条失败模式。给变体加边界会改错误语义 ⇒ 超出 Task 7 字面范围 | 批 3/4 | `git grep -n 'query.get' -- app/src/App.tsx` → `:95`（overlay）/ `:105`（float）两个早返回；读数 `<T>/task7/variant-firstscreen.mjs --budget-json <T>/final-budget.json` |
+| Task 7 转交：计划里的「建议项 < 60 kB/窗变体」**结构性不可达** | 实测 **97.29 / 94.19 kB**（对 60 kB = 1.62× / 1.57×） | — | ① 三窗共用同一 `index.html` ⇒ 入口静态闭包**逐字节相同**，省不掉共用闭包（要真正分开必须第二套入口 HTML，本批禁改面）；② `vendor-react` 单独即 60,367 B > 60 kB ⇒ **任何渲染 React 的窗口，首屏下限已超 60 kB** | 批 3（正式口径：变体首屏 = 入口静态闭包 ∪ 本变体动态 chunk）+ Task 12 回写（计划 L1317「零 vendor 依赖」是错误推理，`< 60 kB` 须标注不可达） | 上行变体仪器命令 + `node scripts/check-bundle-budget.mjs --no-build`（`vendor-react` 行 60,367 B） |
+| Task 5/Task 4 转交：预算守卫的**嵌套输出路径盲区**（I2）—— 产物出现 `assets/vendor/*.js` 这类子目录 chunk 时，它**既不计入首屏、也不计入懒加载**，守卫仍打印 `✅ 达标` 且 exit 0 | 夹具实测：守卫只多给一行「modulepreload 声明但静态闭包未覆盖 1 个（参考项，不影响判定）」 | — | 守卫只遍历 `dist/assets/` **平铺层**的 `.js`；本批产物全平铺（子目录 0 个、`manualChunks` 返回值无 `/`、批 6 的 `vendor-gsap` 同样不含 `/`）⇒ 本批未触发，但缺口**是活的**：将来谁改 `chunkFileNames` 或返回含 `/` 的名字，守卫会**静默假绿** | 批 8（或改动者在当次一并处理） | `node scripts/check-bundle-budget.mjs --no-build --dist <T>/task4/i2-fixture` → 实测 `✅ 达标` + exit 0，而 `assets/vendor/nested-vendor.js` 计不进任何一栏（夹具真实存在） |
+| Task 5 转交：**没有任何门禁看构建日志里的 `Circular chunk`**（md↔katex 环） | —（构建日志项） | — | 环本批已断（`df72e8bf` 警告 1 条 → 终态 **0** 条），但「`micromark-extension-math → katex` 今天是 tree-shake 掉的死边」——**依赖升级可能让它静默复活**，而守卫是规则层的、看不见 | 批 8（或后续批次的 Task 10 顺手加一条「构建日志不得出现 `Circular chunk`」断言） | `node -e "const s=require('fs').readFileSync('<T>/build-after.txt','utf8');console.log('Circular chunk x'+((s.match(/Circular chunk/g) ?? []).length))"` → `x0` |
+| Task 10 转交：`scripts/check-bundle-budget.mjs` **299/300 行**（余 1 行）· `app/src/build/manualChunks.test.ts` **292/300 行**（余 8 行） | —（行数，非字节） | — | 两者都贴着 `AGENTS.md` 的单文件 300 行上限：**任何新增都必须按语义拆分**（守卫拆「口径 / CLI」，测试拆「分组规则 / 反例」），否则 `line-limits --full` 当场变红 | 批 8（治理收口）· 任何下次改动这两个文件的单元**当次**拆分 | `[System.IO.File]::ReadAllLines((Resolve-Path scripts/check-bundle-budget.mjs),[Text.Encoding]::UTF8).Count` → 299；同式对 `app/src/build/manualChunks.test.ts` → 292（`manualChunks.ts` 159） |
+| 未做：路线 A 叶级懒加载（`NoteMarkdown` / `RichEditorView` / `ChatMessageMarkdown` / `KnowledgeCanvasView` / `KnowledgeGraphView`） | —（未做项） | — | 被路线 B′ 在**首屏**上完全包含（B′ 已把整页移出首屏），且测试面风险更高 | 批 5（视图层「惰性挂载」，规格 §7.3 约束 2） | 判据同 `node scripts/check-bundle-budget.mjs --no-build` |
+| 未做：`check-bundle-budget.mjs` 未接进 `.husky/pre-commit` / CI（**本批有意**：它要跑一次真实构建并写 `app/dist/`，塞进共享的 pre-commit 会让并行期每次提交都依赖「此刻工作树可构建」） | —（未做项） | — | 本批策略 = **每个涉及包体的任务手工跑**；自动化接线属治理收口 | 批 8 | `git grep -n "check-bundle-budget" -- .husky` → **0 命中**（阳性对照：同路径 `line-limits` 命中 3 处，证明仪器与路径都对） |
+
+### 达标结论
+
+- **判据**：首屏 JS gzip < **200 kB** —— 来源 `docs/standards/performance.md:28`（「页面包大小 (JS) | < 200KB (gzip)」）。
+- **实测（HEAD `dea1a6a3`）**：**92,789 B = 92.79 kB** ⇒ **✅ 达标**，守卫 **exit 0**，余量 **107,211 B = 107.21 kB**（预算利用率 **46.39%**）。
+- **开工前**：**654,722 B = 654.72 kB**（单 chunk = 3.27× 预算）⇒ 本批 **−561,933 B = −85.83%**。
+- **复现**：`node scripts/check-bundle-budget.mjs --no-build`（判据）· `node scripts/check-bundle-budget.mjs --self-test`（仪器自检 14 条，全绿）。
+- **首屏 3 个 chunk**：见 §瓶颈清单前三行；懒加载 **22 个 · 574,841 B = 574.84 kB**（不计入判据）。
+- **两窗变体也在预算内**：`?float=1` **97.29 kB** · `?overlay=1` **94.19 kB**（口径 = 入口静态闭包 ∪ 本变体动态 chunk）。
+- **「若 ❌ 超标」分支不适用**：Task 11 Step 1 第 6 项（写超出的 kB 数与唯一能补上它的动作）**N/A** —— 本批达标。
+- **诚实代价（不许省略）**：① 全部 JS gzip **+12,908 B = +12.91 kB（+1.97%）**（654,722 → 667,630 B：25 个 chunk 的样板与跨 chunk `import` 开销，**总量守恒不成立**）；② `>500 kB` 警告仍在（`vendor-editor` 208.59 kB，懒 chunk）；③ CSS gzip **+36 B**（11,745 → 11,781）、`index.html` **+166 B**（488 → 654，两条 `modulepreload`）；④ `dist` 总量只降 **4,415 B = −0.14%**（字体 1,072,948 B 一字节未动 ⇒ **磁盘与安装包不因此变小**）。
+- **单位纪律**：本清单所有 kB 均为十进制 ÷1000；字体 **1,072.95 kB = 1,047.80 KiB**、`dist` **3,228.86 kB = 3,153.18 KiB** —— 计划 §表 1 曾把这两行的 KiB 值写成 kB，引用时**必须连单位一起抄**，否则凭空多出 25 kB 字体 / 76 kB dist 的假 Δ。
+
+### 未做（登记，逐条带归属批次）
+
+| # | 未做项 | 归属批次 |
+|---|---|---|
+| 1 | 路线 A 叶级懒加载（被 B′ 在首屏上完全包含 · 测试面更险） | 批 5 |
+| 2 | `scripts/check-bundle-budget.mjs` 接线 `.husky/pre-commit` / CI（本批有意不接，理由见 Global Constraints 与清单末行） | 批 8 |
+| 3 | 页级错误边界 / 懒 chunk 加载失败重试（M-1「整壳卸载」） | 批 3/4 |
+| 4 | 窗口变体分支的错误边界（chunk 加载失败 = 空白窗） | 批 3/4 |
+| 5 | 变体首屏**正式**度量口径 + 把 `< 60 kB` 标注为不可达（计划 L1317 推理错误） | 批 3（口径）· Task 12（回写） |
+| 6 | 首访加载态：`Suspense fallback={null}` → L1 `Loading` 原语（本批是尺寸治理批，引入原语会把其 CSS 拉回首屏） | 批 3/4 |
+| 7 | 预算守卫的嵌套输出路径盲区（I2 静默假绿） | 批 8 |
+| 8 | 构建日志 `Circular chunk` 无门禁看管 + 依赖升级后死边复活风险 | 批 8 |
+| 9 | `check-bundle-budget.mjs` 299/300 行 · `manualChunks.test.ts` 292/300 行 ⇒ 新增须按语义拆分 | 批 8 · 下次改动者当次拆 |
+| 10 | `structuredBlocks.ts` 整模块存废 + `katex` 版本偏斜（含 `@types/katex`） | 批 7 |
+| 11 | `@codemirror/lang-markdown` 传递链（懒 chunk −84.04 kB）+ `basicSetup` 附带件（−45.10 kB）—— 两条耦合，须一起裁决 | 批 4/5 |
+| 12 | 59 个 KaTeX 字体 1,072.95 kB（仅 `.woff2` 可省 816.78 kB） | 批 8 |
+| 13 | 批 6 装 GSAP **必须**用 `import()`，且核对 `vendor-gsap` 不在首屏（槽位已预留并被单测钉住，判据见 Task 5） | 批 6 |
+| 14 | 首屏三个 chunk 的**逐 chunk** 口径复核（本轮已由守卫 + 独立复算确认，无待办）—— 登记为「已复核」而非待办 | 已闭环 |
