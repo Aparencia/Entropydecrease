@@ -144,18 +144,18 @@ describe("NoteMarkdown [[ts:ms]] 接上毫秒（批 6 T26）", () => {
     }
   });
 
-  it("④ 非 ts 链接不受影响：仍渲染 <a href>，点击不触发任何会话回调", () => {
+  it("④ 普通链接不受影响：hash/https 仍渲染 <a href>、javascript: 仍被清空，点击不触发会话回调", () => {
     const at = vi.fn();
     const plain = vi.fn();
-    // 用同页 hash 链接做反例点击（jsdom 里外链点击会打印 navigation 未实现告警，噪声无益）
     const { container } = render(
-      <NoteMarkdown note={note("[普通链接](#section)")} searchQuery="" onTaskToggle={noop} onOpenSession={plain} onOpenSessionAt={at} onImageOpen={noop} />,
+      <NoteMarkdown note={note("[本页](#section) [外链](https://example.com) [坏](javascript:alert(1))")} searchQuery="" onTaskToggle={noop} onOpenSession={plain} onOpenSessionAt={at} onImageOpen={noop} />,
     );
-    const anchor = container.querySelector("a");
-    expect(anchor?.getAttribute("href")).toBe("#section");
+    const anchors = [...container.querySelectorAll("a")];
+    // 两侧自证：普通 URL 逐字保留（https）· 危险协议仍被默认消毒器清空（T26 只放行 `[[ts:ms]]` 一种形态）
+    expect(anchors.map((a) => a.getAttribute("href"))).toEqual(["#section", "https://example.com", ""]);
     expect(container.querySelectorAll('span[title*="跳转到会话"]'), "普通链接被误渲染成回链芯片").toHaveLength(0);
 
-    fireEvent.click(anchor as HTMLAnchorElement);
+    fireEvent.click(anchors[0]); // 同页 hash（jsdom 里外链点击会打印 navigation 未实现告警，噪声无益）
 
     expect(at).toHaveBeenCalledTimes(0);
     expect(plain).toHaveBeenCalledTimes(0);
