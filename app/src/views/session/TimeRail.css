@@ -1,12 +1,14 @@
 /*
- * TimeRail.css — 时间轨的**视觉接缝**（批 6 T25 Step 1）。只写 L1 原语覆盖不到的东西：
- * 刻度线的定位与引线；文案与墨度仍归 `ui/primitives`。
+ * TimeRail.css — 时间轨的**视觉接缝**（批 6 T25）。只写 L1 原语覆盖不到的东西：刻度/播放头的
+ * 定位与引线；文案、墨度、按钮四态仍归 `ui/primitives`。
  *
  * @ai-context 颜色一律走 token（规格 §4.2 的语义注释逐字）：刻度底 = `--ed-border-strong`
- *   （「输入框 / 刻度底 / 引线」）⇒ 本文件 **0 个色值字面量**、0 个裸圆角、0 个裸字号。
- * @ai-context **零 `animation` / 零 `transition` / 零 `@media`**：刻度尺是静态的 ⇒ 既不需要进
- *   `motion.css` 的 reduced-motion 名单（`motion-coverage.test.ts:141` 的域只含
- *   `ui/primitives/*.css`），也不会新增第二条媒体查询（`style-seams.test.ts` 的「全仓只许一条」）。
+ *   （「输入框 / 刻度底 / 引线」）· 播放头 = `--ed-link`（「链接 / 时间码 / 引用」）·
+ *   降级指示器 = `--ed-ink-3`。⇒ 本文件 **0 个色值字面量**、0 个裸圆角、0 个裸字号。
+ * @ai-context **零 `animation` / 零 `transition` / 零 `@media`**：播放头的移动是**位置重算**
+ *   （元素级滚动），不是 CSS 动画 ⇒ 既不需要进 `motion.css` 的 reduced-motion 名单
+ *   （`motion-coverage.test.ts:141` 的域只含 `ui/primitives/*.css`），也不会新增第二条媒体查询
+ *   （`style-seams.test.ts` 的「全仓只许一条 reduced-motion 块」）。
  * @ai-context **零 `z-index`**（`zIndex.guard.test.ts` 的域含全 `app/src` 的 `.css`）
  *   —— 层序由 `position: relative/absolute` 的文档序承担，本轨不与任何浮层竞争。
  * 副作用：无（纯样式表；无 I/O、无动画、无全局选择器 —— 每条规则都锚在 `.ed-timerail` 子树）。
@@ -19,14 +21,14 @@
   margin-bottom: 10px;
 }
 
-/* 读数行（总长）：沿基线对齐，不参与轨道滚动 */
+/* 控制行（播放按钮 + 总长读数）：沿基线对齐，不参与轨道滚动 */
 .ed-timerail__row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-/* 滚动视口：轨道比视口宽时横向滚动（播放头的定位目标也是这个元素，见第二步提交） */
+/* 滚动视口：**播放头的定位目标就是这个元素**（元素级 `scrollTo`，不用 `window`） */
 .ed-timerail__viewport {
   overflow-x: auto;
   border-bottom: 1px solid var(--ed-border);
@@ -51,6 +53,26 @@
 .ed-timerail__tick > span {
   position: absolute;
   top: -12px;
+  left: 2px;
+  white-space: nowrap;
+}
+
+/* 播放头：贯穿轨道的一条引线（可播 = 链接色；降级为聚焦指示器 = 中性墨） */
+.ed-timerail__mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--ed-link);
+}
+
+.ed-timerail[data-degraded="true"] .ed-timerail__mark {
+  background: var(--ed-ink-3);
+}
+
+.ed-timerail__mark > span {
+  position: absolute;
+  top: 0;
   left: 2px;
   white-space: nowrap;
 }

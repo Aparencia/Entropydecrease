@@ -28,10 +28,20 @@
  * @ai-context: DOM 顺序契约（逐字不变）：`SessionDetailHeader` → `SessionQualityCard` →
  *              `SpeakerSwitchCard` → 切换器行（含 `SessionRefineSection`）→ `refineMsg` 行
  *              → 视图区 → 两个裁决面板；全部为**同级兄弟**（视图区内的两个新包裹层见宿主头注）。
+ * @ai-context: **批 6 T25 的容器侧接线（控制方授权的唯一落点）**：`useSessionAudio` 今天**没有别的
+ *              生产调用点**（宿主 H0 判据要求「宿主自身不 `invoke`」），若本件不接，注入槽
+ *              `audio` 在生产路径上永远是 `undefined` ⇒ 视图侧的「纯注入」无从注入。故本件在此
+ *              ① 调 `useSessionAudio(sessionId)`（**唯一**取数点仍在 `session-detail/useSessionAudio.ts`，
+ *              本件自身零 `invoke` ⇒ **H0 判据一字不动仍绿**）；② 持有播放头状态
+ *              `playheadMs` / `onSeekMs`（槽位文档写明「容器负责 `setState` + 播放头动效」）。
+ *              ⚠️ hook 必须在 `kind === "web"` 早退**之前**调用（hooks 规则）⇒ web 会话也会发一次
+ *              只读 IPC（该命令对无音频会话返回 `None`，代价已登记）。
+ *              ⚠️ **本件不做 `[[ts:ms]]` 深链**（T26）：它只需把 `setPlayheadMs` 接上同一条状态。
  */
 import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useSessionDetailData } from "../hooks/useSessionDetailData";
+import { useSessionAudio } from "./session-detail/useSessionAudio";
 import SessionDetailHeader from "./session-detail/SessionDetailHeader";
 import SessionRawView from "./session-detail/SessionRawView";
 import SessionViewHost from "./session-detail/SessionViewHost";
@@ -85,6 +95,10 @@ export default function SessionDetailPanel({ detail, views, fusing, degradedBann
   //   `SessionAuxPanels`（state 留本件：工具条三按钮在切换器行里，就近持有回调更少暴露面）。
   const [showPass2, setShowPass2] = useState(false);
   const [showProofread, setShowProofread] = useState(false);
+  // 批 6 T25（授权①）：音频引用（唯一取数在 useSessionAudio）+ 播放头位置。
+  //   `playheadMs` 由视图经 `onSeekMs` 请求（点时间码 / `<audio>` 的 timeupdate 回报）⇒ 这里 setState。
+  const audio = useSessionAudio(sessionId);
+  const [playheadMs, setPlayheadMs] = useState<number | null>(null);
   // v0.16.1 工作台深链：autoTaskId 到达即切预览视图。深链快照由 hook 持有——App 侧 focus 清空
   // 早于本层 effect，直接透传 prop 会在卡片挂载前被置空（竞态）；快照 + 会话切换清除保证
   // 「只消费一次、不跨会话遗留」。切换 effect 按裁决 D1 留面板（T10 起写入视图记忆）。
@@ -125,6 +139,10 @@ export default function SessionDetailPanel({ detail, views, fusing, degradedBann
     onClearToast: clearPanelToast,
     autoRefineTaskId: deepTaskId,
     onRefineTaskStarted,
+    // T25：三个 T24 槽位在这里**有值**（audio = hook 产出；playheadMs/onSeekMs = 本件的播放头状态）
+    audio,
+    playheadMs,
+    onSeekMs: setPlayheadMs,
   };
 
   return (

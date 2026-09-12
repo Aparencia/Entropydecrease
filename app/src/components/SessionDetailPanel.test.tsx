@@ -183,3 +183,53 @@ describe("SessionDetailPanel · 安全网（批 5 T2 Step 1；抽件前后逐字
 function findButtonSafe(label: string): HTMLButtonElement | null {
   return ([...document.querySelectorAll("button")].find((b) => b.textContent?.includes(label)) as HTMLButtonElement | undefined) ?? null;
 }
+
+/**
+ * 批 6 T25 的**容器侧接线**判据（控制方授权①的唯一落点）。
+ *
+ * @ai-context Why 落在这里而不是宿主测试：宿主 `SessionViewHost` 有一条既有判据 **H0**
+ *   「宿主自身不 invoke」（它的测试文件余 7 行 ⇒ 不许再追加）⇒ 取数与播放头状态只能落在面板这一层。
+ *   本块判的就是授权①的兑现：`useSessionAudio` 的产出**在生产路径上**进得了注入槽
+ *   （W1），且 `playheadMs`/`onSeekMs` 的回路真的闭环（W2）。
+ * @ai-context 仪器边界：`convertFileSrc` 在本文件顶部被 mock 成 `asset://localhost/<path>`
+ *   （真 Tauri 不在场）；媒体行为不触发（不点播放控件）⇒ 不真播放。
+ */
+describe("SessionDetailPanel · 批 6 T25 容器接线（音频槽在生产路径上有值）", () => {
+  /** 真实形态的应用数据目录内路径（T22 的出参 `path`；URL 由前端 `convertFileSrc` 拼） */
+  const AUDIO_PATH = "C:\\Users\\u\\AppData\\Roaming\\com.entropydecrease.app\\session-audio\\1042.wav";
+
+  beforeEach(() => {
+    // 视图记忆（`view:default:session`）在同文件的用例间共享（P1–P4 会写它）⇒ 先清干净
+    localStorage.clear();
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "session_audio_path"
+        ? Promise.resolve({ path: AUDIO_PATH, aligned: true, durationMs: 3_730_000 })
+        : Promise.reject(new Error(`invoke not mocked: ${cmd}`)),
+    );
+  });
+
+  it("W1 `session_audio_path` 恰 1 次（实参逐字）⇒ `<audio src>` = convertFileSrc(path) 且播放控件可用", async () => {
+    const { container } = render(<SessionDetailPanel {...propsOf(detailOf())} />);
+    fireEvent.click(findButton("三轨对齐"));
+    await screen.findByTestId("session-tritrack-view");
+    const audio = await screen.findByTestId("session-timerail-audio");
+    expect(
+      invokeMock.mock.calls.filter((c) => c[0] === "session_audio_path"),
+      "音频引用的取数点不是唯一 / 实参漂了",
+    ).toEqual([["session_audio_path", { sessionId: 1042 }]]);
+    expect(audio.getAttribute("src")).toBe(`asset://localhost/${AUDIO_PATH}`);
+    expect((container.querySelector('[data-testid="session-timerail-play"]') as HTMLButtonElement).disabled).toBe(false);
+    expect(container.querySelectorAll('[data-kind="error"]')).toHaveLength(0);
+  });
+
+  it("W2 播放头回路闭环：点时间码 ⇒ 容器 setState ⇒ 播放头 `data-ms` 逐字 = 该段（恰 1 个）", async () => {
+    const { container } = render(<SessionDetailPanel {...propsOf(detailOf())} />);
+    fireEvent.click(findButton("三轨对齐"));
+    await screen.findByTestId("session-tritrack-view");
+    expect(container.querySelector('[data-testid="session-timerail-playhead"]'), "未请求定位就出现了播放头").toBeNull();
+    fireEvent.click(container.querySelector('[data-track="transcript"] [data-ms="2500"] button') as HTMLElement);
+    expect(
+      [...container.querySelectorAll('[data-testid="session-timerail-playhead"]')].map((el) => el.getAttribute("data-ms")),
+    ).toEqual(["2500"]);
+  });
+});
