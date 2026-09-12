@@ -1,10 +1,16 @@
 /**
  * engine.ts — **全仓唯一 GSAP 入口**（ADR-035 §2 · 裁决 R2.2）。
  *
- * @ai-context 业务背景：L4 动效层（批 6）的引擎装配点。所有动效落点只许
- *   `const { gsap, useGSAP } = await import("../motion/engine")` —— 本文件是全仓**唯一**
- *   静态 import GSAP 家族（`gsap` / `gsap/*` / `@gsap/react`）的文件。少了这条约束，
- *   GSAP 会被拉进首屏静态闭包，`vendor-gsap` 独立懒 chunk 的承诺（规格 §13 风险表）当场落空。
+ * @ai-context 业务背景：L4 动效层（批 6）的引擎装配点 —— 动效落点只许
+ *   `const { gsap, useGSAP } = await import("../motion/engine")` 取引擎。
+ * @ai-context 🔻 判据口径（控制方 2026-09-13 追加指令；ADR-035 的 `:30` 快照注释写的是**白名单**口径，
+ *   与本文件落地口径不一致，差异已登记在 task-3-report.md 供 T35 就地加注）：
+ *   「本文件是唯一静态 import GSAP 家族（`gsap` / `gsap/*` / `@gsap/react`）的文件」
+ *   **不是判据**，而是 **ADR-035 决策 3 的闭包交集判据**的**派生结论**（供失败定位的诊断读数）。
+ *   判据本体逐字 = 「`app/src/**` 中**静态** import `gsap` / `@gsap/react` 的文件集合
+ *   ∩ **首屏静态可达闭包** = ∅」；本文件之所以能存在，是因为它**不在**该闭包内 ——
+ *   白名单口径一加新文件就漏（易腐化），闭包交集是结构性的。少了这条约束，GSAP 会被拉进
+ *   首屏静态闭包，`vendor-gsap` 独立懒 chunk 的承诺（规格 §13 风险表）当场落空。
  * @ai-context 🔴 为什么必须在**顶层**执行 `registerPlugin(useGSAP, …)`（尖刺 S3.2 的发现，本仓已复现）：
  *   不注册时 `useGSAP()` **防不住 React 19 StrictMode 的双 tween** —— 实测裸 `useEffect` 留
  *   **2 个** tween，`useGSAP()` **也是 2 个**，卸载后 tween 仍挂在 globalTimeline 上（既不报错也不清理）。
@@ -21,8 +27,8 @@
  *
  * 副作用：**进程级全局副作用** —— `registerPlugin` 执行后这四个插件对本进程内所有 GSAP 实例可见。
  *   测试隔离不受影响（每个测试文件独立环境），但**不得**把本模块当「无副作用工具」在首屏路径上静态引用。
- * 边界：本模块**只能经 `await import()` 到达**（R11.1 的闭包判据 = 「静态 import GSAP 家族的文件集合
- *   ∩ 首屏静态可达闭包 = ∅」）；凡需要 `useGSAP` 的组件，其自身必须在动态 import 链上。
+ * 边界：本模块**只能经 `await import()` 到达**（判据 = 上面那条**闭包交集**，不是白名单）；
+ *   凡需要 `useGSAP` 的组件，其自身必须在动态 import 链上。
  *   本文件不做任何动效编排 —— 时长 / 位移 / 具名 ease 分别归 token 真源、`motion/shift.ts` 与 T8。
  */
 import { useGSAP } from "@gsap/react";
