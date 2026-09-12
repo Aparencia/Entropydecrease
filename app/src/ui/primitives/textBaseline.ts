@@ -171,7 +171,7 @@ export const RESIDUAL: readonly { file: string; kind: TextResidualKind; reason: 
  * 相对 `app/src` 的正斜杠路径 → 该文件**允许残留的字号越界处数上限**（只许降，键不许新增）。
  * 交给**批 5/6** 的工作量底稿：映射规则 `9/10/10.5/11/11.5 → 12`（`11.5` 仅在 `font="mono"` 时合法
  * —— 六档字阶的 s6 就是 11.5，仅用于数字对齐）；逐文件明细见 `tmp/t16a/slice.md`。
- * ⚠️ T16-B **未动本表**：迁移时越界值一律**原样留在行内**（R2：只登记，交批 5/6）⇒ 558/120 不变。
+ * ⚠️ T16-B **未动本表**：迁移时越界值一律**原样留在行内**（R2：只登记，交批 5/6）⇒ 551/120 不变。
  */
 export const FROZEN_FONT_OOB_BY_FILE: Readonly<Record<string, number>> = {
   "components/AiConversationDock.tsx": 7,
