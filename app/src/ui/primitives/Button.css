@@ -44,11 +44,19 @@
      `width: auto` 的元素上 border-box 与 content-box 等价 ⇒ 对非 block 按钮零观感影响。 */
   box-sizing: border-box;
   /* 接缝（§8.6.1 第 2/3 条）：四个属性各自**单属性、无时序、120ms** —— 回执不排队，下一次
-     hover / 按下直接接管当前过渡（快速连点不会"播完上一条"）。 */
+     hover / 按下直接接管当前过渡（快速连点不会"播完上一条"）。
+     T12 追加 `outline-color` / `outline-offset` 两条：焦点环"落纸"（见下 `:focus-visible`）——
+     基准态把 outline 声明为透明（`outline-color: transparent` 是关键字，不是色值字面量），
+     于是 `:focus-visible` 的 token 墨色与 2px offset **有起点可插值**，键盘焦点不再是 0ms 硬跳。
+     响应层三档同行为（§8.5 节能档「只留响应层」）⇒ 这里**不得**出现任何 `[data-motion]` 覆写。 */
+  outline: 2px solid transparent;
+  outline-offset: 0;
   transition: background-color var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)),
               border-color var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)),
               color var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)),
-              transform var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
+              transform var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)),
+              outline-color var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)),
+              outline-offset var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
 }
 
 /* 三档尺寸：字号/行高/字重走字阶 token（`SCALE_TOKENS.typeScaleVars` 的第 4/5/6 档），
