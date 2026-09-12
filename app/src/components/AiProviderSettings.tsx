@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiProviderInput, AiProviderView } from "../types";
-import { ConfirmDialog } from "../ui/primitives";
+import { ConfirmDialog, Button } from "../ui/primitives";
 
 const btn: React.CSSProperties = {
   padding: "5px 10px",
@@ -169,14 +169,14 @@ export default function AiProviderSettings() {
             {p.baseUrl} · {p.defaultModel}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <button style={btn} onClick={() => setEditing(p)} disabled={busy}>编辑</button>
-            <button style={btn} onClick={() => void testProvider(p.id)} disabled={busy}>测试连接</button>
-            {!p.isDefault && <button style={btn} onClick={() => void setDefault(p.id)} disabled={busy}>设为默认</button>}
-            <button style={btn} onClick={() => void toggleEnabled(p)} disabled={busy}>{p.enabled ? "禁用" : "启用"}</button>
+            <Button variant="secondary" size="md" disabled={busy} onClick={() => setEditing(p)}>编辑</Button>
+            <Button variant="secondary" size="md" disabled={busy} onClick={() => void testProvider(p.id)}>测试连接</Button>
+            {!p.isDefault && <Button variant="secondary" size="md" disabled={busy} onClick={() => void setDefault(p.id)}>设为默认</Button>}
+            <Button variant="secondary" size="md" disabled={busy} onClick={() => void toggleEnabled(p)}>{p.enabled ? "禁用" : "启用"}</Button>
             {p.hasKey ? (
-              <button style={btn} onClick={() => clearKey(p.id)} disabled={busy}>清除密钥</button>
+              <Button variant="secondary" size="md" disabled={busy} onClick={() => clearKey(p.id)}>清除密钥</Button>
             ) : (
-              <button style={btn} onClick={() => { setKeyInputId(p.id); setKeyInput(""); }} disabled={busy}>配置密钥</button>
+              <Button variant="secondary" size="md" disabled={busy} onClick={() => { setKeyInputId(p.id); setKeyInput(""); }}>配置密钥</Button>
             )}
             {!p.isDefault && (
               <button style={{ ...btn, color: "#dc2626" }} onClick={() => removeProvider(p.id)} disabled={busy}>删除</button>
@@ -204,15 +204,16 @@ export default function AiProviderSettings() {
               >
                 保存
               </button>
-              <button
-                style={btn}
+              <Button
+                variant="secondary"
+                size="md"
                 onClick={() => {
                   setKeyInputId(null);
                   setKeyInput("");
                 }}
               >
                 取消
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -381,9 +382,9 @@ function ProviderForm({
         <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }} onClick={() => void submit()} disabled={busy}>
           保存
         </button>
-        <button style={btn} onClick={onCancel} disabled={busy}>
+        <Button variant="secondary" size="md" disabled={busy} onClick={onCancel}>
           取消
-        </button>
+        </Button>
       </div>
     </div>
   );

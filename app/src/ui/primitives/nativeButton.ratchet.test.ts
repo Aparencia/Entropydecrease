@@ -20,9 +20,9 @@
  *   已知边界（有意保留、并有用例钉住）：字符串字面量里的 `<button` 会被计入 —— 实测本仓 0 例。
  *
  * 副作用：只读磁盘（递归遍历 `app/src`），不修改任何文件。
- * 边界：**批 4 T12 迁的是 `*Btn*` 常量族的直接消费者 91 处 / 34 文件**（两个登记例外见
+ * 边界：**批 4 T12 迁的是 `*Btn*` 常量族的直接消费者 99 处 / 35 文件**（两个登记例外见
  * `nativeButtonBaseline.ts` 头注）；其余余量登记给批 5/7。基线随迁移**只降不升**
- * （T1 冻结 510/121 → T5–T10 后 493/121 → T12 后 402/114）。
+ * （T1 冻结 510/121 → T5–T10 后 493/121 → T12 后 394/114）。
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
@@ -179,7 +179,7 @@ const SCAN = scan();
 const BASELINE = FROZEN_NATIVE_BUTTON_BY_FILE;
 const SPLIT_TARGETS = new Set(SPLIT_MOVES.map((m) => m.split("|")[0]));
 
-describe("原生按钮棘轮（B4）：基线随迁移只降不升（T12 后 402 处 / 114 文件）", () => {
+describe("原生按钮棘轮（B4）：基线随迁移只降不升（T12 后 394 处 / 114 文件）", () => {
   it("仪器自证：能命中已知存在的串 · 对无意义串报 0 · 且剥注释生效（末条是**已知边界**）", () => {
     expect(countOf("const a = <button onClick={f}>x</button>;", RE_BUTTON)).toBe(1);
     expect(countOf("const a = <butto n />;", RE_BUTTON)).toBe(0);

@@ -20,20 +20,21 @@
  *
  * ★ 批 4 T12 的迁移与**基线收紧**（2026-09-12；T12 实施者实测，仪器 = 与守卫同源探针）
  *   迁移前（`dev@bde807dc` 导出树）**493 处 / 121 文件** · `const *Btn*` **79 行 / 55 文件**；
- *   迁移后（T12 工作树）**402 处 / 114 文件** · `const *Btn*` **56 行 / 44 文件**。
- *   Δ = **−91 处**（逐文件 Δ 之和逐字等于迁过的处数 ⇒ 机理对拍通过；T5–T10 已先降 510→493）。
+ *   迁移后（T12 三次提交后）**394 处 / 114 文件** · `const *Btn*` **56 行 / 44 文件**。
+ *   Δ = **−99 处**（逐文件 Δ 之和逐字等于迁过的处数 ⇒ 机理对拍通过；T5–T10 已先降 510→493）。
  *
  * ★ 余量去向（B4 的"口径变化 + 余量去向"，**不许把 §5.1 的 107/63 悄悄改成 80/55**）
  *   规格 §5.1 的「Button | 107 处 / 63 文件」**口径不可考**（`btnStyle` 标识符全仓 0 命中）⇒
  *   实测三口径：原生 `<button>`（本文件冻结）· `const *Btn*` 常量族 · `style={xxxBtn}` 消费者。
- *   **T12 只迁直接形态 91 处 / 34 文件**（T1 §B 的 37 文件减去 3 个登记例外，见下），
- *   余量（402 处 − 后续批次已迁）登记给**批 5/7**，由本棘轮冻结。**两个登记例外**：
- *   ① `components/AiProviderSettings.tsx`（8 处，与 T11 并行撞车，见 T12 报告 §7 缺口表）；
- *   ② `components/GroupRowContextMenu.tsx`（2 处）+ `components/RichEditorView.tsx`（3 处）——
+ *   **T12 迁的是直接形态 99 处 / 35 文件**（T1 §B 的 37 文件减去 **2 个登记例外**，见下），
+ *   余量（394 处 − 后续批次已迁）登记给**批 5/7**，由本棘轮冻结。**两个登记例外**（B1 优先于 B4）：
+ *   ① `components/GroupRowContextMenu.tsx`（2 处）· ② `components/RichEditorView.tsx`（3 处）——
  *      二者在 T8 的 `NON_MIGRATED_14`（B1 锚定菜单）里，而 `dialogMigration.e.test.ts:240-244`
  *      断言这 14 个文件**不得 import 原语层** ⇒ 迁按钮会绕过 B1，**既有断言不改**，故不迁。
+ *   **已补齐的历史缺口**：`components/AiProviderSettings.tsx`（8 处）曾因与 T11 并行撞车暂缓，
+ *      T11 落库（`1a7762bd`）后由 T12 的补做提交补齐（13 → 5 处）。
  */
-export const FROZEN_NATIVE_BUTTON_TOTAL = 402;
+export const FROZEN_NATIVE_BUTTON_TOTAL = 394;
 
 /** `const *Btn*` 样式常量族的冻结**行数**（T12 迁移后实测 56；迁移前 79）。 */
 export const FROZEN_BTN_STYLE_CONST_LINES = 56;
@@ -41,11 +42,11 @@ export const FROZEN_BTN_STYLE_CONST_LINES = 56;
 /** `const *Btn*` 样式常量族的冻结**文件数**（T12 迁移后实测 44；迁移前 55）。 */
 export const FROZEN_BTN_STYLE_CONST_FILES = 44;
 
-/** 相对 `app/src` 的路径 → 基线计数（T12 迁移后实测：402 处 / 114 文件） */
+/** 相对 `app/src` 的路径 → 基线计数（T12 迁移后实测：394 处 / 114 文件） */
 export const FROZEN_NATIVE_BUTTON_BY_FILE: Readonly<Record<string, number>> = {
   "components/action-center/ActionCenterPanel.tsx": 11,
   "components/AiConversationDock.tsx": 9,
-  "components/AiProviderSettings.tsx": 13,
+  "components/AiProviderSettings.tsx": 5,
   "components/AiRefineCard.tsx": 3,
   "components/AiServicePanel.tsx": 3,
   "components/AiTaskPanel.tsx": 1,

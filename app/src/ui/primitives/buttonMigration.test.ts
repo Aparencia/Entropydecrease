@@ -73,21 +73,23 @@ const T1_SECTION_B_37: readonly string[] = [
 
 /** 登记例外：**点名 + 理由**（缺口必须可见；不许从账本消失） */
 const EXCLUDED: Readonly<Record<string, string>> = {
-  "components/AiProviderSettings.tsx": "与 T11 并行撞车（同一文件同时被两个任务点名）",
-  "components/GroupRowContextMenu.tsx": "T8 的 dialogMigration.e.test.ts:240-244 禁止 NON_MIGRATED_14 import 原语（B1）",
-  "components/RichEditorView.tsx": "同上（B1 锚定菜单）",
+  "components/GroupRowContextMenu.tsx": "B1：T8 的 dialogMigration.e.test.ts:240-244 禁止 NON_MIGRATED_14 import 原语",
+  "components/RichEditorView.tsx": "B1：同上（锚定菜单）",
 };
 const MIGRATED = T1_SECTION_B_37.filter((f) => EXCLUDED[f] === undefined);
 
 /** 缺口：这些文件**还剩几处** `style={xxxBtn}`（实测值；补做时这里先红） */
 const GAP_SITES: Readonly<Record<string, number>> = {
-  "components/AiProviderSettings.tsx": 8,
   "components/GroupRowContextMenu.tsx": 2,
   "components/RichEditorView.tsx": 3,
 };
 
+/** 已补齐的历史缺口（T11 落库后由 T12 补做）—— 留档，防止"缺口从账本消失" */
+const FILLED_GAP = { file: "components/AiProviderSettings.tsx", sites: 8, why: "曾与 T11 并行撞车；T11 落库后补做" } as const;
+
 /** 仍被引用的 `const *Btn*` 白名单（`文件|常量名`）—— **只有 spread 消费者**的常量按兵不动 */
 const STILL_REFERENCED: readonly string[] = [
+  "components/AiProviderSettings.tsx|btn",
   "components/AiRefineCard.tsx|btn",
   "components/AiServicePanel.tsx|btn",
   "components/AiTaskPanel.tsx|btn",
@@ -126,6 +128,7 @@ const STILL_REFERENCED: readonly string[] = [
 
 /** 换出来的 `Button` 形状表：`文件 → (variant,size) 形状 → 计数`（迁移后实测） */
 const BUTTON_SHAPES: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+  "components/AiProviderSettings.tsx": { "variant=secondary size=md": 8 },
   "components/AiRefineCard.tsx": { "variant=secondary size=md": 1 },
   "components/AiServicePanel.tsx": { "variant=secondary size=md": 1 },
   "components/AiTaskPanel.tsx": { "variant=secondary size=sm": 3 },
@@ -162,7 +165,7 @@ const BUTTON_SHAPES: Readonly<Record<string, Readonly<Record<string, number>>>> 
   "pages/GoalsPage.tsx": { "variant=primary size=md": 1, "variant=secondary size=md": 1 },
 };
 /** 形状表覆盖的 `Button` 总数（= 迁移处数；棘轮的 Δ 必须与它逐字相等） */
-const MIGRATED_SITES = 91;
+const MIGRATED_SITES = 99;
 /** 迁移前读数（`dev@bde807dc` 导出树，同一仪器实测）：棘轮基线**只许在这条线以下** */
 const PRE_T12_NATIVE_BUTTONS = 493;
 
@@ -199,11 +202,13 @@ describe("T12 · 仪器自证（正/负对照 · 剥注释 · 空真排查）", 
     expect(MIGRATED.length + Object.keys(EXCLUDED).length).toBe(37);
     for (const rel of T1_SECTION_B_37) expect(read(rel).length, `读不到 ${rel}`).toBeGreaterThan(0);
     expect(Object.keys(GAP_SITES).sort(), "缺口表与例外表不是同一组文件").toEqual(Object.keys(EXCLUDED).sort());
-    expect(MIGRATED.length, "已迁文件数不像话（清单读错会在这里显形）").toBe(34);
+    expect(MIGRATED.length, "已迁文件数不像话（清单读错会在这里显形）").toBe(35);
+    expect(MIGRATED, "曾登记的历史缺口已补齐（它必须回到已迁清单里）").toContain(FILLED_GAP.file);
+    expect(directHits(read(FILLED_GAP.file)), `补做过的 ${FILLED_GAP.file} 又冒出直接形态命中`).toBe(0);
   });
 });
 
-describe("① 直接形态 style={xxxBtn} 在 34 个已迁文件里归零", () => {
+describe("① 直接形态 style={xxxBtn} 在 35 个已迁文件里归零", () => {
   it("逐文件 directHits === 0；缺口文件的实测处数 == 登记值（仪器在缺口上有非零读数 ⇒ 不是看不见）", () => {
     const bad = MIGRATED.filter((rel) => directHits(read(rel)) !== 0)
       .map((rel) => `${rel}: ${directHits(read(rel))}`);
@@ -234,7 +239,7 @@ describe("② 常量族台账：孤立常量 = 0，仍被引用者 == 白名单"
 });
 
 describe("③ Button 形状表：换出来的原语必须与冻结的 (variant,size) 逐文件一致", () => {
-  it("逐文件形状计数相等，且总数 == 91（把 primary 写成 secondary 这里必红）", () => {
+  it("逐文件形状计数相等，且总数 == 99（把 primary 写成 secondary 这里必红）", () => {
     const diffs: string[] = [];
     let total = 0;
     for (const rel of MIGRATED) {
