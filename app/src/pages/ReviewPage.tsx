@@ -114,7 +114,7 @@ export default function ReviewPage({ active, focusGroupId, onFocusGroupConsumed 
 
   if (session) {
     return (
-      <div style={{ height: "calc(100vh - 56px)", display: "flex", flexDirection: "column", minHeight: 0, background: "#fff" }}>
+      <div style={{ height: "calc(100vh - var(--ed-nav-h))", display: "flex", flexDirection: "column", minHeight: 0, background: "#fff" }}>
         <ReviewSessionPanel
           groupId={session.groupId}
           groupName={session.groupName}
@@ -137,7 +137,7 @@ export default function ReviewPage({ active, focusGroupId, onFocusGroupConsumed 
     : `其余组共 ${totalDue} 张到期——切换上方范围即可复习。`;
 
   return (
-    <div style={{ height: "calc(100vh - 56px)", display: "flex", flexDirection: "column", minHeight: 0, background: "#fff" }}>
+    <div style={{ height: "calc(100vh - var(--ed-nav-h))", display: "flex", flexDirection: "column", minHeight: 0, background: "#fff" }}>
       {/* 头部：标题 + 到期总数 + 开始复习 */}
       <div style={{ padding: "10px 16px", borderBottom: "1px solid #e5e7eb", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

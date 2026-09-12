@@ -34,7 +34,7 @@ export default function ActionPage({ active }: Props) {
   }, [active]);
 
   return (
-    <div style={{ height: "calc(100vh - 56px)", display: "flex", flexDirection: "column", minHeight: 0 }}>
+    <div style={{ height: "calc(100vh - var(--ed-nav-h))", display: "flex", flexDirection: "column", minHeight: 0 }}>
       <ActionCenterPanel refreshToken={token} />
     </div>
   );

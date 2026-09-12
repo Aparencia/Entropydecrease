@@ -54,7 +54,7 @@ interface RawZIndexHit {
  * 与 `FROZEN_OVER_LIMIT` 的棘轮同源：名单只能缩短，不能加长。
  */
 const FROZEN_NUMERIC_ZINDEX: readonly string[] = [
-  "components/AiConversationDock.tsx::position: \"fixed\", top: 56, right: 0, bottom: 0, width: PANEL_W, zIndex: 900,",
+  "components/AiConversationDock.tsx::position: \"fixed\", top: \"var(--ed-nav-h)\", right: 0, bottom: 0, width: PANEL_W, zIndex: 900,",
   "components/BoxSelectOverlay.tsx::zIndex: 10,",
   "components/BoxSelectOverlay.tsx::zIndex: 20,",
   "components/BrowserChrome.tsx::zIndex: 1000,",

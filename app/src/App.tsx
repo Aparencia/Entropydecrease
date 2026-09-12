@@ -285,7 +285,7 @@ function MainShell() {
       {/* 顶部导航 */}
       <nav
         style={{
-          height: 56,
+          height: "var(--ed-nav-h)",
           flexShrink: 0,
           display: "flex",
           alignItems: "center",

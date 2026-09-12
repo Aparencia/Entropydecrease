@@ -55,7 +55,7 @@ interface Props {
 
 export default function SettingsPage({ active = true }: Props) {
   return (
-    <div style={{ height: "calc(100vh - 56px)", overflowY: "auto" }}>
+    <div style={{ height: "calc(100vh - var(--ed-nav-h))", overflowY: "auto" }}>
       <div style={{ maxWidth: 720, padding: "12px 16px 24px" }}>
         <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 4 }}>
           应用配置与管理。改动即时生效，课堂助手下次使用时读取最新值。

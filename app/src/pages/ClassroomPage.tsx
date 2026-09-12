@@ -203,7 +203,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   /** 素材流水线（v0.1.0）：选素材/提取逻辑已下沉 MaterialInputPanel（审查硬拆） */
 
   return (
-    <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
+    <div style={{ display: "flex", height: "calc(100vh - var(--ed-nav-h))", minHeight: 0 }}>
       {/* ── 左栏：配置面板（窗口选择 → 素材 → 启动按钮；v0.15 可拖拽/折叠） ── */}
       {/* 批 0-C2 Task 4 步 4：左栏整体抽出至 ClassroomSourceColumn（顶层恰好一个元素）；
           R2：ColumnResizer 仍是本列的**兄弟**——留在本页、无条件渲染，不随之搬走 */}

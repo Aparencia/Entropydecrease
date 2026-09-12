@@ -188,7 +188,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   }, [visibleNotes, groupMap, list.tagColors]);
 
   return (
-    <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
+    <div style={{ display: "flex", height: "calc(100vh - var(--ed-nav-h))", minHeight: 0 }}>
       {/* ── 左侧：组筛选侧栏（折叠窄条/列表切换 + 列拖拽手柄见
           components/notes/NotesGroupsColumn）── */}
       <NotesGroupsColumn

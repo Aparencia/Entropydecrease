@@ -275,7 +275,7 @@ export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocu
   // （映射实际位于 SessionListPanel.runBatchConvert——本层只收可转化 id 集合）
 
   return (
-    <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
+    <div style={{ display: "flex", height: "calc(100vh - var(--ed-nav-h))", minHeight: 0 }}>
       {/* ── 左栏：会话管理台（v0.7.1 拆出 SessionListPanel；v0.15 可拖拽/折叠） ── */}
       {listCol.folded ? (
         <ColumnBar icon="🗂" title="会话列表" onClick={listCol.expand} />

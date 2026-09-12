@@ -236,7 +236,7 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup, 
   }
 
   return (
-    <div style={{ display: "flex", height: "calc(100vh - 56px)", minHeight: 0 }}>
+    <div style={{ display: "flex", height: "calc(100vh - var(--ed-nav-h))", minHeight: 0 }}>
       {/* ── 左：体系列表（全局置顶固定 + 领域列表；v0.15 可拖拽/折叠为窄条） ── */}
       {leftCol.folded ? (
         <ColumnBar icon="🧭" title="知识体系" onClick={leftCol.expand} />
