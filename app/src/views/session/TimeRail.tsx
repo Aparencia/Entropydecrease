@@ -16,6 +16,14 @@
  * @ai-context **精度诚实**：`aligned === false` 的语义是「**不能保证**对齐」（残余 = **块粒度
  *   ±200 ms**，R51.2⑧）⇒ 文案只能是「无时间基准，定位为近似」，**不得**写成「未对齐 / 未同步」
  *   （`## 陷阱` B9-① 的「标签不许说谎」）。
+ * @ai-context **批 6 T31：#5「时间码回跳」的编排与掠过条接在这里**（规格 §8.6 第 5 行逐字「播放头沿
+ *   时间轨**滑**到目标位置，**掠过几帧缩略**」）。本件的视口（`viewportRef`，判据点
+ *   `0/52.5/90/120`）、播放头标记与降级三条支路**一字未改**；新增的只有：① `usePlayheadJump`
+ *   的挂载（元素级落位口 `seekToMs` + ≤8px 的「掠过」位移 + 三档/reduced-motion 降级）；
+ *   ② 掠过条 `ThumbStrip`（`thumb/` 级缩略图，容器注入的 `imageUrl` 槽；`screens` 稀疏 ⇒ 整条不渲染）。
+ *   🔴 **Why 条与编排都在本件、而不在视图**：`imageUrl` 槽由视图经 props 一转就到这里（视图**零**新增
+ *   行内逻辑），而编排需要的是**本件独有的两个元素**（视口与播放头标记）—— 放在视图就得再开两条
+ *   ref 通道（视图已 292 行，余 8）。⇒ 视图只多一行 props（见 T31 报告「与计划不一致」）。
  * @ai-context **播放头定位用元素级滚动**：`scrollLeftFor`（ms → 像素 → 滚动量）+ `scrollToLeft`
  *   （元素级唯一出口）。**不用 `window` 目标** —— 尖刺实测其在 jsdom 抛
  *   `Not implemented: Window's scrollTo()`、读数恒 0。⚠️ 本轮实测（T25）：jsdom **没有**
@@ -35,6 +43,8 @@ import type { ReactElement, SyntheticEvent } from "react";
 import { Button, StatusLine, Text } from "../../ui/primitives";
 import { fmtMs } from "../../utils/fmt";
 import type { SessionViewSlot } from "../registry";
+import ThumbStrip from "./ThumbStrip";
+import { usePlayheadJump } from "./usePlayheadJump";
 import "./TimeRail.css";
 
 /** 1 px = 1000 ms（1 秒 1 像素）：判据点 `0 / 52.5 / 90 / 120` px 即 `0 / 52500 / 90000 / 120000` ms */
@@ -81,6 +91,14 @@ export function ticksOf(totalMs: number): readonly number[] {
 }
 
 /**
+ * **元素级落位的唯一口**（模块级常量 ⇒ 身份稳定，注入给回跳编排不会让 effect 重跑）。
+ * 组合两个既有出口（`scrollLeftFor` + `scrollToLeft`），**不新造第二套换算**，也**不碰 `window`**。
+ */
+export function seekToMs(viewport: HTMLElement, ms: number): void {
+  scrollToLeft(viewport, scrollLeftFor(ms, viewport.clientWidth));
+}
+
+/**
  * 降级 / 如实提示的**唯一来源**（恰一行；`null` = 不出提示行）。
  *
  * @ai-context 优先级 = 加载失败 → 无音频 → 尚未 finalize → 无时间基准。四条互斥 ⇒ 任何时刻
@@ -107,13 +125,19 @@ interface Props {
   readonly audio: SessionViewSlot["audio"];
   /** 上行通道（**唯一**）：播放进度回报。容器负责把它变成下一次 `playheadMs` */
   readonly onSeekMs?: (ms: number) => void;
+  /** 屏数据面（T31 掠过条的取材面）；`undefined`（宿主未接线）⇒ 不出掠过条 */
+  readonly screens?: SessionViewSlot["detail"]["screens"];
+  /** 配图 URL 槽（容器注入；`views/**` 零 Tauri ⇒ 本件不拼 URL）；`undefined` ⇒ 不出掠过条 */
+  readonly imageUrl?: SessionViewSlot["imageUrl"];
 }
 
-/** 时间轨 + 播放头 + `<audio>` 属性契约 + 降级提示行（见文件头）。 */
-export default function TimeRail({ totalMs, playheadMs, audio, onSeekMs }: Props): ReactElement {
+/** 时间轨 + 播放头 + `<audio>` 属性契约 + 降级提示行 + #5 回跳编排与掠过条（见文件头）。 */
+export default function TimeRail({ totalMs, playheadMs, audio, onSeekMs, screens, imageUrl }: Props): ReactElement {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  // #5 回跳：元素级落位（`seekToMs`）+ ≤8px 的「掠过」位移 + 三档/reduced-motion 降级（见该件文件头）
+  const jump = usePlayheadJump({ targetMs: playheadMs, viewport: viewportRef, seekTo: seekToMs });
 
   const url = audio === undefined || audio === null ? null : audio.url;
   // 只有已 finalize 的 WAV 可播（R5.5-b 约束 3）；加载失败走**同一条**降级 ⇒ 播放控件禁用
@@ -176,10 +200,11 @@ export default function TimeRail({ totalMs, playheadMs, audio, onSeekMs }: Props
               </Text>
             </span>
           ))}
-          {/* 播放头：`data-ms` = 注入值**逐字**（判据 V2 的锚点） */}
+          {/* 播放头：`data-ms` = 注入值**逐字**（判据 V2 的锚点）；`ref` = #5 回跳的位移登记口 */}
           {playheadMs === null ? null : (
             <span
               className="ed-timerail__mark"
+              ref={jump.mark}
               style={{ left: pxOf(playheadMs) }}
               data-ms={playheadMs}
               data-testid="session-timerail-playhead"
@@ -191,6 +216,8 @@ export default function TimeRail({ totalMs, playheadMs, audio, onSeekMs }: Props
           )}
         </div>
       </div>
+      {/* #5「掠过几帧缩略」：目标邻域的 `thumb/` 级缩略帧（稀疏 / 槽未接线 ⇒ 整条不渲染） */}
+      <ThumbStrip stripRef={jump.strip} screens={screens} imageUrl={imageUrl} targetMs={playheadMs} frames={jump.frames} />
     </div>
   );
 }

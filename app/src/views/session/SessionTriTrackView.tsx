@@ -68,8 +68,10 @@ import { useTriTrackAlign } from "./useTriTrackAlign";
 // 轨名类型（`data-track` 锚的唯一字面量来源）由编排层持有 ⇒ 两处不各写一份字面量
 import type { TrackKey, TriTrackAlign } from "./useTriTrackAlign";
 
-/** 视图的数据面：`detail`（三轨）+ T25 的三个**只读**注入槽（音频引用 / 播放头 / 上行通道） */
-type Slot = Pick<SessionViewSlot, "detail" | "audio" | "playheadMs" | "onSeekMs">;
+/** 视图的数据面：`detail`（三轨）+ T25 的三个**只读**注入槽（音频 / 播放头 / 上行通道）+ T31 的
+ *  `imageUrl`（掠过条的配图槽）。🔴 `imageUrl` **可选**：既有夹具（T1–T5）按 `detail` 单参渲染 ⇒
+ *  缺它时**不出掠过条**（稀疏降级），而不是把这条链拉红（`SessionViewSlot` 里它是必填）。 */
+type Slot = Pick<SessionViewSlot, "detail" | "audio" | "playheadMs" | "onSeekMs"> & { readonly imageUrl?: SessionViewSlot["imageUrl"] };
 
 /** 三轨的数据面 = 槽里的 `detail` 一项（C14②：其余槽位与三轨无关 ⇒ 三轨仍不可能取数） */
 type Detail = Slot["detail"];
@@ -241,7 +243,7 @@ function attachOf(align: TriTrackAlign, track: TrackKey): ((el: HTMLElement | nu
  * 渲染会话三轨对齐视图 + 时间轨（T25）+#1 对齐动效（T27）。数据全来自 props（`detail` + 三个注入槽）
  * ⇒ 本件不取数、**不自持播放头状态**（受控：点击只上报，位置随 `playheadMs` 回来）。
  */
-export default function SessionTriTrackView({ detail, audio, playheadMs, onSeekMs }: Slot): ReactElement {
+export default function SessionTriTrackView({ detail, audio, playheadMs, onSeekMs, imageUrl }: Slot): ReactElement {
   const lanes = lanesOf(detail);
   const empty = lanes.every((lane) => lane.items.length === 0);
   // 🔴 hook 在**空态提前返回之前**调用（否则两次渲染的 hook 数不同 ⇒ React 抛错）；空态下两条轨
@@ -268,8 +270,9 @@ export default function SessionTriTrackView({ detail, audio, playheadMs, onSeekM
 
   return (
     <div style={ROOT_STYLE} data-testid="session-tritrack-view">
-      {/* R5.5 #5 的承载面：共享时间轴尺 + 播放头 + `<audio>` 属性契约 + 降级提示行 */}
-      <TimeRail totalMs={totalMsOf(detail, audio)} playheadMs={playheadMs ?? null} audio={audio} onSeekMs={onSeekMs} />
+      {/* R5.5 #5 的承载面：共享时间轴尺 + 播放头 + `<audio>` 属性契约 + 降级提示行；T31 起同址接上
+          **回跳编排**与**掠过条**（`screens` 与配图槽在此一转即达，视图自身零副作用） */}
+      <TimeRail totalMs={totalMsOf(detail, audio)} playheadMs={playheadMs ?? null} audio={audio} onSeekMs={onSeekMs} screens={detail.screens} imageUrl={imageUrl} />
       {/* `data-tone="instrument"` = #1 的基调登记（R3.4 逐字「每个动效落点显式声明基调」） */}
       <div style={TRACKS_STYLE} data-tone="instrument">
         {lanes.map((lane) => (
