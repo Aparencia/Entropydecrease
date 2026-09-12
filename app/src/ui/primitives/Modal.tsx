@@ -35,6 +35,9 @@
  *    引用计数 + 原值快照，见 `useBodyScrollLock`；未挂载时**不碰** `document.body` 的样式。
  * ⑥ **不消费 `isImeComposing`**：计划 Task 7 Step 1 明确"本批只建不接"—— 需要 IME 守卫的是
  *    「Enter 提交」，那是调用点的动作（`Modal` 自己不定义提交）。
+ * ⑦ **解锁时恢复滚动位置**（批 5 T17 / C10#14；与规格 §7.3 第 2 条「重挂载恢复 `scrollTop`」同族）：
+ *    快照在**加锁那一刻**取（归属 = 第一个持锁者），**最后一个持锁者释放时**写回；两条纯函数
+ *    `saveScroll` / `restoreScroll` 导出给测试。⚠️ **jsdom 不做布局** ⇒ 只到"属性级可观测"（见未验证）。
  */
 import { createContext, useContext, useEffect, useId, useRef } from "react";
 import type { ReactElement, ReactNode } from "react";
@@ -94,6 +97,29 @@ function isInnermost(entry: { depth: number }): boolean {
 const scrollLockOwners = new Set<object>();
 /** 首个持锁者记下的**原值快照**（`null` = 当前没持锁）。恢复成 `""` 会抹掉宿主页设过的 overflow */
 let savedBodyOverflow: string | null = null;
+/** 首个持锁者记下的**滚动位置快照**（`null` = 当前没持锁）；与 `savedBodyOverflow` 同源同时刻取 */
+let savedScrollTop: number | null = null;
+
+/**
+ * 视口滚动宿主：`scrollingElement` 是规范里"能滚视口的那个元素"（标准模式 `html` / quirks `body`）——
+ *   写死任一个都会在另一半场景里写到不该写的元素上（症状 = 解锁后跳回 0，比"不恢复"更难查）。
+ *   兜底 `body` 是必需的：jsdom 30 **没有** `scrollingElement`（实测 `undefined`）⇒ 没有它，
+ *   本能力的接线在测试环境里不可观测。
+ */
+function scrollHostOf(): { scrollTop: number } | null {
+  if (typeof document === "undefined") return null;
+  return document.scrollingElement ?? document.body ?? null;
+}
+
+/** 记录滚动位置（**纯函数**：只读宿主、原样返回快照）——导出给测试（C10#14 的判据形态） */
+export function saveScroll(host: { scrollTop: number }): number {
+  return host.scrollTop;
+}
+
+/** 恢复滚动位置（**纯函数**：只写宿主；不钳制、不分支 ⇒ 契约是全函数、无隐藏语义）——导出给测试 */
+export function restoreScroll(host: { scrollTop: number }, saved: number): void {
+  host.scrollTop = saved;
+}
 
 /**
  * body 滚动锁（批 4 T2；B6 缺口 A：20 个弹层共用 ⇒ 锁在原语里，调用点零改动）。
@@ -105,6 +131,8 @@ let savedBodyOverflow: string | null = null;
  *   提前解锁等于"弹层还在、背景却能滚"（与 §5.2 第 2 条「退场相位必须禁指针事件」同源）。
  * Why 单个 effect：加锁与解锁都在同一个 effect 的 body/cleanup 里 —— 拆成两个的话，退场中
  *   `open` 反向回到 `true` 时 cleanup 会先解锁、再（因依赖未变而）不加回来，锁就永久丢了。
+ * Why 滚动快照与 `overflow` **同源同时刻**（批 5 T17 / C10#14）：两者都是"加锁前的宿主状态"，归属
+ *   必须一致 —— 放在别的 effect 里，嵌套交接时两个快照会来自不同时刻（写回一个从未存在过的组合）。
  */
 function useBodyScrollLock(locked: boolean): void {
   const ownerRef = useRef<object>({});
@@ -113,7 +141,11 @@ function useBodyScrollLock(locked: boolean): void {
     if (typeof document === "undefined") return;
     const owner = ownerRef.current;
     if (!locked) return;
-    if (scrollLockOwners.size === 0) savedBodyOverflow = document.body.style.overflow;
+    if (scrollLockOwners.size === 0) {
+      savedBodyOverflow = document.body.style.overflow;
+      const host = scrollHostOf();
+      savedScrollTop = host ? saveScroll(host) : null; // 加锁时记录（快照归属 = 第一个持锁者）
+    }
     scrollLockOwners.add(owner);
     document.body.style.overflow = "hidden";
     return () => {
@@ -121,6 +153,9 @@ function useBodyScrollLock(locked: boolean): void {
       if (scrollLockOwners.size > 0) return;
       document.body.style.overflow = savedBodyOverflow ?? "";
       savedBodyOverflow = null;
+      const host = scrollHostOf();
+      if (host && savedScrollTop !== null) restoreScroll(host, savedScrollTop); // 解锁时恢复（写回快照）
+      savedScrollTop = null;
     };
   }, [locked]);
 }

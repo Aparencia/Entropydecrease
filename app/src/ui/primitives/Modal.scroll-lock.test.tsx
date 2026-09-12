@@ -200,3 +200,70 @@ describe("⑥ 原值快照属于**第一个**持锁者（弹层交接时不许�
     expect(overflow(), "快照被后来者改写 ⇒ 宿主页的 'auto' 永久丢失").toBe("auto");
   });
 });
+
+/* ── T17 / C10#14 追加段：解锁恢复滚动位置（**纯追加**：既有 6 个用例与既有 import 一行未动）──────
+ * 判据形态（C15「只能登记」边界）：jsdom **不做布局** ⇒「恢复后用户看见的位置对不对」**不可验**；
+ *   本段只钉两件**可观测**的事，**不作**"已在浏览器验证滚动恢复"的声称：① 两条**纯函数**的契约；
+ *   ② **接线**：加锁时读宿主、解锁写回**快照**（不是当前值），且快照归**第一个**持锁者。
+ * 宿主两条腿都覆盖（探针实测：jsdom 30 **没有** `document.scrollingElement` ⇒ 天然只走兜底腿）：
+ *   主腿 = 注入的假宿主（`Object.defineProperty`，仓库既有注入先例）；兜底腿 = jsdom 的真 `body`
+ *   （它**会存** `scrollTop`：探针实测写 251 读回 251 —— 是属性存储，**不是**布局）。
+ */
+import { restoreScroll, saveScroll } from "./Modal"; // 独立成行：既有那行 import 保持逐字原样
+
+/** 假滚动宿主：`scrollTop` 是唯一契约面；`reads` 计读、`writes` 记写、`jump` = 外部挪动（不计写） */
+function fakeHost(initial: number): { host: { scrollTop: number }; reads: () => number; writes: () => number[]; jump: (v: number) => void } {
+  let value = initial;
+  let reads = 0;
+  const writes: number[] = [];
+  const host = {
+    get scrollTop(): number { reads += 1; return value; },
+    set scrollTop(v: number) { writes.push(v); value = v; },
+  };
+  return { host, reads: () => reads, writes: () => writes, jump: (v) => { value = v; } };
+}
+
+describe("⑦ 解锁时恢复滚动位置（T17 / C10#14；规格 §7.3 第 2 条同族）", () => {
+  afterEach(() => {
+    delete (document as unknown as { scrollingElement?: unknown }).scrollingElement;
+    document.body.scrollTop = 0;
+  });
+
+  it("纯函数契约：saveScroll 读宿主并原样返回；restoreScroll 写宿主（含 0 与覆盖）", () => {
+    const { host, reads, writes } = fakeHost(250);
+    expect(saveScroll(host), "保存 = 原样读回宿主的 scrollTop").toBe(250);
+    expect(reads(), "saveScroll 必须真的读了宿主（否则它可以返回任何常量）").toBeGreaterThan(0);
+    restoreScroll(host, 120);
+    expect(host.scrollTop, "计划逐字的样例：restoreScroll(fakeHost, 120) ⇒ 120").toBe(120);
+    restoreScroll(host, 0);
+    expect(host.scrollTop, "恢复 0 也是合法写（宿主本来就可能在顶部）").toBe(0);
+    expect(writes(), "两次恢复各写一次，写的都是传进来的值").toEqual([120, 0]);
+  });
+
+  it("接线主腿：加锁时读 scrollingElement；解锁写回**快照**（期间宿主被挪动 ⇒ 仍回快照）", () => {
+    vi.useFakeTimers();
+    const { host, reads, writes, jump } = fakeHost(250);
+    Object.defineProperty(document, "scrollingElement", { configurable: true, get: () => host });
+    const { rerender } = render(<Host open />);
+    tick(0);
+    expect(reads(), "前提：加锁时确实读了这个宿主（主腿优先于兜底腿）").toBeGreaterThan(0);
+    jump(999); // 弹层期间宿主被别的东西挪动过
+    closeAndSettle(rerender, <Host open={false} />);
+    expect(writes(), "解锁时必须写回**打开前的快照**，不是当前值").toContain(250);
+    expect(host.scrollTop, "恢复后宿主回到打开前的位置").toBe(250);
+  });
+
+  it("接线兜底腿 + 快照归属：无 scrollingElement ⇒ 写 document.body；关内层不恢复、关外层才恢复", () => {
+    vi.useFakeTimers();
+    document.body.scrollTop = 300; // 打开前"页面已滚了 300"
+    const { rerender } = render(<Nested outer={false} inner={false} />);
+    tick(0);
+    rerender(<Nested outer inner />);
+    tick(0);
+    document.body.scrollTop = 888; // 期间被挪动
+    closeAndSettle(rerender, <Nested outer inner={false} />, "inner");
+    expect(document.body.scrollTop, "内层关闭时外层还在 ⇒ 不许恢复（快照归第一个持锁者）").toBe(888);
+    closeAndSettle(rerender, <Nested outer={false} inner={false} />, "outer");
+    expect(document.body.scrollTop, "最后一层关闭必须写回打开前的快照").toBe(300);
+  });
+});
