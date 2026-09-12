@@ -51,6 +51,7 @@ impl Db {
                 state_json: new.state_json.clone(),
                 due_at: new.due_at,
                 created_at: now,
+                interval_days: 0.0,
             })
         })
     }
@@ -283,7 +284,14 @@ fn row_to_card(row: &rusqlite::Row<'_>) -> rusqlite::Result<Flashcard> {
         state_json: row.get(7)?,
         due_at: row.get(8)?,
         created_at: row.get(9)?,
+        interval_days: interval_days_from(row.get(8)?, &row.get::<_, String>(7)?),
     })
+}
+/// 行派生间隔（整天粒度）：`due_at − stateJson.lastReviewMs` 反推；无复习记录/劣化输入 ⇒ 0.0。
+fn interval_days_from(due_at: i64, state_json: &str) -> f32 {
+    let s: crate::scheduler::CardState = serde_json::from_str(state_json).unwrap_or_default();
+    let days = (due_at.saturating_sub(s.last_review_ms as i64)) as f64 / 86_400_000.0;
+    if s.last_review_ms == 0 || days <= 0.0 { 0.0 } else { days.round().max(1.0) as f32 }
 }
 
 /// 单测独立文件。

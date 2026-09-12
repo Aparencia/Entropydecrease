@@ -244,6 +244,16 @@ pub struct Flashcard {
     /// 到期时刻（Unix 毫秒；due_at ≤ now 进复习队列）
     pub due_at: i64,
     pub created_at: i64,
+    /// 真实复习间隔天数（**只读**；前端唯一口径——不得用 dueAt 差值或字符数自造）。
+    ///
+    /// @ai-context: 两个精度域（PB2 裁决）：① `review_card` 返回体 = 当次调度的**精确值**
+    ///              （`ScheduleOutcome.interval_days` 当场显式覆写）；② 行派生路径
+    ///              （`row_to_card` 由 `due_at − stateJson.lastReviewMs` 反推，覆盖
+    ///              list_due_cards / get_card / card_by_fragment / list_cards_by_group /
+    ///              find_card_by_front）= **整天粒度**（DB 无 interval 列，f32 原值不可恢复）。
+    ///              新卡/无复习记录/劣化输入 ⇒ `0.0`（不发明数字）；确切时刻看 `dueAt`。
+    ///              契约不变：`stateJson` 仍是「后端调度契约，前端透传不解析」。
+    pub interval_days: f32,
 }
 
 /// 周契约（v0.11.4 REQ-200；弹性承诺呈现层——用户自设本周目标，非打卡 KPI）。

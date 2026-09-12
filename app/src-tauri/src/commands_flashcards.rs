@@ -11,6 +11,7 @@ use tauri::State;
 
 use crate::card_generate::{card_from_fragment, cards_from_note};
 use crate::commands::AppState;
+use crate::db::Db;
 use crate::db_flashcards::NewFlashcard;
 use crate::scheduler::{schedule, CardState, Rating};
 use crate::types::Flashcard;
@@ -162,21 +163,27 @@ pub fn count_due_cards(state: State<'_, AppState>, group_id: Option<i64>) -> Res
 }
 
 /// 复习评分（提取优先闭环：front→回忆→back→评分→调度推进）。
-///
-/// @ai-context: state_json 损坏 → 回退新卡状态重学（诚实降级不 panic）；
-///              card_reviewed 指标每次必记（北极星组成①的数据源）。
 #[tauri::command]
 pub fn review_card(
     state: State<'_, AppState>,
     card_id: i64,
     rating: String,
 ) -> Result<Flashcard, String> {
+    review_card_inner(&state.db, card_id, &rating)
+}
+
+/// 复习评分编排（inner——命令壳只解引用 State；仓内约定「inner 等价于测全命令」）。
+///
+/// @ai-context: state_json 损坏 → 回退新卡状态重学（诚实降级不 panic）；
+///              card_reviewed 指标每次必记（北极星组成①的数据源）。
+/// @ai-context: 返回体的 interval_days 必须**显式覆写**为当次调度的精确值——`..card`
+///              结构体更新语法会把 row_to_card 的旧值（整天粒度）漏出去。
+pub(crate) fn review_card_inner(db: &Db, card_id: i64, rating: &str) -> Result<Flashcard, String> {
     if card_id <= 0 {
         return Err("无效的卡片 id".to_string());
     }
-    let rating = Rating::parse(&rating).ok_or_else(|| format!("不支持的评分: {}", rating))?;
-    let card = state
-        .db
+    let rating = Rating::parse(rating).ok_or_else(|| format!("不支持的评分: {}", rating))?;
+    let card = db
         .get_card(card_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("卡片不存在: {}", card_id))?;
@@ -190,22 +197,19 @@ pub fn review_card(
         now,
     );
     let state_json = serde_json::to_string(&outcome.next).unwrap_or_default();
-    state
-        .db
-        .update_card_schedule(card_id, &state_json, outcome.due_at_ms as i64)
+    db.update_card_schedule(card_id, &state_json, outcome.due_at_ms as i64)
         .map_err(|e| e.to_string())?;
-    state
-        .db
-        .add_review_log(card_id, &rating.to_string_lower(), now as i64)
+    db.add_review_log(card_id, &rating.to_string_lower(), now as i64)
         .map_err(|e| e.to_string())?;
     // 北极星埋点（组有复习记录=组成①；payload 带组 id 供按组聚合）
     let payload =
         serde_json::json!({ "cardId": card_id, "groupId": card.group_id, "rating": rating.to_string_lower() })
             .to_string();
-    let _ = state.db.add_metric_event("card_reviewed", &payload);
+    let _ = db.add_metric_event("card_reviewed", &payload);
     Ok(Flashcard {
         state_json,
         due_at: outcome.due_at_ms as i64,
+        interval_days: outcome.interval_days,
         ..card
     })
 }

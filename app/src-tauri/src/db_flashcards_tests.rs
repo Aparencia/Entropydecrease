@@ -1,7 +1,9 @@
 //! db_flashcards 单测（内存库；AAA 模式）。
 
+use crate::commands_flashcards::review_card_inner;
 use crate::db::Db;
 use crate::db_flashcards::NewFlashcard;
+use crate::scheduler::{schedule, CardState, Rating};
 use crate::types::NewNoteGroup;
 
 /// 内存库。
@@ -223,4 +225,70 @@ fn update_card_back_roundtrip() {
     let fetched = db.get_card(c.id).expect("get").expect("exists");
     assert_eq!(fetched.back, new_back);
     assert!(!db.update_card_back(9999, "x").expect("miss"));
+}
+
+/// 复习过的卡状态 JSON（`reps=0` ⇒ `review_card` 内部按新卡态调度：间隔与 now 无关）。
+fn reviewed_state(last_review_ms: i64) -> String {
+    format!(
+        r#"{{"stability":0.0,"difficulty":0.0,"reps":0,"lapses":0,"lastReviewMs":{}}}"#,
+        last_review_ms
+    )
+}
+
+#[test]
+fn interval_days_new_card_is_zero_and_degraded_inputs_safe() {
+    // Arrange：新卡（state_json="{}" ⇒ lastReviewMs 缺键 ⇒ 0）
+    let db = mem_db();
+    let gid = make_group(&db);
+    // Act
+    let created = db.create_card(&card(gid, "新卡", 1000)).expect("create");
+    let fetched = db.get_card(created.id).expect("get").expect("exists");
+    // Assert：新卡无间隔——两路都 0.0（不发明 due_at/86400000 这类数字）
+    assert_eq!(created.interval_days, 0.0);
+    assert_eq!(fetched.interval_days, 0.0);
+    // Act/Assert（劣化输入）：lastReviewMs > due_at ⇒ 0.0；due_at 为负 ⇒ 0.0；均不 panic
+    db.update_card_schedule(created.id, &reviewed_state(9_000_000), 1000).expect("u1");
+    assert_eq!(db.get_card(created.id).expect("g1").expect("e1").interval_days, 0.0);
+    db.update_card_schedule(created.id, &reviewed_state(5000), -1).expect("u2");
+    assert_eq!(db.get_card(created.id).expect("g2").expect("e2").interval_days, 0.0);
+}
+
+#[test]
+fn interval_days_row_derived_is_whole_days() {
+    // Arrange：上次复习 T0、到期 T0+31 天（夹具构造；不读 stateJson 语义）
+    let db = mem_db();
+    let gid = make_group(&db);
+    let t0 = 1_700_000_000_000i64;
+    let mut new = card(gid, "极限", t0 + 31 * 86_400_000);
+    new.state_json = reviewed_state(t0);
+    db.create_card(&new).expect("create");
+    // Act：队列路径（5 个查询方法共用 row_to_card 供值）
+    let due = db.list_due_cards(None, i64::MAX, 10).expect("due");
+    // Assert：整天粒度 = round((due_at − lastReviewMs)/86400000).max(1)
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0].interval_days, 31.0);
+}
+
+#[test]
+fn review_card_returns_precise_interval_not_stale_row_value() {
+    // Arrange：行派生值刻意构造成 31 天（陈旧值）——本次评分必不等于它
+    let db = mem_db();
+    let gid = make_group(&db);
+    let t0 = 1_700_000_000_000i64;
+    let mut new = card(gid, "极限", t0 + 31 * 86_400_000);
+    new.state_json = reviewed_state(t0);
+    let id = db.create_card(&new).expect("create").id;
+    let stale = db.get_card(id).expect("get").expect("exists");
+    assert_eq!(stale.interval_days, 31.0, "②域：行派生整天粒度");
+    // Act：复习编排（命令壳只解引用 State ⇒ inner 等价于测全命令）
+    let returned = review_card_inner(&db, id, "good").expect("review");
+    // Assert：①域 = 当次 ScheduleOutcome.interval_days（reps=0 ⇒ 新卡态 ⇒ 与 now 无关）
+    assert_eq!(returned.interval_days, schedule(None, Rating::Good, 0).interval_days);
+    assert_ne!(returned.interval_days, stale.interval_days, "`..card` 不得漏出旧值");
+    // Assert：返回的间隔就是驱动 dueAt 的那一个（scheduler.rs:100 恒等式）
+    let next: CardState = serde_json::from_str(&returned.state_json).expect("next");
+    assert_eq!(
+        returned.due_at,
+        next.last_review_ms as i64 + (returned.interval_days.round() as i64).max(1) * 86_400_000
+    );
 }
