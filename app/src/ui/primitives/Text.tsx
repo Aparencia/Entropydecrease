@@ -15,6 +15,11 @@
  * 变为**块级**（`display: block`）—— 放在 `<p>` 等内联语境时由调用点负责；③ `as` 决定语义标签，
  * 本组件不额外包裹任何 DOM（不制造「多一层 div」的排版权威）；④ `ink-4` 是过渡态，
  * 不得承载唯一关键信息，剪报底纹上禁止使用（见 `Text.css` 的墨度边界注释）。
+ *
+ * ★ 属性级受控槽（批 4 T16-A 裁决）：`testId` / `title` 两个 —— 见 `TextProps` 里的理由。
+ *   **明确不加** `role` / `onClick` / `aria-*` / `id` / 任意 DOM 透传（`...rest`）：可交互文本
+ *   不是 `Text` 的职责，是 `Button` 的域（批 5/7）；开一个 `...rest` 就等于把「谁能改这个元素的
+ *   行为与语义」重新交回调用点，ADR-033 §4 的「调用点不掌握排版权威」会在这一步失效。
  */
 
 import type { CSSProperties, ReactElement, ReactNode } from "react";
@@ -46,6 +51,22 @@ export interface TextProps {
   truncate?: boolean;
   /** 语义标签，默认 `span` */
   as?: TextTag;
+  /**
+   * 渲染 `data-testid`（探针锚点）。
+   *
+   * Why 开这一槽：批 4 T16-A 的探针实测切片内有 **≥3 处**弱化文本元素带着 `data-testid`，
+   * 而 `TextProps` 表达不了 ⇒ 按 B6 阈值（同一缺口 ≥3 处共用 ⇒ 回来改原语）补槽。
+   * ★ 它是**属性级**、不是排版级：`testId` 不影响任何排版或墨度决策，因此**不**打开
+   * 「调用点重新掌握排版权威」的口子（ADR-033 §4）；同理 `title`。二者是唯一被批准的两槽。
+   */
+  testId?: string;
+  /**
+   * 原生 `title`（悬停 tooltip）。
+   *
+   * Why：同上 —— 探针实测 ≥3 处弱化文本带 `title`。**要不要 tooltip 是内容决策（调用点的）**，
+   * 怎么显示是浏览器的事 ⇒ 原语只负责把值送到 DOM，不做任何包装 / 自绘气泡。
+   */
+  title?: string;
   /** 追加类名（调用点只做定位，不参与排版权威 —— 排版与墨度一律由本原语的类决定） */
   className?: string;
   /** 透传内联样式：批 6 的动效接缝（`letterSpacing` / `color`）与调用点布局用 */
@@ -65,6 +86,8 @@ export function Text({
   font = "ui",
   truncate = false,
   as = "span",
+  testId,
+  title,
   className,
   style,
   children,
@@ -81,8 +104,15 @@ export function Text({
     .join(" ");
 
   const Tag = as;
+  // 未传 ⇒ 属性**根本不出现**（不是 `undefined` 字符串）：`data-testid={undefined}` 在 React 里
+  // 恰好也不落属性，但显式三元把这条契约写在源码里，`Text.test.tsx` 的反向用例钉的就是它。
   return (
-    <Tag className={cls} style={style}>
+    <Tag
+      className={cls}
+      style={style}
+      data-testid={testId === undefined ? undefined : testId}
+      title={title === undefined ? undefined : title}
+    >
       {children}
     </Tag>
   );

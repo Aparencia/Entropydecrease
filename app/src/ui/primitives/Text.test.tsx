@@ -128,3 +128,44 @@ describe("Text 语义与透传", () => {
     expect(container.innerHTML).not.toMatch(/\b(?:rgb|hsl)a?\(/);
   });
 });
+
+/**
+ * 两个**属性级**受控槽（批 4 T16-A 裁决：切片内 `data-testid` 与 `title` 各 ≥3 处缺口，
+ * 按 B6 阈值回来改原语）。每槽**正反两向**都要钉：传了就落属性、**不传时不得出现该属性** ——
+ * 只钉正向会让「原语偷偷给所有文本加一个空 title」这种回潮静默通过（空 title 会吃掉子元素的
+ * tooltip 继承，是真实可观测的行为差异）。
+ */
+describe("Text 属性级受控槽（testId / title）", () => {
+  it("testId ⇒ 渲染 data-testid；**不传 ⇒ 属性根本不出现**", () => {
+    const on = render(<Text testId="notes-empty-hint">x</Text>);
+    expect(root(on.container).getAttribute("data-testid")).toBe("notes-empty-hint");
+    const off = render(<Text>x</Text>);
+    expect(root(off.container).hasAttribute("data-testid")).toBe(false);
+    // 反向：`title` 也在场时不得顺带产出 testid（两槽互不牵连）
+    const onlyTitle = render(<Text title="提示">x</Text>);
+    expect(root(onlyTitle.container).hasAttribute("data-testid")).toBe(false);
+  });
+
+  it("title ⇒ 渲染原生 tooltip；**不传 ⇒ 属性根本不出现**", () => {
+    const on = render(<Text title="共 12 条，只显示前 5">x</Text>);
+    expect(root(on.container).getAttribute("title")).toBe("共 12 条，只显示前 5");
+    const off = render(<Text>x</Text>);
+    expect(root(off.container).hasAttribute("title")).toBe(false);
+    expect(root(off.container).getAttribute("title")).toBeNull();
+  });
+
+  it("两槽是**属性级**：不改变标签、类名序列，也不落任何排版内联 style", () => {
+    const { container } = render(<Text testId="t" title="p" as="p" tone="ink-3">x</Text>);
+    const el = root(container);
+    expect(el.tagName).toBe("P");
+    expect(el.className).toBe("ed-text ed-text--s4 ed-text--ink-3 ed-text--font-ui");
+    expect(el.style.color).toBe("");
+    expect(el.style.fontSize).toBe("");
+  });
+
+  it("空串是**显式传入**而不是缺席：`testId=\"\"` 仍落一个空属性（契约是 undefined 才算未传）", () => {
+    const { container } = render(<Text testId="">x</Text>);
+    expect(root(container).hasAttribute("data-testid")).toBe(true);
+    expect(root(container).getAttribute("data-testid")).toBe("");
+  });
+});
