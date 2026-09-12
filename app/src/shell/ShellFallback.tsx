@@ -17,8 +17,11 @@
  *   ③ 首访加载态：`Suspense fallback={null}` ⇒ 改用 `ShellFallback`。
  *
  * 副作用：仅 `Loading` 自带的循环 CSS 动效（`ed-probe-swing`，纯 CSS、不占 JS 主线程）——
- *   批 4 的动效纲领（三档强度 / 双基调 / GSAP）**未交付**，此处只是原语自带的接缝：
- *   **只有接缝、没有纲领**（B9）。
+ *   （🔴 T14b 更正过时标签）纲领**已由批 6 交付**（`docs/standards/motion.md` + `ADR-035`：三档 `data-motion` /
+ *   双基调 `data-tone` / `controls.ts` 可中断出口）⇒ 原文「未交付……只有接缝、没有纲领」已不成立；
+ *   本文件**自身状态不变**：仍是 0 条动效声明的接缝消费方 —— 摆动连它的 `2.4s` 都长在 `Loading.css`
+ *   （G5 本批零改动；`motion/env.ts:17-18` 逐字登记「探针摆动不进 `AMBIENT_ITEMS`」），可覆盖性由
+ *   `motion.css` 唯一那块 reduced-motion 名单里的 `.ed-probe` 承担 ⇒ **接缝在这侧、纲领在批 6 那侧**。
  * 边界：**不做重试按钮**（重试语义要与 Tauri 的 chunk 缓存一起设计，登记给批 8）；失败卡片
  *   只给静态文案，不回显 error 细节（细节仍由最外层 `AppErrorBoundary` 承担）。
  * 等价性锚点（T9 逐条核对）：`role="status"` / `role="alert"` 由两个原语分别提供；`data-testid`
