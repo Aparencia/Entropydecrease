@@ -1,10 +1,21 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + React + Typescript</title>
+    <title>熵减 · 本地知识提取</title>
+    <!-- J1-2：body 的 UA 8px margin + 无高度基准 ⇒ 整窗常驻纵向滚动条/底缘白条。
+         reset 放 index.html 而不是 tokens.css：tokens.css 是生成物（改它会被 drift 测试判失败），
+         而 reset 是**文档结构**约定，不是设计 token。 -->
+    <style>
+      html, body, #root { margin: 0; height: 100%; }
+      /* 规格 §1 决策 17：细滚动条 6px（审计 J1-2「6px 细滚动条规格全站未实现」） */
+      * { scrollbar-width: thin; }
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-thumb { background: #c9c4b8; border-radius: 3px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+    </style>
   </head>
 
   <body>

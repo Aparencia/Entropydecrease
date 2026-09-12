@@ -13,8 +13,11 @@
     "windows": [
       {
         "title": "熵减 · 本地知识提取",
-        "width": 960,
-        "height": 720
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "resizable": true
       }
     ],
     "security": {
