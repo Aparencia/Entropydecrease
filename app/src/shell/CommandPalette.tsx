@@ -4,8 +4,9 @@
  *
  * 分工：**T11 交付壳** —— 开合、键盘导航（↑↓ / Enter / Esc）、命令列表 =
  *   9 个页面跳转命令（来自 `navRegistry` 的 `ALL_ENTRIES`，含设置页）+ 1 条对话面板命令。
- *   **T12 交付数据源** —— 把 `kb_search` 的命中变成「结果命令」；交接面就是本文件导出的 `Command`
- *   （同一形状，T12 只往里追加，不必改本文件的结构）。
+ *   **T12 交付数据源**（已接线）—— 把 `kb_search` 的命中变成「结果命令」追在页面命令之后
+ *   （180ms 防抖 + `seq` 只认最后一次 + 失败降级为「只有页面命令」+ 一行灰字提示）；
+ *   命中→命令的**数据形状全在 `shell/kbCommands.ts`**（纯函数、不 import React），本文件只做取样与渲染。
  *   顶栏的 `dock-toggle` **不因本文件而移除**（控制方 T11-b：它仍是 REQ-274 的唯一显式入口，
  *   `TopBar.test.tsx` 的守卫钉着它）⇒ 面板里的「对话面板」命令是**增量**入口。
  *
@@ -28,10 +29,22 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { zIndex } from "../ui/zIndex";
 import { ALL_ENTRIES, type PageKey } from "./navRegistry";
+// 批 3 T12：⌘K 的数据源 = `kb_search`（规格 §9 表第 14 行「⌘K 的数据源」）。
+// 数据形状、契约校验与降级都在 `kbCommands.ts`（纯函数，不 import React）；防抖/seq 取样在
+// `useKbPaletteSearch`（hook）⇒ 本文件只把结果渲染进来，测试面因此不依赖 Tauri 运行时。
+import { useKbPaletteSearch } from "./useKbPaletteSearch";
+import type { HitJump } from "./kbCommands";
 import "./CommandPalette.css";
 
 /** 选中一条命令后交给调用方的**动作描述**：调用方持有 `setPage` 与对话面板状态，本组件不碰它们 */
-export type PalettePick = { kind: "page"; key: PageKey } | { kind: "dock" };
+export type PalettePick =
+  | { kind: "page"; key: PageKey }
+  | { kind: "dock" }
+  // ↓ T12 新增两类。① 「结果命令」：携带跳转意图，落到哪个 `focus*` 状态由调用方决定（本组件不碰状态机）
+  | { kind: "hit"; jump: HitJump }
+  // ② 无载荷的 `focus*` 入口：`createSystemSignal`（建体系向导不需要 ID —— 10 个 focus* 字段里唯一
+  //    能由面板独立发起的一条；其余 9 个带 ID 深链的入口收敛方式见 task-12-report.md 的入口映射表）
+  | { kind: "create-system" };
 
 /** 一条命令（T12 的 `commandsFromHits(): Command[]` 用的就是这个形状） */
 export interface Command {
@@ -70,7 +83,12 @@ function buildCommands(onPick: (pick: PalettePick) => void): Command[] {
     hint: "页面",
     run: () => onPick({ kind: "page", key: e.key }),
   }));
-  return [...pages, { id: "dock", label: "对话面板", hint: "Ctrl+Shift+A", run: () => onPick({ kind: "dock" }) }];
+  return [
+    ...pages,
+    { id: "dock", label: "对话面板", hint: "Ctrl+Shift+A", run: () => onPick({ kind: "dock" }) },
+    // T12（规格 §6.1 的 `focus*` 入口收敛）：无载荷的深链入口（建体系向导）进面板
+    { id: "focus:create-system", label: "新建体系", hint: "体系向导", run: () => onPick({ kind: "create-system" }) },
+  ];
 }
 
 export function CommandPalette({ open, onClose, onPick }: CommandPaletteProps) {
@@ -101,8 +119,11 @@ export function CommandPalette({ open, onClose, onPick }: CommandPaletteProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  // 命令表随渲染重建（10 条，成本可忽略）：`run` 闭包因此恒为最新，不需要为依赖稳定性再包一层 memo
-  const list = filterCommands(buildCommands(onPick), query);
+  // 命令表随渲染重建（11 条，成本可忽略）：`run` 闭包因此恒为最新，不需要为依赖稳定性再包一层 memo
+  // T12：**检索结果**（`kb_search` 数据源）——取样（180ms 防抖 + seq 只认最后一次 + 失败降级）
+  // 整段在 `useKbPaletteSearch` 里，本组件只把结果与页面命令合并展示（页面命令恒在最前）。
+  const { commands: hits, degraded } = useKbPaletteSearch(open, query, (jump) => onPick({ kind: "hit", jump }));
+  const list = [...filterCommands(buildCommands(onPick), query), ...hits];
   const activeAt = list.length === 0 ? -1 : Math.min(active, list.length - 1);
 
   if (!open) return null;
@@ -152,6 +173,12 @@ export function CommandPalette({ open, onClose, onPick }: CommandPaletteProps) {
           }}
           onKeyDown={onInputKeyDown}
         />
+        {/* T12：检索失败时如实降级（只剩页面命令可走）——不谎报成「没有匹配的命令」 */}
+        {degraded ? (
+          <div className="ed-cmdk__note" data-testid="command-palette-degraded">
+            学习库检索不可用——只显示页面命令
+          </div>
+        ) : null}
         <ul className="ed-cmdk__list" role="listbox" aria-label="命令列表" data-testid="command-palette-list">
           {list.map((cmd, i) => (
             <li

@@ -177,6 +177,37 @@ function MainShell() {
     setFocusNoteId(noteId);
     setPage("notes");
   };
+
+  // 批 3 T12（规格 §6.1「⌘K 命令入口用来替代现在手写的 `focus*` 参数跳转」）：把这 10 个 `focus*`
+  // 字段的**跨页跳转入口**收敛成具名函数 —— ⌘K 命令与页内回调从此走**同一实现**（此前同一段
+  // 「setFocus…+setPage」在 2–4 处各写一遍）。⚠️ 边界（计划 Step 5 明写）：**只收敛入口** ——
+  // 状态机、字段类型、各页消费逻辑一个字节未动（删字段 / 改路由参数是批 5 的视图层重构）。
+  // 入口映射：⌘K 侧能独立发起的是页面命令（9 个）· 建体系向导 · 检索结果（带 ID 的笔记深链）；
+  // 其余带 ID 的深链（会话/体系/复习组/工作台/对话）仍由**页内入口**发起 —— ID 只有页内有。
+  const goSessions = (sessionId: number) => {
+    setFocusSessionId(sessionId);
+    setPage("sessions");
+  };
+  // REQ-260：带词高亮打开（引用卡片与 ⌘K 检索结果的**共同实现**）——与上面的普通打开是两条路：
+  // 普通打开必须清带词态（审查 H1），带词打开双设 focusNoteSearch（key 递增让同笔记可重触发）
+  const openNoteHighlight = (noteId: number, search: string) => {
+    setFocusNoteId(noteId);
+    setFocusNoteSearch({ noteId, search, key: Date.now() });
+    setPage("notes");
+  };
+  const goSystem = (systemId: number) => { setFocusSystemId(systemId); setPage("knowledge"); };
+  const goGroup = (groupId: number) => { setFocusGroupId(groupId); setPage("notes"); };
+  // 组预选允许 null（NotesPage 的「复习全部」路径——收敛前那个内联箭头也是这么推出来的）
+  const goReviewGroup = (groupId: number | null) => { setFocusReviewGroupId(groupId); setPage("review"); };
+  const goChatSession = (chatId: number) => { setFocusChatId(chatId); setPage("chat"); };
+  const goChatTask = (taskId: number) => { setFocusChatTaskId(taskId); setPage("chat"); };
+  const goRefineWorkbench = (sessionId: number, taskId: number) => {
+    setFocusSessionId(sessionId);
+    setFocusRefineTaskId(taskId);
+    setPage("sessions");
+  };
+  // 10 个 focus* 字段里**唯一无载荷**的入口（建体系向导不需要 ID）⇒ 它能由 ⌘K 独立发起
+  const openSystemWizard = () => { setCreateSystemSignal((s) => s + 1); setPage("knowledge"); };
   // v0.13.7：跨页直达目标体系（组行徽标/结算简报 → 体系页自动选中）
   const [focusSystemId, setFocusSystemId] = useState<number | null>(null);
   // TD-2026-09-05-A：外部请求打开建体系向导（笔记页空体系引导 → 体系页向导）
@@ -361,12 +392,7 @@ function MainShell() {
       <main style={{ flex: 1, minHeight: 0, display: "flex" }}>
         <PageSlot show={page === "classroom"} mounted={mountedPages.has("classroom")}>
           {/* 2026-08 A4：融合完成直达会话（onOpenSessions 跳转 + focusSessionId 定位） */}
-          <ClassroomPage
-            onOpenSessions={(id) => {
-              setFocusSessionId(id);
-              setPage("sessions");
-            }}
-          />
+          <ClassroomPage onOpenSessions={goSessions} />
         </PageSlot>
         <PageSlot show={page === "sessions"} mounted={mountedPages.has("sessions")}>
           {/* v0.7.1：active 驱动列表刷新（display:none 挂载不刷新根治）+ 查看笔记跨页直达 */}
@@ -375,10 +401,8 @@ function MainShell() {
             // v0.16.1：工作台深链 / 精修启动 → AI 对话页（focus 消费后即清空）
             focusRefineTaskId={focusRefineTaskId}
             onFocusRefineTaskConsumed={() => setFocusRefineTaskId(null)}
-            onRefineTaskStarted={(_sessionId, taskId) => {
-              setFocusChatTaskId(taskId);
-              setPage("chat");
-            }}
+            // 精修启动 → AI 对话页（T12：入口收敛为 goChatTask；sessionId 仍被忽略——与收敛前逐字一致）
+            onRefineTaskStarted={(_sessionId, taskId) => goChatTask(taskId)}
             active={page === "sessions"}
             onOpenNote={(id) => openNotePlain(id)}
           />
@@ -389,23 +413,11 @@ function MainShell() {
             focusNoteId={focusNoteId}
             focusNoteSearch={focusNoteSearch}
             focusGroupId={focusGroupId}
-            // v0.20.10（批 5）：ⓘ「复习本组」深链 → 复习页组预选
-            onOpenReview={(groupId) => {
-              setFocusReviewGroupId(groupId);
-              setPage("review");
-            }}
-            onOpenSystem={(id) => {
-              setFocusSystemId(id);
-              setPage("knowledge");
-            }}
-            onCreateSystem={() => {
-              setCreateSystemSignal((s) => s + 1);
-              setPage("knowledge");
-            }}
-            onOpenSessions={(id) => {
-              setFocusSessionId(id);
-              setPage("sessions");
-            }}
+            // v0.20.10（批 5）：ⓘ「复习本组」深链 → 复习页组预选（T12：入口收敛为 goReviewGroup）
+            onOpenReview={goReviewGroup}
+            onOpenSystem={goSystem}
+            onCreateSystem={openSystemWizard}
+            onOpenSessions={goSessions}
           />
         </PageSlot>
         {/* v0.20.5：行动域页（保活挂载 + active 门控切回重载——TD-004 模式） */}
@@ -428,24 +440,17 @@ function MainShell() {
               AI 任务本页无感知；SessionsPage/ActionPage 同款 active 语义） */}
           <ChatPage
             active={page === "chat"}
-            onOpenSessions={(id) => { setFocusSessionId(id); setPage("sessions"); }}
+            onOpenSessions={goSessions}
             onOpenNote={(id) => { setFocusNoteId(id); setPage("notes"); }}
-            onOpenNoteHighlight={(noteId, search) => {
-              setFocusNoteId(noteId);
-              setFocusNoteSearch({ noteId, search, key: Date.now() });
-              setPage("notes");
-            }}            onOpenSettings={() => setPage("settings")}
+            onOpenNoteHighlight={openNoteHighlight}
+            onOpenSettings={() => setPage("settings")}
             // v0.16.1：任务进入对话页（会话页精修启动自动跳转）；任务视图 → 工作台深链
             focusTaskId={focusChatTaskId}
             onFocusTaskConsumed={() => setFocusChatTaskId(null)}
             // REQ-274：对话面板「在对话页继续」直达会话（消费后清空）
             focusChatId={focusChatId}
             onFocusChatConsumed={() => setFocusChatId(null)}
-            onOpenRefineWorkbench={(sessionId, taskId) => {
-              setFocusSessionId(sessionId);
-              setFocusRefineTaskId(taskId);
-              setPage("sessions");
-            }}
+            onOpenRefineWorkbench={goRefineWorkbench}
           />
         </PageSlot>
         <PageSlot show={page === "knowledge"} mounted={mountedPages.has("knowledge")}>
@@ -455,7 +460,7 @@ function MainShell() {
             focusSystemId={focusSystemId}
             createSystemSignal={createSystemSignal}
             onOpenNote={(id) => { setFocusNoteId(id); setPage("notes"); }}
-            onOpenGroup={(id) => { setFocusGroupId(id); setPage("notes"); }}
+            onOpenGroup={goGroup}
           />
         </PageSlot>
         <PageSlot show={page === "goals"} mounted={mountedPages.has("goals")}>
@@ -504,10 +509,12 @@ function MainShell() {
           {aiToast.text}
         </div>
       )}
-      {/* 批 3 T11：⌘K 命令面板（规格 §6.1）。它是**壳级覆盖层**，与 toast 一样挂在导航壳最外层、
+      {/* 批 3 T11/T12：⌘K 命令面板（规格 §6.1）。它是**壳级覆盖层**，与 toast 一样挂在导航壳最外层、
           不是任何页面的子节点（切页不重挂、也不参与页面布局）。
-          `onPick` 只收口两种动作 —— 页面级 `setPage`（key 仍经 `isPageKey` 运行期校验，
-          回调实参不被信任）与打开对话面板；`focus*` 深链状态机原样不动（收敛是 T12）。
+          `onPick` 收口三类动作（回调实参不被信任）：页面级 `setPage`（key 仍经 `isPageKey` 运行期校验）·
+          打开对话面板 · **T12 新增的两类** —— 检索结果（`kind:"hit"`：带载荷的深链入口，落到
+          `focusNoteId` + `focusNoteSearch`，与引用卡片共用 `openNoteHighlight`）与无载荷的 `focus*`
+          入口（`kind:"create-system"`）。`focus*` 状态机本身原样不动（收敛的只是入口，见 T12 报告）。
           Esc / 点遮罩 / 焦点都在组件内部（自足实现，见 `shell/CommandPalette.tsx` 文件头）。 */}
       <CommandPalette
         open={paletteOpen}
@@ -515,6 +522,14 @@ function MainShell() {
         onPick={(pick) => {
           if (pick.kind === "dock") {
             setDockOpen(true);
+            return;
+          }
+          if (pick.kind === "hit") {
+            openNoteHighlight(pick.jump.noteId, pick.jump.search);
+            return;
+          }
+          if (pick.kind === "create-system") {
+            openSystemWizard();
             return;
           }
           if (isPageKey(pick.key)) setPage(pick.key);
@@ -529,15 +544,11 @@ function MainShell() {
           <AiConversationDock
             open={dockOpen}
             onClose={() => setDockOpen(false)}
-            onOpenChat={(chatId) => { setFocusChatId(chatId); setPage("chat"); }}
-            onOpenTaskInChat={(taskId) => { setFocusChatTaskId(taskId); setPage("chat"); }}
-            onOpenSessions={(id) => { setFocusSessionId(id); setPage("sessions"); }}
-            onOpenNote={(id) => openNotePlain(id)}
-            onOpenRefineWorkbench={(sessionId, taskId) => {
-              setFocusSessionId(sessionId);
-              setFocusRefineTaskId(taskId);
-              setPage("sessions");
-            }}
+            onOpenChat={goChatSession}
+            onOpenTaskInChat={goChatTask}
+            onOpenSessions={goSessions}
+            onOpenNote={openNotePlain}
+            onOpenRefineWorkbench={goRefineWorkbench}
           />
         </Suspense>
       )}

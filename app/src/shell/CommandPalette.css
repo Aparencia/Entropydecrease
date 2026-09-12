@@ -91,3 +91,12 @@
   font-size: 13px;
   color: var(--ed-ink-3, #6e6e68);
 }
+
+/* 检索降级提示（批 3 T12）：输入框与列表之间的一行灰字——「检索失败」与「没有命中」是两回事 */
+.ed-cmdk__note {
+  flex: 0 0 auto;
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--ed-ink-3, #6e6e68);
+  border-bottom: 1px solid var(--ed-border, #eae7e0);
+}
