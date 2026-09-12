@@ -15,8 +15,10 @@
  * @ai-context 产物判据 ①②（R11.5）：`app/dist` **不入库** ⇒ 导出树里必然不运行，故取「`runIf(existsSync(dist))`
  *   用例 + **真实构建强制命令行** + 未运行计入报告**「未验证」单列**」三轨。🔴 **未运行 ≠ 通过**，本守卫不得
  *   静默通过。T3 已在导出树做过注入式正向实测（`void import("./motion/engine")` ⇒ `vendor-gsap-BQLVn3Z6.js`
- *   105,584 B / gzip 41,161 B，首屏仍 3 chunk 不含它）⇒ 机理已证；该 chunk **首次真实出现 = 第一个调用点落地时
- *   （波 B/C）**。今天源图（静态∪动态）到不了 GSAP ⇒ ① 的「存在性分支」**未运行**（用例 `console.warn` 点名）。
+ *   105,584 B / gzip 41,161 B，首屏仍 3 chunk 不含它）⇒ 机理已证；该 chunk **已真实出现** —— T30（`66f0e4a9`）
+ *   落了首个运行时调用点（`app/dist/assets/vendor-gsap-BQLVn3Z6.js` = 105,584 B、首屏仍 3 chunk 不含它，T35b 实测）。
+ *   今天源图（静态∪动态）**已到达** GSAP（`gsapInBuildGraph = true`，T35b 用本文件的仪器实测）⇒ ① 的「存在性
+ *   分支」**今天真跑**；`dist` 不入库 ⇒ 导出树里仍条件跳过（R11.5 的 `runIf` 不变）。
  * @ai-context 插件集合与顺序（R14.7-I-2）：ADR-035 `:48` 自称「恰 4 个、**顺序逐字**」⇒ 对拍必须是**逐序数组
  *   相等**（集合相等测不出纯换序）。四插件「真的注册了」的**行为级**判据在 `engine.test.ts`（B3/B4/B5）。
  * @ai-context 仪器：剥注释复用 `ui/primitives/sliceScan.ts` 的状态机（R8.7）；静态图遍历是**正则级**（不认
@@ -219,14 +221,15 @@ interface BudgetJson {
 
 describe("①② 产物判据（R11.5：runIf(existsSync(dist))；🔴 未运行 ≠ 通过）", () => {
   it.runIf(hasDist)(
-    "① 产物独立性：源图到达 GSAP ⇔ 出现独立的 vendor-gsap-*.js（今天源图未到达 ⇒ 存在性分支未运行，见报告「未验证」单列）",
+    "① 产物独立性：源图到达 GSAP ⇔ 出现独立的 vendor-gsap-*.js（今天源图已到达 ⇒ 存在性断言真跑）",
     () => {
       if (!gsapInBuildGraph) {
-        // 今天的真相：源图（静态∪动态）零边到达 GSAP ⇒ 下面那条存在性断言今天**跑不到**（R11.5：不计入绿）
+        // 🔴 今天**不走**这个分支（T30 `66f0e4a9` 之后源图已到达）⇒ 走到这里 = 调用点被回退或遍历漏判，先查这两处
+        // 再看下面的 warn（R11.5：本分支的读数**不计入绿**，因为存在性断言根本没跑）。
         console.warn(
-          "[guard①] 存在性分支今天未运行：源图未到达任何 GSAP 静态 importer ⇒ 本分支计入报告「未验证」单列。" +
+          "[guard①] 存在性分支未运行：源图未到达任何 GSAP importer ⇒ 本分支计入报告「未验证」单列。" +
             "机理已证（T3 注入树：vendor-gsap-BQLVn3Z6.js 105,584 B / gzip 41,161 B，首屏 3 chunk 不含它）；" +
-            "首次真实出现 = 第一个调用点落地时（波 B/C）。",
+            "该 chunk 已于 T30（66f0e4a9）随首个调用点真实出现 ⇒ 今天读到本行 = 静态∪动态边被回退或遍历漏判。",
         );
       } else {
         expect(gsapChunks, "源图已到达 GSAP ⇒ 产物必须出现 vendor-gsap-*.js；实得零个").not.toEqual([]);

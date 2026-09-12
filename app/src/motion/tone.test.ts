@@ -20,7 +20,11 @@
  *   **不**把 jsdom 的 `performance` 挂到 `globalThis`；GSAP 家族的**静态** import 只许在 `motion/engine.ts`
  *   ⇒ 本文件经 `await import("./engine")` 取引擎（同 `engine.test.ts` 的口径）。
  * 副作用：只读磁盘（生成物）+ 给 `window.matchMedia` 打桩 + 建**游离**元素（不挂进 document，不产生动画）。
- * 边界：① 本文件**不**判 `data-tone` 的落点接线（那是波 B/C）⇒ 今日 `app/src` 生产代码里 `data-tone` 仍 0 命中；
+ * 边界：① 本文件**不**判 `data-tone` 的落点接线（判据在落点自己的测试里）⇒ 今日 `app/src` 生产代码里 `data-tone`
+ *   已有 **4 处属性落点**（T35b 实测）：`components/review/DueScale.tsx:134`（T30，条件式 `instrument`）·
+ *   `components/review/ReviewSessionPanel.tsx:252`（T30，`instrument`）· `views/session/SessionTriTrackView.tsx:277`
+ *   （T27，`instrument`）· `components/session-detail/SessionRawView.tsx:105`（T28，`paper`）—— 旧措辞「生产 0 命中」
+ *   描述的是 T8 当时的真相，**已过期**；本文件仍只造**游离元素**验基调契约；
  *   ② `CustomEase` 的曲线控制点是**手感参数**，本文件只保证「单调不减 + 端点正确」，**不保证视觉正确**。
  */
 import { describe, expect, it } from "vitest";

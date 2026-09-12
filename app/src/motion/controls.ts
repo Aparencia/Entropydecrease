@@ -19,12 +19,17 @@
  *   只能用 `timeline.getChildren()[0]`（把返回值当 tween 用会让「旧 tween 冻结」一类断言**恒真 = 假绿**）；
  *   ② **绝不可**把 jsdom 的 `performance` 挂到 `globalThis`（`Performance-impl.js:14` 自调用 ⇒ 栈溢出）。
  *
- * 🔴 **使用纪律（波 C 复制本文件时必须遵守）**：本模块**只许经 `await import()` 到达** —— 它自己静态
- *   `import { gsap } from "./engine"`（见下面的 import 段），所以**静态** import 本文件的首屏模块会把
- *   **engine（连同其 `gsap`）拉进首屏静态闭包**，`vendor-gsap` 独立懒 chunk 的承诺（规格 §13 风险表）
- *   当场落空。判据 = `engine.guard.test.ts` 的「`app/src/**` 静态 import GSAP 家族的文件集合 ∩ 首屏
- *   静态可达闭包 = ∅」（**闭包交集**，不是白名单）—— 今天 `controls.ts` 有 **0 个生产消费点**所以安全，
- *   波 C 一旦静态引入，**该守卫会红**（不是静默洞）；这条纪律与 `engine.ts` 头注的边界句是同一条。
+ * 🔴 **使用纪律（精确口径 = R60.1 对 R41.3 适用范围的更正；`docs/standards/motion.md` 的「懒加载边界」同款）**：
+ *   **不许从「首屏静态可达」的模块静态 import 本文件** —— 本文件自己静态 `import { gsap } from "./engine"`
+ *   （见下面的 import 段），所以静态引用它的**首屏**模块会把 **engine（连同其 `gsap`）拉进首屏静态闭包**，
+ *   `vendor-gsap` 独立懒 chunk 的承诺（规格 §13 风险表）当场落空。🔴 **惰性视图（`React.lazy` / 注册表驱动）
+ *   静态 import 本文件是安全的**（T27 实测：`SessionTriTrackView` 经 `views/registry.ts` 惰性到达 ⇒ 那条静态边
+ *   不进首屏闭包）——「**只许经 `await import()` 到达**」是**过宽**的旧措辞，已按 R60.1 更正。
+ *   判据 = `engine.guard.test.ts` 的「`app/src/**` 静态 import GSAP 家族的文件集合 ∩ 首屏静态可达闭包 = ∅」
+ *   （**闭包交集**，不是白名单）；今天静态消费者 = `views/session/usePlayheadJump.ts`（T31，惰性链上）+ 若干
+ *   `import type`（类型边不进产物），动态消费者 = 5 个 hook（T27/T28/T29/T30/T32）；T35b 用该守卫自己的仪器
+ *   实测：`motion/controls.ts` ∈ 静态∪动态可达（333 文件）而 ∉ 首屏静态可达闭包（89 文件）⇒ 守卫绿。
+ *   首屏模块一旦静态引入，**该守卫会红**（不是静默洞）；这条纪律与 `engine.ts` 头注的边界句是同一条。
  *
  * reduced-motion（§8.5「系统 `prefers-reduced-motion` 优先于档位」）：命中时**直接落终态、不建 tween**
  *   （`tweenCount(target)` = 0），调用方无需分支；`matchMedia` **自带守卫**（尖刺实测 jsdom 30.0.1 没有它
@@ -37,8 +42,9 @@
  *   **传进来的属性名**，读数口由调用方给（`test/motionHarness.ts` 的 `animatedProps` 读 `el.style` 内联集合，
  *   看不见类规则里的属性）；④ 出口**挡不住**绕过它直接调 tween 的写法 —— 那由属性集合审计与评审兜。
  */
-/* 🔴 静态边 ⇒ 本模块因此**只能经 `await import()` 到达**（见文件头「使用纪律」；判据 =
- * `engine.guard.test.ts` 的闭包交集）。改成动态 import 会把 `startControllable` 变成 async。
+/* 🔴 静态边 ⇒ 本模块**不许被「首屏静态可达」的模块静态 import**（R60.1；惰性视图静态 import 是安全的 ——
+ * 见文件头「使用纪律」；判据 = `engine.guard.test.ts` 的闭包交集）。改成动态 import 会把 `startControllable`
+ * 变成 async。
  */
 import { gsap } from "./engine";
 import type { GsapTimeline } from "./engine";

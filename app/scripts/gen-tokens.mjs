@@ -93,9 +93,9 @@ export const DURATION_TOKENS = [
   { name: "toast-in", ms: 180, usage: "Toast 进场（规格 §8.4「Toast 180/140」）" },
   { name: "toast-out", ms: 140, usage: "Toast 出场 —— 出场比进场快（规格 §8.4）" },
   { name: "skeleton", ms: 1200, usage: "循环环境动效：骨架微光（规格 §8.4「--dur-skeleton 1200ms」）" },
-  { name: "card", ms: 220, usage: "面板 / 视图 / 列折叠（规格 §8.4「--dur-card 220ms」）；今日 0 生产消费者，波 C 首次消费" },
-  { name: "reveal", ms: 500, usage: "显影 / 编排层（规格 §8.4「--dur-reveal 500ms」）；今日 0 生产消费者，波 C 首次消费" },
-  { name: "page", ms: 150, usage: "页面切换（规格 §8.4「--dur-page 150ms」）；今日 0 生产消费者，波 C 首次消费" },
+  { name: "card", ms: 220, usage: "面板 / 视图 / 列折叠（规格 §8.4「--dur-card 220ms」）；**已有生产消费者**（T35b 实测 6 处：useColumnFlip / usePhaseFreeze / useScaleGrowth / useRevealMemory / usePlayheadJump / useTriTrackAlign 的档位→时长函数取 ms）" },
+  { name: "reveal", ms: 500, usage: "显影 / 编排层（规格 §8.4「--dur-reveal 500ms」）；**已有生产消费者**（T35b 实测 7 处：useRevealChoreography 的 standard 档 + 上列 6 个 hook 的档位→时长函数 —— 其中 5 个只在 rich 档取它、useRevealMemory 各档都取）" },
+  { name: "page", ms: 150, usage: "页面切换（规格 §8.4「--dur-page 150ms」）；🔴 **仍 0 生产消费者**（T35b 实测：波 C 已全部落地而页面切换动效不在规格 §8.6 的六条内 ⇒ 旧措辞「波 C 首次消费」已过期为假）" },
 ];
 
 /**
