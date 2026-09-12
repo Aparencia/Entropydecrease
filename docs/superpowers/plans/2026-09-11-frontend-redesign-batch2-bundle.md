@@ -76,6 +76,7 @@
 - **★ 连通性判据（批 1「收口一」第 1 条，本批的技术底座）**：**「这个模块看起来还有人用」不是保留依据**；判一块代码是否仍连着，唯一可靠的方法是**从入口反向做可达性分析**。本批四个任务（1 / 2 / 9 / 10）全部采用同一把尺：**从 `app/src/main.tsx` 出发、只沿静态 ESM `import`/`export … from` 走、把 `import(…)` 当作断点**，得到「首屏可达模块集合」。探针脚本已在 `tmp/probe-eager-graph.mjs`，Task 1 会把它固化成 `scripts/bundle-eager-graph.mjs`。
 - **★ 文本扫描型守卫会被注释/测试名里的字面量误伤**（批 0-D Task 10 实测）：若某个测试必须提到本批新增/改动的字符串，**用拼接写法**（`"vendor-" + "gsap"`）**或改述**，**绝不为了绕开守卫去改守卫本身**。
 - **★ 提交纪律**：`git commit --only -m "<msg>" -- <显式路径…>`（本仓**多 agent 并行**，裸 `git commit` 会扫走别人已暂存的条目，包括 `D` 删除条目 —— 已实际发生）。**禁止**：`git add -A` · `git add .` · `git stash` · `git checkout --` · `git restore` · `git clean` · `git reset --hard` · `--no-verify`。提交信息 Conventional Commits：`<type>(<scope>): <subject>`，subject ≤50 字、动词开头、无结尾句号。**本批禁止任何删除操作**（无文件删除、无依赖卸载）—— 若某任务确需删除，STOP 并报控制方。
+  > **2026-09-12 追加（收口评审 I-1 结清）—— 对「新建文件」，上一行的命令形态跑不通。** 实测 `git commit --only -m "<msg>" -- <未跟踪路径>` 报 **`exit 1 / error: pathspec '<path>' did not match any file(s) known to git`**（台账 §四「三处漂移」第 1 条，控制方在提交两份计划文件时亲自踩到；Task 1 阶段复现并已登记）。**正确形态（新增文件）= 两步**：先 `git add -- <显式单路径>`，再 `git commit --only -m "<msg>" -- <同一路径>`。已跟踪文件可继续一步到位。**禁用表不变**（`git add -A` / `git add .` / `git stash` / `git checkout --` / `git restore` / `git clean` / `git reset --hard` / `--no-verify`）。本计划里属「新建文件」场景的提交命令共 **3 处**（Task 1 Step 7 · Task 2 Step 5 · Task 3 Step 6，三处均已就地加注）。
 - **★ 判门禁要在提交树上判**：要证「某个提交自洽」，必须导出该提交的树再跑（`git -c core.autocrlf=false archive -o <绝对路径>.tar <commit>` → 解包到 `.superpowers/sdd/<batch>/tmp/<子目录>/` → 在该树内跑它自带的脚本）。⚠️ **`git archive` 必须在仓库根执行 + `-o` 用绝对路径**（在未跟踪子目录里执行会产出 **10240 字节空归档且 exit 0**）；且在解包树里**没有 `.git`**，`git grep` 会**静默 0 命中**（仪器坏，不是树干净）。
 - **★ `cmd` 会吃掉 `^`**：`cmd /c "git show X^:path"` 静默变成看当前提交。读历史文件一律在 PowerShell 里读**完整**文件，绝不读 diff hunk 推断全文。
 - **★ `Copy-Item` 保留 mtime** ⇒ cargo 判定产物最新、复验读到**陈旧缓存**里的诊断集。本批不碰 Rust，但若任何步骤还原了文件，**先 `touch` 再复验**。
@@ -156,6 +157,9 @@ cd app; npx vite build --config "<仓库根>\.superpowers\sdd\2026-09-11-fronten
 > ⚠️ **仪器局限（必须先读再引用）**：该探针把 133 个包切成 133 个 chunk，**总 gzip 从 654.72 膨胀到 695.95 kB（+41.23 kB / +6.3%）** —— 增量是 chunk 样板与跨 chunk `import` 语句。⇒ **探针只用于「归因占比」，绝不可把探针之和当作落地后的尺寸预测**。任务 10 的对比一律以**真实构建输出**为准。
 > ⚠️ **表的归组口径 ≠ 落地的归组口径（两者都在本计划里，别混用）**：本表的族边界取自**探针的包名分组**；**落地分组的唯一真源是 Task 3 的 `EXACT` / `PREFIX` 表**。两处对少数**共享包**的归属不同 —— 例：`property-information` / `hastscript` / `web-namespaces` 本表记在 `vendor-md` 行，Task 3 记在 `vendor-katex`。这类差异**只在两个懒 chunk 之间搬字节**，对首屏总量与达标判定**一个字节都不影响**（两边都是懒 chunk）；引用数字时以本表看**占比**、以 Task 3 看**落点**。
 
+> **2026-09-12 追加（收口评审 I-1 结清）—— 「251」这个分子与「276」这个分母不是同一个口径（台账 §四「三处漂移」第 2 条）。** 本表「**静态可达 251 个文件**」与 §表 3 baseline 行的「**251 / 276**」里：分母 **276** = `app/src` 非测试 `.ts`(**111**) + `.tsx`(**165**)，**不含 CSS**；而分子 **251** **含 2 个 `.css`**。⇒ 一致口径应为 **249 / 276** 或 **251 / 288**（`app/src` 非测试共 **289** 个文件，含 1 个 `.svg`）。**分子读数本身无误**（Task 1 的探针实测），但**引用比值时必须先统一口径**，否则「251/276」这个分数是两种口径混写出来的。
+> 同族提醒：本表同处的 `<<应用源码>>` 占比 **190.52 kB / 27.4%** 是**探针口径**（总量比真实构建膨胀 +6.3%，见上条仪器局限），与 §表 1 的真实构建读数**不可混用**。
+
 | 族 | gzip (kB) | 占比 | 内容 |
 |---|---|---|---|
 | `vendor-editor` | **218.69** | 31.4% | `@codemirror/view` 62.59 · `@lezer/javascript` 30.69 · `@codemirror/state` 15.30 · `@codemirror/autocomplete` 12.66 · `@lezer/markdown` 12.02 · `@codemirror/language` 9.89 · `@lezer/common` 9.55 · `@lezer/lr` 8.83 · `@lezer/css` 8.08 · `@codemirror/commands` 7.83 · `@codemirror/search` 6.83 · `@lezer/html` 6.26 · `@codemirror/lang-html` 5.51 · `@codemirror/lang-css` 4.53 · `@codemirror/lint` 4.62 · `@codemirror/lang-markdown` 3.82 · `@codemirror/lang-javascript` 2.93 · `@lezer/highlight` 2.83 · 其余 5 个小件 |
@@ -234,6 +238,8 @@ cd app; npx vite build --config "<仓库根>\.superpowers\sdd\2026-09-11-fronten
 4. **构建读数必须留痕**：涉及 `App.tsx` / `vite.config.ts` 的任务都要跑 `cd app; npm run build` 并保存完整输出到 `tmp/build-task<N>.txt`，同时跑 `node scripts/check-bundle-budget.mjs --no-build` 记录首屏 gzip 的**逐任务变化曲线**（这是本批最有价值的过程数据）。
 5. **报告必含「你没能验证的地方」**（诚实单列）。
 6. **提交**：`git diff --stat` 复核只含自己的文件 → `git commit --only -m "<msg>" -- <显式路径…>`。
+
+   > **2026-09-12 追加（收口评审 I-1 结清）**：若本步含**新建文件**，上一条命令会失败（`pathspec … did not match any file(s) known to git`）⇒ **先 `git add -- <同一路径>` 再提交**。完整口径见 Global Constraints「★ 提交纪律」的更正行。
 
 ---
 
@@ -401,6 +407,8 @@ git commit --only -m "build(scripts): add first-screen reachability probe" -- sc
 ```
 
 > **2026-09-12 更正（Task 12 回写）**：上面这个 subject **51 字符，超 `AGENTS.md` §5 的 ≤50 字上限**，且**照抄落地**了（`e46e0e82`）。**门禁不会拦**：`commitlint.config.js` 的 `header-max-length` 沿用 config-conventional 的 **100**，未覆盖为 50。**Task 2 Step 5 的 subject 同样是 51 字符**（同一处失误，已实测入库 `f0592654`）。⇒ 抄写提交命令前请人工数字符数。
+
+> **2026-09-12 追加（收口评审 I-1 结清）—— 本步的提交命令还有第二处会失败：`scripts/bundle-eager-graph.mjs` 是新建文件。** 裸 `git commit --only -m "…" -- scripts/bundle-eager-graph.mjs` 在文件**未跟踪**时报 **`exit 1 / error: pathspec 'scripts/bundle-eager-graph.mjs' did not match any file(s) known to git`**（台账 §四「三处漂移」第 1 条的原始读数）。**正确形态（两步）**：`git add -- scripts/bundle-eager-graph.mjs` → `git commit --only -m "build(scripts): add first-screen reachability probe" -- scripts/bundle-eager-graph.mjs`。**同一形态另见 Task 2 Step 5（`scripts/check-bundle-budget.mjs`）与 Task 3 Step 6（`app/src/build/` 两个新文件，注意该目录当时还被 `.gitignore` 的 `build/` 规则静默吞掉 ⇒ 那一步实际需要 `git add -f` 并请示控制方）**。
 
 **Verification（本任务的验收，逐条给命令与期望）**
 
@@ -585,6 +593,8 @@ git commit --only -m "build(scripts): add first-screen bundle budget gate" -- sc
 ```
 
 > **2026-09-12 更正（Task 12 回写）**：上面这个 subject **51 字符，超 `AGENTS.md` §5 的 ≤50 字上限**，且**照抄落地**了（`f0592654`）。**门禁不会拦**（`commitlint.config.js` 的 `header-max-length` = **100**）。**Task 1 Step 7 的 subject 同为 51 字符**（`e46e0e82`）；本批计划里超限的提交命令共 **3 处**（第三处是 Task 7 Step 5 的 53 字符）。
+
+> **2026-09-12 追加（收口评审 I-1 结清）—— 本步的提交命令同样跑不通：`scripts/check-bundle-budget.mjs` 是新建文件。** 未跟踪文件上执行 `git commit --only … -- scripts/check-bundle-budget.mjs` 报 `exit 1 / error: pathspec … did not match any file(s) known to git`。**正确形态（两步）**：`git add -- scripts/check-bundle-budget.mjs` → `git commit --only -m "build(scripts): add first-screen bundle budget gate" -- scripts/check-bundle-budget.mjs`。**（本步的 subject 另有一处 51 字符超限问题，见上一段。）**
 
 **Verification**
 
@@ -898,6 +908,8 @@ cd app; npx tsc --noEmit; npx vitest run
 git diff --stat
 git commit --only -m "build(app): add pure manualChunks vendor grouping" -- app/src/build/manualChunks.ts app/src/build/manualChunks.test.ts
 ```
+
+> **2026-09-12 追加（收口评审 I-1 结清）—— 本步一次新建 2 个文件，命令必然失败（且该目录当时还被 `.gitignore` 静默忽略）。** ① `git commit --only … -- <未跟踪路径>` 报 `exit 1 / error: pathspec … did not match any file(s) known to git`（台账 §四「三处漂移」第 1 条）⇒ **正确形态 = 先 `git add -- <两个显式路径>`，再 `git commit --only -m "…" -- <同一对路径>`**。② 该步还有一个叠加陷阱：`.gitignore:11` 的 `build/` **未锚定**，会**静默吞掉** `app/src/build/`（`git status` 完全看不见它）⇒ Task 3 实际是用 **`git add -f -- <两个显式路径>`** 入库并主动请示控制方的（根因修复见 `99fab220` 的点状取反与批 8 的锚定裁决）。**这两条都是"照抄计划会卡住"的实例，下一批计划者请勿再照抄本行的原始形态。**
 
 **Verification**
 
@@ -1820,18 +1832,21 @@ git commit --only -m "docs(batch2): close bundle governance batch" -- docs/super
 **占比** = 占首屏 **92.79 kB** 的比例；`—` = 非字节项（失败路径 / 行数 / 未做项），该列无意义。
 **「归属批次」列的 `—（硬底线，不派单）` 是明确决定**（不是漏填）：该行今天没有可执行的降本动作，要动它须先立 ADR。
 **`<T>`** = 下表复现命令里的留档目录 `.superpowers/sdd/2026-09-11-frontend-redesign-batch2-bundle/tmp`（**不入库**，故只写行内代码、不写成 Markdown 链接）；命令 cwd 除注明外均为仓库根。
+> **2026-09-12 追加（收口评审 M-1 结清）—— 本表「复现命令」列已全部自足。** 收口评审指出两行不构成可独立执行的命令：`vendor-tauri` 行原写 **`同上`**（依赖读者回看上一行）、KaTeX 字体行原写 **`<T>/task9/cand2and5.mjs`**（缺解释器）。两处**已就地改为**上文那两条可独立执行的命令（`同上` → 重复写出上一行的 `node scripts/check-bundle-budget.mjs --no-build`；后者 → `node <T>/task9/cand2and5.mjs`）。**原文与判定依据见收口评审 M-1**（`.superpowers/sdd/2026-09-11-frontend-redesign-batch2-bundle/batch-2-closing-review.md`，该目录整体 gitignore）——评审者已实跑被引用脚本（`exit 0`：59 个 · 1,072,948 B · 仅留 `.woff2` 可省 816,780 B · `.js` = 0），故这两行原先只是**自足性**瑕疵、数字为真。
+
+> **2026-09-12 追加（收口评审 M-4 结清）—— 本表首行原写「壳层内 5 类构成见下一行」，而下一行实际逐类列了 7 类。** 「**5 类**」是 Task 11 起草时的过期计数（`task-11-report.md` 的同一段落里也是 5），而同一份报告的 §3 与 `xcheck-entry-attrib.mjs` 的读数是 **7 类占比合计 100.1%（四舍五入）**（默认页依赖树 · 壳层 `App.tsx`+`main.tsx` · `ClassroomPage` · `BrowserChrome` · vite 运行时垫片 · `AppErrorBoundary` · types/utils/css）⇒ **计数已就地改为「7 类」**。**字节读数与各类占比不受影响**（27.87 kB 与每类 `renderedLength` 均未变）。
 
 | 项 | 实测 gzip | 占比 | 为什么降不下去 | 归属批次 | 复现命令 |
 |---|---|---|---|---|---|
-| `index-C4ezj_on.js`（入口 chunk：`main.tsx` + `App.tsx` 导航壳 + 默认页） | 87,573 B 原始 → **27,874 B = 27.87 kB** | 30.0% | 入口必须首屏；**默认页 `ClassroomPage` 静态保留**（首屏必渲染页，改 lazy 只把同一批字节挪进动态 chunk，且让守卫读数失真 —— 控制方 2026-09-12 裁决 2 末条）。壳层内 5 类构成见下一行 | 批 3/4（壳层：页级错误边界 + 加载原语）· 批 5（默认页内视图级惰性挂载） | `node scripts/check-bundle-budget.mjs --no-build` |
+| `index-C4ezj_on.js`（入口 chunk：`main.tsx` + `App.tsx` 导航壳 + 默认页） | 87,573 B 原始 → **27,874 B = 27.87 kB** | 30.0% | 入口必须首屏；**默认页 `ClassroomPage` 静态保留**（首屏必渲染页，改 lazy 只把同一批字节挪进动态 chunk，且让守卫读数失真 —— 控制方 2026-09-12 裁决 2 末条）。壳层内 **7 类**构成见下一行 | 批 3/4（壳层：页级错误边界 + 加载原语）· 批 5（默认页内视图级惰性挂载） | `node scripts/check-bundle-budget.mjs --no-build` |
 | `vendor-react-V0PkpIKo.js`（react + react-dom + scheduler） | 192,521 B 原始 → **60,367 B = 60.37 kB** | 65.1% | React 运行时是硬底线；**它单独就 60,367 B > 60 kB** ⇒ 计划「建议项 < 60 kB/窗变体」结构性不可达（见下方变体两行） | —（硬底线，不派单；要动只能改非 React 渲染或第二套入口 HTML，属架构变更、须先立 ADR —— 提请批 3/4 记录） | `node scripts/check-bundle-budget.mjs --no-build` |
-| `vendor-tauri-UIF4jgRy.js`（`@tauri-apps/api` + `plugin-dialog`） | 17,143 B 原始 → **4,548 B = 4.55 kB** | 4.9% | IPC 是全部页面的公共依赖（21 处静态引用方）；再分包只把它拆到更多文件，不减字节 | —（硬底线，不派单） | 同上 |
+| `vendor-tauri-UIF4jgRy.js`（`@tauri-apps/api` + `plugin-dialog`） | 17,143 B 原始 → **4,548 B = 4.55 kB** | 4.9% | IPC 是全部页面的公共依赖（21 处静态引用方）；再分包只把它拆到更多文件，不减字节 | —（硬底线，不派单） | `node scripts/check-bundle-budget.mjs --no-build` |
 | 应用源码中仍静态可达的部分（**47 文件 / 4 包**；入口 chunk 内 39 module · 161,368 B pre-minify） | 已计入首行那个 **27.87 kB** | 30.0% | 逐类（pre-minify `renderedLength`，仅表类别占比）：默认页依赖树 26 module / 128,923 B（79.9%，含 provider `useLiveCaptureControl.tsx` 6,610 B）· 壳层 `App.tsx`+`main.tsx` 2 / 16,673 B（10.3%）· `ClassroomPage` 1 / 5,268 B（3.3%）· `BrowserChrome`（浏览器痕迹抑制，须全局生效）1 / 4,327 B（2.7%）· vite 运行时垫片 3 / 3,045 B（1.9%）· `AppErrorBoundary`（须在任何渲染之前存在）1 / 2,039 B（1.3%）· types/utils/css 5 / 1,093 B（0.7%） | 批 3/4（壳层 / 错误边界 / 加载原语）· 批 5（默认页内视图惰性挂载） | `node scripts/bundle-eager-graph.mjs`（47 文件 / 4 包）· 类别占比仪器见 `<T>/task9/attrib-base.json` + `<T>/task11/xcheck-entry-attrib.mjs` |
 | Task 9-① `katex` 双版本（顶层 0.18.4 + 嵌套 0.16.47 ×2 目录） | 首屏 **0 B**（唯一渲染出字节的副本在懒 chunk `vendor-katex-7KF2nzwm.js` **79,916 B = 79.92 kB**） | 0% | 去重 = 0.16.47 → 0.18.4 = **换渲染库版本**（行为不中性）；实测去重首屏 Δ **0 B**（92,789 → 92,783 = 命名域噪声）、`vendor-katex` **+53 B**、全部 JS **+63 B** ⇒ 尺寸闸与行为闸**双双不过** | 批 7（版本偏斜 + `structuredBlocks` 存废 + `package.json` 的 `katex`/`@types/katex` 一并裁决） | `node -e "console.log(require('./app/node_modules/katex/package.json').version, require('./app/node_modules/rehype-katex/node_modules/katex/package.json').version)"` → `0.18.4 0.16.47`；A/B `<T>/task9/attrib.mjs dedup-katex` |
 | Task 9-② `app/src/components/structuredBlocks.ts`（生产孤儿） | 首屏 **0 B**，且**不在任何 chunk 的模块表里**（产物中不存在 ⇒ 无字节可省） | 0% | 删除会打断 `app/src/ui/primitives/motion-coverage.test.ts:60,68` 的钉值 ⇒ 非行为中性；存废须连它自身测试与 `katex` 直接依赖一起裁决 | 批 7 | `git grep -n "structuredBlocks" -- app/src` → 4 命中，**唯一 importer 是它自己的测试**（另 2 条是注释与 primitives 钉值）；产物级 `<T>/task9/recon.mjs` |
 | Task 9-③ `@codemirror/lang-markdown` 传递链（9 包：`@lezer/*` + `@codemirror/lang-{html,css,javascript}`） | 首屏 **0 B**；整链全在懒 chunk（stub 后 `vendor-editor` 208,585 → **124,549 B = −84.04 kB**） | 0% | 9 个包的懒 `renderedLength` = 338,319 B，**100% 落在懒 chunk**；去掉即改变编辑器内联 HTML/JS/CSS 的高亮与补全 ⇒ 非行为中性 | 批 4/5（编辑器体验裁决） | `node scripts/check-bundle-budget.mjs --no-build --dist <T>/task9/dist-stub-langmd --json`（`lazy` 里 `vendor-editor-*` = 124,549 B）；A/B `<T>/task9/attrib.mjs stub-langmd` |
 | Task 9-④ `codemirror` 的 `basicSetup` 附带件（`@codemirror/{autocomplete,search,lint}`） | 首屏 **0 B**；懒 chunk **208,585 → 163,484 B = −45.10 kB** | 0% | 换成显式扩展表 = 去掉自动补全 / 搜索 / 诊断 ⇒ 非行为中性；且与 ③ 耦合（stub 掉 `basicSetup` 后 `@codemirror/autocomplete` 仍因 ③ 保留 20,540 B）⇒ 两者必须一起裁决 | 批 4/5 | `node scripts/check-bundle-budget.mjs --no-build --dist <T>/task9/dist-stub-basicsetup --json`；A/B `<T>/task9/attrib.mjs stub-basicsetup` |
-| Task 9-⑤ 59 个 KaTeX 字体 | **1,072,948 B = 1,072.95 kB（= 1,047.80 KiB）**；对 200 kB **JS** 预算的作用面 **0** | 0%（不进 JS 预算） | 59 个文件里 `.js` = **0 个**（仪器自检）；字体只被 `vendor-katex-CEK31ho9.css` 的 59 处 `url()` 引用；仅留 `.woff2` 可省 **816,780 B = 816.78 kB（797.64 KiB）**，但要改第三方 CSS ⇒ 与安装包体积一并裁决 | 批 8（安装包体积） | `<T>/task9/cand2and5.mjs` |
+| Task 9-⑤ 59 个 KaTeX 字体 | **1,072,948 B = 1,072.95 kB（= 1,047.80 KiB）**；对 200 kB **JS** 预算的作用面 **0** | 0%（不进 JS 预算） | 59 个文件里 `.js` = **0 个**（仪器自检）；字体只被 `vendor-katex-CEK31ho9.css` 的 59 处 `url()` 引用；仅留 `.woff2` 可省 **816,780 B = 816.78 kB（797.64 KiB）**，但要改第三方 CSS ⇒ 与安装包体积一并裁决 | 批 8（安装包体积） | `node <T>/task9/cand2and5.mjs` |
 | `vendor-editor-CTQefJ4X.js`（懒 chunk 里最大的块） | **608,384 B 原始 / 208,585 B = 208.59 kB** gzip | 0%（懒 chunk，不计入判据） | vite `>500 kB` 警告仍在：它把编辑器栈并成一块；③+④ 全做可降 −129.14 kB，但两条都不行为中性；**拆成多文件不降字节**（总 JS 只多不少） | 批 4/5 | `cmd /c "cd /d <repo>\app && npm run build > <T>\task11\build.log 2>&1"` 后 `findstr /C:"larger than 500" <T>\task11\build.log`（现成留档 `<T>/build-after.txt:100`） |
 | Task 6 评审判定 M-1：`PageSlot` 的 `<Suspense fallback={null}>` 之上只有**全局** `AppErrorBoundary` ⇒ 懒 chunk 加载失败**卸载整个 `MainShell`**，已访问页状态（含笔记编辑态）一起丢 | —（失败路径，非字节项） | — | 不是白屏、也不是规范违背（有兜底 UI），但与裁决 2「保活 + 不丢稿」取向相反：保活是为了不丢状态，这条路径一次丢光。**这是本批新增的失败模式**（单 chunk 时代不存在 chunk 拉取失败） | 批 3/4（与「首访加载态」同批） | `git grep -n -e AppErrorBoundary -e 'Suspense fallback' -- app/src/App.tsx` → 唯一边界 `:119` 包 `MainShell`，`PageSlot` 的 Suspense 在 `:146`（HEAD `dea1a6a3`） |
 | Task 7 风险 1：两个窗口变体分支**没有错误边界**（`<Suspense fallback={null}>` + 无 `AppErrorBoundary`）⇒ chunk 加载失败 = 该窗**全空白** | —（失败路径）；变体首屏实测 `?float=1` **97.29 kB** / `?overlay=1` **94.19 kB** | — | 这两个分支**改动前后都没有边界**；本批新增的只是「chunk 可能加载失败」这条失败模式。给变体加边界会改错误语义 ⇒ 超出 Task 7 字面范围 | 批 3/4 | `git grep -n 'query.get' -- app/src/App.tsx` → `:95`（overlay）/ `:105`（float）两个早返回；读数 `<T>/task7/variant-firstscreen.mjs --budget-json <T>/final-budget.json` |
