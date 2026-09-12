@@ -25,7 +25,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { FROZEN_NATIVE_BUTTON_TOTAL } from "./nativeButtonBaseline";
+import { FROZEN_NATIVE_BUTTON_BY_FILE, FROZEN_NATIVE_BUTTON_TOTAL } from "./nativeButtonBaseline";
 import { declsOf, directHits, shapeCensus, stripComments } from "./buttonScan";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -257,6 +257,19 @@ describe("③ Button 形状表：换出来的原语必须与冻结的 (variant,s
 describe("④ 棘轮朝向 + 缺口可见（这条判据的牙）", () => {
   it("棘轮基线在 T12 之前那条线以下（手改回 510 / 抬到 520 这里红）", () => {
     expect(FROZEN_NATIVE_BUTTON_TOTAL, `棘轮基线被抬高到 ${FROZEN_NATIVE_BUTTON_TOTAL}（T12 迁移前是 ${PRE_T12_NATIVE_BUTTONS}）`).toBeLessThanOrEqual(PRE_T12_NATIVE_BUTTONS);
+  });
+
+  /**
+   * 评审 M-1：上面那条只判 `FROZEN ≤ 493`，把常量手改成 395 / 493 / 510 **三次全绿**（报告却写「改回
+   * 510 ⇒ 红」）⇒ 牙只在一侧。这条把常量钉回**逐文件 entries 之和**（T12 实测 114 键 / sum 394 / 常量
+   * 394，逐条复算过）—— 只改常量 = 悄悄腾出预算，在这里必红，不必等新代码回潮。
+   * ⚠️ 不改棘轮本身的 `<=` 语义（那会与 `SPLIT_MOVES` 的拆件守恒冲突）；拆件登记新键时同步键数锚。
+   */
+  it("基线常量 == 逐文件 entries 之和（只改常量腾预算必红）", () => {
+    const entries = Object.entries(FROZEN_NATIVE_BUTTON_BY_FILE);
+    const sum = entries.reduce((acc, [, n]) => acc + n, 0);
+    expect(entries.length, "逐文件基线键数变了（T12 实测 114 键；拆件走 SPLIT_MOVES 时同步这里）").toBe(114);
+    expect(FROZEN_NATIVE_BUTTON_TOTAL, `基线常量 ${FROZEN_NATIVE_BUTTON_TOTAL} ≠ 逐文件之和 ${sum}`).toBe(sum);
   });
 
   it("两个 B1 例外文件不许 import 原语（与 T8 的 dialogMigration.e.test.ts:240-244 同向复核）", () => {

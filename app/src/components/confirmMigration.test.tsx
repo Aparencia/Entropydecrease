@@ -11,14 +11,15 @@
  *   ② 六个文件都从 **barrel**（`"../ui/primitives"`）导入 `ConfirmDialog`（深导入会漏 `motion.css`）；
  *   ③ 每个文件都传了 `impacts`（§5.3 硬要求）与 `busy`（重复点击门）；
  *   ④ 全仓 `app/src/**`（含测试）`window.confirm(` 的剩余命中 == 登记的例外集（预期**空**）；
- *   ⑤ 逐处渲染：文案片段按序逐字 + 确认分支执行**同一个** invoke 实参 + 取消分支**不执行**
- *      （= `window.confirm` 返回 false 的那条路径；`NotePreviewView` 的取消还有副作用，单判）。
+ *   ⑤ 逐处渲染：文案按 DOM 边界**逐段恰等**（标题 / message / 逐条 impact / 取消 / 确认，见 `segmentsOf`）+ 确认
+ *      分支执行**同一个** invoke 实参 + 取消分支（= `window.confirm` 返回 false 的那条）**不执行**；副作用单判。
  *
  * 边界（诚实登记）：
- *   ① 片段判据只认**静态字面片段**；运行时插值（目标名 / 碎片正文 / 段数 / 版本时间）单独用包含式
- *      断言，且 `VersionPanel` 的时间戳走 `fmtTime`（**本地时区**）⇒ 故意不比字面量。
- *   ② 「逐字」的可机械部分 = 原模板切成片段后**全部按序出现**；句末 `。？`、换行、包裹括号按
- *      **分隔符**处理（映射为标题 / 清单项 / 按钮边界）—— 逐处映射表见 T11 报告 §2。
+ *   ① 段判据只认**静态字面段**；运行时插值（目标名 / 碎片正文 / 段数）在夹具下都取定值 ⇒ 仍是字面段，
+ *      唯独 `VersionPanel` 的时间戳走 `fmtTime`（**本地时区**）⇒ 那一段单判「前后缀恰等 + 时间形状」。
+ *   ② 「逐字」的可机械部分 = 原模板切成「标题 / message / impact 行 / 按钮」后**逐段恰等** —— 不是
+ *      「片段存在」（评审 I-1：子串判据下**改一个字 / 追加「（已改字）」全绿**，计划 M4 却要求必红）；
+ *      句末 `。？`、换行、包裹括号按**分隔符**处理（逐处映射表见 T11 报告 §2），未记账字符由总长守卫兜住。
  *   ③ 不判观感（jsdom 不排版）；不判真机 WebView2（`window.confirm` 静默 false 的复现面）。
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -60,19 +61,28 @@ const stripComments = (t: string): string =>
 const read = (rel: string): string =>
   stripComments(readFileSync(join(SRC, ...rel.split("/")), "utf8").replace(/\r\n/g, "\n"));
 
-/** 片段判据：全部片段按**原顺序**出现 ⇒ 返回缺失/乱序者（空数组 = 通过） */
-function missingFragments(text: string, fragments: readonly string[]): string[] {
-  const missing: string[] = [];
-  let at = -1;
-  for (const frag of fragments) {
-    const i = text.indexOf(frag, at + 1);
-    if (i < 0) missing.push(frag);
-    else at = i;
-  }
-  return missing;
-}
 const textOf = (testId: string): string => screen.getByTestId(testId).textContent ?? "";
 const click = (testId: string): void => { fireEvent.click(screen.getByTestId(testId)); };
+
+/**
+ * 弹层按 **DOM 边界**切段（顺序 = 标题 · message · 逐条 impact · 取消 · 确认），供 `toEqual` **逐段恰等**
+ * —— 这就是 I-1 的牙：段数、顺序、每段字面量全恰等，「改一个字 / 追加一句」必红。⚠️ 原语侧装饰（关闭钮 +
+ * 印章）**不入段**（不属 T11 迁的文案），但由**总长守卫**单独记账 ⇒ 任何未记账字符同样必红。
+ */
+function segmentsOf(testId: string): string[] {
+  const panel = screen.getByTestId(testId);
+  const q = (sel: string): Element | null => panel.querySelector(sel);
+  const body = q(".ed-confirm");
+  const seal = q(".ed-confirm-seal");
+  const ul = q("ul.ed-confirm-impacts");
+  const kids = body === null ? [] : Array.from(body.children).filter((c) => c !== seal && c !== ul);
+  const lis = ul === null ? [] : Array.from(ul.querySelectorAll("li"));
+  const chrome = `${q(".ed-modal-head > button")?.textContent ?? ""}${seal?.textContent ?? ""}`;
+  const segs = [q(".ed-modal-head > div"), ...kids, ...lis,
+    screen.getByTestId(`${testId}-cancel`), screen.getByTestId(`${testId}-confirm`)].map((n) => n?.textContent ?? "");
+  expect(panel.textContent?.length, `弹层里有未记账的字符：${panel.textContent}`).toBe(segs.join("").length + chrome.length);
+  return segs;
+}
 
 const PROVIDER = {
   id: "p1", name: "DeepSeek", kind: "openAiCompat", baseUrl: "https://api.deepseek.com/v1",
@@ -181,11 +191,16 @@ describe("④ 全仓剩余 window.confirm 命中 == 例外集（预期空）", (
   });
 });
 
-describe("⑤ 逐处渲染：确认 / 取消两条分支 + 文案逐字", () => {
-  it("片段判据仪器自检：乱序与缺失都必须被报出来（防自引用恒真）", () => {
-    expect(missingFragments("甲。乙？丙", ["甲", "乙", "丙"])).toEqual([]);
-    expect(missingFragments("甲。乙？丙", ["甲", "丙", "乙"]), "乱序未被报出").toEqual(["乙"]);
-    expect(missingFragments("甲。乙？丙", ["甲", "丁"]), "缺失未被报出").toEqual(["丁"]);
+describe("⑤ 逐处渲染：确认 / 取消两条分支 + 文案逐段恰等", () => {
+  it("段切分仪器自检：原语装饰不入段 · 总长守卫把「关闭」+ 印章单独记账（防恒真）", async () => {
+    const { container } = render(<BackupPanel />);
+    openMock.mockResolvedValue("C:/b.zip");
+    fireEvent.click(within(container).getByText("从备份恢复…"));
+    await screen.findByTestId("backup-restore-confirm");
+    const segs = segmentsOf("backup-restore-confirm");
+    expect(segs, "少切 / 多切了段（切分仪器坏了）").toHaveLength(4);
+    expect(segs.join(""), "切分没按 DOM 边界：原语装饰混进了段").not.toContain("慎");
+    expect(textOf("backup-restore-confirm").length, "总长守卫的装饰项不是「关闭」+「慎」这 3 个字符").toBe(segs.join("").length + 3);
   });
 
   it("AiProviderSettings：删 Provider / 清密钥（2 处）", async () => {
@@ -194,16 +209,12 @@ describe("⑤ 逐处渲染：确认 / 取消两条分支 + 文案逐字", () => 
     const trigger = (label: string): void => { fireEvent.click(within(container).getByText(label)); };
 
     trigger("删除");
-    expect(missingFragments(textOf("ai-provider-danger-confirm"), [
-      "确定删除？", "删除后该 Provider 配置与密钥将永久清除，且不可恢复。", "其它 Provider 不受影响",
-    ])).toEqual([]);
+    expect(segmentsOf("ai-provider-danger-confirm")).toEqual(["确定删除？", "删除后该 Provider 配置与密钥将永久清除，且不可恢复。", "Provider 配置与密钥将永久清除", "其它 Provider 不受影响", "取消", "删除"]);
     click("ai-provider-danger-confirm-cancel");
     expect(invokeMock).not.toHaveBeenCalledWith("ai_provider_remove", expect.anything());
 
     trigger("清除密钥");
-    expect(missingFragments(textOf("ai-provider-danger-confirm"), [
-      "确定清除？", "清除后密钥不可恢复（需重新输入）。", "端点与模型列表保留",
-    ])).toEqual([]);
+    expect(segmentsOf("ai-provider-danger-confirm")).toEqual(["确定清除？", "清除后密钥不可恢复（需重新输入）。", "端点与模型列表保留", "取消", "清除"]);
     click("ai-provider-danger-confirm-cancel");
     expect(invokeMock).not.toHaveBeenCalledWith("ai_provider_clear_key", expect.anything());
 
@@ -220,9 +231,7 @@ describe("⑤ 逐处渲染：确认 / 取消两条分支 + 文案逐字", () => 
     openMock.mockResolvedValue("C:/b.zip");
     fireEvent.click(within(container).getByText("从备份恢复…"));
     await screen.findByTestId("backup-restore-confirm");
-    expect(missingFragments(textOf("backup-restore-confirm"), [
-      "恢复将覆盖当前全部数据", "现有数据库改名 .pre-restore 兜底", "继续",
-    ])).toEqual([]);
+    expect(segmentsOf("backup-restore-confirm")).toEqual(["恢复将覆盖当前全部数据", "现有数据库改名 .pre-restore 兜底", "取消", "继续"]);
     click("backup-restore-confirm-cancel");
     expect(invokeMock).not.toHaveBeenCalledWith("backup_restore", expect.anything());
     // 再选一次并确认 ⇒ 同一条 invoke（实参 = 选中的路径）
@@ -237,9 +246,7 @@ describe("⑤ 逐处渲染：确认 / 取消两条分支 + 文案逐字", () => 
     const { container, unmount } = render(<GoalDetail goalId={7} onChanged={vi.fn()} onDeleted={onDeleted} />);
     await screen.findByTestId("goal-detail");
     fireEvent.click(within(container).getByTestId("goal-delete-open"));
-    expect(missingFragments(textOf("goal-delete-confirm"), [
-      "确定删除目标「高数」？", "里程碑与绑定将一并移除", "组本身不受影响",
-    ])).toEqual([]);
+    expect(segmentsOf("goal-delete-confirm")).toEqual(["确定删除目标「高数」？", "里程碑与绑定将一并移除", "组本身不受影响", "取消", "删除"]);
     click("goal-delete-confirm-cancel");
     expect(invokeMock).not.toHaveBeenCalledWith("delete_goal", expect.anything());
     fireEvent.click(within(container).getByTestId("goal-delete-open"));
@@ -253,9 +260,7 @@ describe("⑤ 逐处渲染：确认 / 取消两条分支 + 文案逐字", () => 
     const g = render(<GoalDetail goalId={8} onChanged={vi.fn()} onDeleted={vi.fn()} />);
     await screen.findByTestId("goal-detail");
     fireEvent.click(within(g.container).getByTestId("goal-delete-open"));
-    expect(missingFragments(textOf("goal-delete-confirm"), [
-      "确定删除已毕业目标「高数」？", "毕业报告快照仍会在「毕业档案」保留",
-    ])).toEqual([]);
+    expect(segmentsOf("goal-delete-confirm")).toEqual(["确定删除已毕业目标「高数」？", "毕业报告快照仍会在「毕业档案」保留", "取消", "删除"]);
     expect(textOf("goal-delete-confirm").includes("里程碑与绑定将一并移除"), "已毕业分支串了未毕业文案").toBe(false);
     click("goal-delete-confirm-cancel");
     expect(invokeMock).not.toHaveBeenCalledWith("delete_goal", expect.anything());
@@ -266,10 +271,7 @@ describe("⑤ 逐处渲染：确认 / 取消两条分支 + 文案逐字", () => 
     const trigger = (): void => { fireEvent.click(within(container).getByText("✨ AI 复核")); };
     await waitFor(() => expect(within(container).queryByText("✨ AI 复核")).not.toBeNull());
     trigger();
-    expect(missingFragments(textOf("ai-review-confirm"), [
-      "是否继续？", "将发送 1 段边界文本至 DeepSeek（模型 deepseek-flash）进行删除/保留/合并判定。",
-      "进行删除/保留/合并判定", "纯规则结果原样输出",
-    ])).toEqual([]);
+    expect(segmentsOf("ai-review-confirm")).toEqual(["是否继续？", "将发送 1 段边界文本至 DeepSeek（模型 deepseek-flash）进行删除/保留/合并判定。", "进行删除/保留/合并判定", "纯规则结果原样输出", "取消", "继续"]);
     click("ai-review-confirm-cancel");
     expect(invokeMock).not.toHaveBeenCalledWith("review_text_filter", expect.anything());
     // 取消路径的**副作用**（原 window.confirm 返回 false 的那条分支）：状态文案必须还在
@@ -285,9 +287,9 @@ describe("⑤ 逐处渲染：确认 / 取消两条分支 + 文案逐字", () => 
     fireEvent.click(within(container).getByText(/版本时间线/));
     const trigger = await within(container).findByText("回滚到此处");
     fireEvent.click(trigger);
-    expect(missingFragments(textOf("version-rollback-confirm"), [
-      "回滚到「本地规则」版本（", "）？", "将创建新版本", "历史链保留",
-    ])).toEqual([]);
+    const segs = segmentsOf("version-rollback-confirm");
+    expect(segs.slice(1), "第 0 段是运行时插值标题（`fmtTime` 走本地时区）").toEqual(["将创建新版本", "历史链保留", "取消", "回滚"]);
+    expect(segs[0]).toMatch(/^回滚到「本地规则」版本（\d{4}-\d{2}-\d{2} \d{2}:\d{2}）？$/);
     click("version-rollback-confirm-cancel");
     expect(invokeMock).not.toHaveBeenCalledWith("note_versions_rollback", expect.anything());
     fireEvent.click(within(container).getByText("回滚到此处"));
