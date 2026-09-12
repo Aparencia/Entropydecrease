@@ -6,8 +6,10 @@
  *   ① 结构：8 个域 Tab + ⚙ 齿轮 + ⌘K；设置**不在**域 Tab 里；`right` 插槽确实渲染在右侧区；
  *   ② 两档溢出：每个 Tab **同时**有 label 元素与 `title` ⇒ 「1024–1179 收起文字后靠 title 当悬浮名」
  *      这条规格要求是 **DOM 可断言的**；A2 裁决（emoji 出局）另有一条**带阳性对照**的判据；
- *   ③ 静态纪律：`TopBar.css` 里不得出现 transition / animation / @keyframes（动效属批 6）；
- *      高度消费 `--ed-nav-h`；两档断点与 `shell/breakpoints.ts` 同值；顶栏项不许被压缩（陷阱 #15）；
+ *   ③ 静态纪律（G1 改判，T14）：`TopBar.css` 的动效**只许 token**（`var(--ed-dur-*)` / `var(--ed-ease*)`）
+ *      且**落点必须留在 `motion.css` 元素级回执的覆盖面内**（顶栏交互元素全是裸 `<button>`）；
+ *      `@keyframes` 与第二条 reduced-motion 块仍**禁**。另：高度消费 `--ed-nav-h`；两档断点与
+ *      `shell/breakpoints.ts` 同值；顶栏项不许被压缩（陷阱 #15）；
  *   ④ 裁决 A3：AI toast **不在**导航行里（批 3 时它是 `App.tsx` 的 `MainShell` 最外层 fixed 覆盖层；
  *      **批 4 T10 起交给 `ui/primitives/Toast`** ⇒ B13/B15 授权把定位/锚点/层级三条判据搬到原语层，
  *      第四条（`ai-toast` 的 testid）改由 `components/toastMigration.test.tsx` 的**渲染级**断言保住），
@@ -35,6 +37,12 @@ import { BREAKPOINTS } from "./breakpoints";
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** 判据前先剥注释（与 `ui/primitives` 层同一口径）：注释里提到 transition 不算犯规 */
 const CSS = readFileSync(join(HERE, "TopBar.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+/**
+ * G1 改判（T14）的**真源侧**只读件：`motion.css` 的元素级回执 `button:not(.ed-btn)` 与那条唯一的
+ * reduced-motion 块。顶栏的交互元素全是裸 `<button>` ⇒ 顶栏的时长/缓动**不是顶栏自己的事**：
+ * 真源在那条元素级规则里，顶栏再写一份就是 R1.1 明禁的第二个真源（`motion.css:63` 同款论证）。
+ */
+const MOTION_CSS = readFileSync(join(HERE, "..", "ui", "primitives", "motion.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
 const TOPBAR_TSX = readFileSync(join(HERE, "TopBar.tsx"), "utf8");
 const APP_TSX = readFileSync(join(HERE, "..", "App.tsx"), "utf8");
 /**
@@ -63,6 +71,18 @@ const TOAST_BELOW_NAV_BODY = toastRuleBody(".ed-toast--below-nav");
 
 /** emoji / 图形字符（A2 裁决的机器判据）。`\p{Extended_Pictographic}` 是 Unicode 属性类，覆盖 ✨📡🎙 等 */
 const PICTO = /\p{Extended_Pictographic}/u;
+
+/**
+ * G1 改判的**扫描口径**（一处定义，判据与仪器自证共用 ⇒ 不会各写一份正则而漂移）。
+ * `withoutTokenVars` 必须先剥掉 `var(--ed-x, <同值兜底>)` 整段：本仓的 token 习惯写法**带同值兜底**
+ * （`--ed-dur-micro, 120ms`）⇒ 不剥的话「不得写裸 ms/s」会把合法 token 用法判成犯规（**假红**，
+ * 逼实施者绕开守卫 —— 计划 Task 14 的 G1 新断言原文就有这个洞，T14 实施时实测并修正）。
+ */
+const motionDecls = (css: string): string[] =>
+  css.split(";").filter((d) => /(?:^|[;\s])(?:transition|animation)(?:-duration|-name)?\s*:/.test(d));
+const withoutTokenVars = (decl: string): string => decl.replace(/var\(--ed-[a-z0-9-]+,[^)]*\)/g, "");
+const rawTimes = (decls: string[]): string[] => decls.filter((d) => /\d+(?:\.\d+)?\s*(?:ms|s)\b/.test(withoutTokenVars(d)));
+const rawEases = (decls: string[]): string[] => decls.filter((d) => /cubic-bezier|ease-(?:in|out|in-out)\b/.test(withoutTokenVars(d)));
 
 afterEach(cleanup);
 
@@ -136,10 +156,42 @@ describe("TopBar（规格 §6.1）", () => {
     expect(onOpenPalette).toHaveBeenCalledTimes(1);
   });
 
-  it("③ 顶栏 CSS 里没有动效声明（批 6 才加）", () => {
-    const banned = [/transition\s*:/, /animation\s*:/, /@keyframes/];
-    const hits = banned.filter((re) => re.test(CSS)).map(String);
-    expect(hits, `批 3 的顶栏 CSS 不得含动效（属批 6）：${hits.join(" / ")}`).toEqual([]);
+  /**
+   * G1 改判（R1.2 / §七 G1 / R4.2）：旧断言「顶栏 CSS 里没有动效声明」⇒「动效只许 token + 落点可被
+   * reduced-motion 覆盖」。**为什么不做计划 Task 14 的 `decls.length > 0`**：T12 的元素级回执
+   * （`motion.css:66-73` 的 `button:not(.ed-btn)`）已落在顶栏每个交互元素上（域 Tab 与两个动作按钮
+   * 都是裸 `<button>`）⇒ 顶栏再写一份 = R1.1 明禁的第二个真源（同 `motion.css:63` 对 `.ed-btn` 的论证）。
+   * 故：① 真写动效时时长/缓动只许 token；② `@keyframes` 仍禁（§8.2 桶边界）；③ **无条件** —— 顶栏的
+   * 交互元素必须留在那条回执的覆盖面内，且回执必须存在、声明时长、在那条唯一的 reduced-motion 名单里。
+   * 解禁新开的洞（本文件自写第二条 reduced-motion 块）一并封住。
+   */
+  it("③ 顶栏动效只许 token，且落点必须留在元素级回执的覆盖面内（改判自「一律禁止」）", () => {
+    const decls = motionDecls(CSS);
+    const times = rawTimes(decls);
+    const eases = rawEases(decls);
+    expect(times, `顶栏 CSS 的时长必须走 var(--ed-dur-*)，不得写裸 ms/s：${times.join(" / ")}`).toEqual([]);
+    expect(eases, `顶栏 CSS 的缓动必须走 var(--ed-ease*)，不得写裸曲线：${eases.join(" / ")}`).toEqual([]);
+    expect(CSS, "顶栏 CSS 出现 @keyframes（§8.2 桶边界：keyframes 只留 Loading/Skeleton/Probe）").not.toContain("@keyframes");
+    // 仪器自证（双跑）：反例各报 1 条、正例各报 0 条 —— 否则上面的「0 条」是正则坏了，不是「没犯规」
+    const bad = motionDecls(".a { transition: color 120ms ease-out; }");
+    const good = motionDecls(".a { transition: color var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)); }");
+    expect([rawTimes(bad), rawEases(bad)], "扫描器抓不到裸值动效 ⇒ 上面两条是空真").toEqual([bad, bad]);
+    expect([rawTimes(good), rawEases(good)], "token + 同值兜底的正例被判成犯规 ⇒ 上面两条会假红").toEqual([[], []]);
+    // ③a 覆盖面（类序**逐序数组相等**：带 `ed-btn` 会掉出那条回执，少一个 = 覆盖面缩水）
+    render(<TopBar {...base} />);
+    const classes = [...screen.getByTestId("topbar").querySelectorAll("button")].map((b) => b.className);
+    expect(
+      classes,
+      "顶栏按钮的类序变了：带 `ed-btn` ⇒ 掉出 `button:not(.ed-btn)` 的元素级回执（也就掉出 reduced-motion 名单）",
+    ).toEqual([...NAV_ENTRIES.map(() => "ed-topbar__tab"), "ed-topbar__action", "ed-topbar__action"]);
+    // ③b 真源侧：回执存在、声明了时长/缓动、且在**唯一**的 reduced-motion 名单里
+    const at = MOTION_CSS.indexOf("button:not(.ed-btn)");
+    expect(at, "motion.css 里找不到 `button:not(.ed-btn)`（顶栏元素级回执的真源）").toBeGreaterThan(-1);
+    expect(MOTION_CSS.slice(at, MOTION_CSS.indexOf("}", at)), "那条回执没有声明时长/缓动 ⇒ 顶栏的回执是空壳").toContain("transition-duration:");
+    const reducedAt = MOTION_CSS.indexOf("@media (prefers-reduced-motion");
+    expect(reducedAt, "motion.css 里找不到 reduced-motion 块").toBeGreaterThan(-1);
+    expect(MOTION_CSS.slice(reducedAt), "名单没覆盖 `button:not(.ed-btn)` ⇒ 顶栏在 reduced-motion 下照旧动").toContain("button:not(.ed-btn)");
+    expect(CSS, "TopBar.css 自写了 reduced-motion 块 ⇒ app/src 出现第二条（唯一块的真源在 motion.css）").not.toContain("@media (prefers-reduced-motion");
   });
 
   it("③ 高度消费 --ed-nav-h（不许再写 56）", () => {

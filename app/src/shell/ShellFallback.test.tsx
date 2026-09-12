@@ -29,6 +29,17 @@ import { ALL_ENTRIES } from "./navRegistry";
 /** `App.tsx` 的**只留代码**版本（剥块注释 + 整行 `//`；与 `TopBar.test.tsx:43` 同一口径） */
 const APP = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "App.tsx"), "utf8")
   .replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+/**
+ * G2 改判（T14）的**真源侧**只读件：`motion.css` 的唯一 reduced-motion 块。
+ * Why 要它：首访加载态的动效**不由行内 style 承担**，而由 `Loading` 原语的类承担 ⇒ 「行内只许 token」
+ * 这条只封住一条路，另一条路（自造一个没进名单的动效载体类）必须同时封。
+ */
+const MOTION_CSS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "ui", "primitives", "motion.css"), "utf8")
+  .replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "");
+const MOTION_REDUCED = MOTION_CSS.slice(MOTION_CSS.indexOf("@media (prefers-reduced-motion"));
+/** G2 改判的扫描口径：一条行内 `style` 里**没走 token** 的 `transition|animation` 声明（空数组 = 都走 token） */
+const inlineMotionViolations = (style: string): string[] =>
+  style.split(";").filter((d) => /(?:transition|animation)/.test(d) && !/var\(--ed-(?:dur|ease)/.test(d));
 /** 模拟懒 chunk 加载失败（渲染期抛错 ⇒ React 落到最近的上层边界）；抛错时 React 仍会 console.error ⇒ 抑制后还原 */
 function Boom(): never { throw new Error("模拟懒 chunk 加载失败"); }
 /**
@@ -55,12 +66,33 @@ function silenced(fn: () => void) {
 afterEach(cleanup);
 
 describe("首访加载态 ShellFallback（批 2 未做 #6）", () => {
-  it("渲染一行文字且是 role=status；内联样式里没有动效（动效属批 6）", () => {
+  /**
+   * G2 改判（R1.2 / §七 G2 / R4.2）：旧断言「内联样式里**没有**动效」⇒「内联动效**只许 token**」。
+   * 🔴 旧口径在本批已是**空真**：批 4 T9 把自足内联 `<div style=…>` 整块删除、改用 L1 原语
+   * （`Loading`）⇒ 该元素**根本没有 `style` 属性**，`?? ""` 上的 `not.toMatch` 恒成立（T14 实测
+   * `getAttribute("style") === null`）。⇒ 新口径必须自己带**无条件的那一半**，否则改判只是换个写法空真：
+   * ① 内联动效若回归，时长/缓动只许 `var(--ed-dur-*)` / `var(--ed-ease*)`（+ 仪器双跑自证）；
+   * ② 动效**必须由类承担**，且那些基类在 `motion.css` 唯一的 reduced-motion 名单里（行内值绕不过
+   *    名单，类才走得到）。判**基类**：修饰类与基类同在一个元素上、已被同一条规则覆盖（逐字枚举
+   *    修饰类会假红 —— 与 `motion-coverage.test.ts` 的口径一致）。
+   */
+  it("渲染一行文字且是 role=status；内联动效只许 token、动效一律走类（改判自「禁内联动效」）", () => {
     render(<ShellFallback />);
     const el = screen.getByRole("status");
     expect(el.textContent).toBe("正在载入…");
     expect(el.getAttribute("data-testid")).toBe("shell-fallback");
-    expect(el.getAttribute("style") ?? "").not.toMatch(/transition|animation/);
+    const bad = inlineMotionViolations(el.getAttribute("style") ?? "");
+    expect(bad, `首访加载态的内联动效只许 var(--ed-dur-*) / var(--ed-ease*)：${bad.join(" / ")}`).toEqual([]);
+    // 仪器自证（双跑）：反例恰 1 条（**逐序数组相等**）、正例 0 条 —— 否则「0 条」是提取器坏了
+    expect(inlineMotionViolations("transition: opacity 150ms"), "提取器抓不到裸值内联动效 ⇒ 上面是空真").toEqual([
+      "transition: opacity 150ms",
+    ]);
+    expect(inlineMotionViolations("transition: opacity var(--ed-dur-toast-in, 180ms)"), "token 正例被判成犯规 ⇒ 上面会假红").toEqual([]);
+    // ② 无条件的那一半：动效载体是类，且基类在唯一的 reduced-motion 名单里
+    const bases = [...new Set((el.className || "").split(/\s+/).filter(Boolean).map((c) => c.split("--")[0]))];
+    expect(bases.length, "加载态根元素一个类都没有 ⇒ 下面的名单判据是空真").toBeGreaterThan(0);
+    const uncovered = bases.filter((c) => !new RegExp(`\\.${c}(?![\\w-])`).test(MOTION_REDUCED));
+    expect(uncovered, `这些基类不在 motion.css 的 reduced-motion 名单里 ⇒ 首访加载态在 reduced-motion 下照旧动：${uncovered.join(" / ")}`).toEqual([]);
     expect(screen.queryByRole("alert"), "加载态不是错误态").toBeNull();
   });
 });

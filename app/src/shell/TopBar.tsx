@@ -19,7 +19,9 @@
  * 边界：本组件**不**知道采集状态、也不渲染 AI toast —— 采集徽标/对话面板入口经 `right` 插槽注入，
  *   AI toast 不在顶栏、也不由本组件渲染：它是 App.tsx 的 `MainShell` 最外层一个 fixed 覆盖层
  *   （控制方裁决 A3：它是 1024 溢出的唯一主因，单项 373.75 px = 视口的 36.5%），见 App.tsx 该处注释。
- *   批 3 不加任何动效（`TopBar.css` 里禁止 transition/animation，由本文件的测试断言）。
+ *   批 3 不加任何动效；批 6 T14 起 `TopBar.css` 的动效禁令**改判为条件式**（只许 token + 落点必须
+ *   留在 `motion.css` 元素级回执的覆盖面内；`@keyframes` 与第二条 reduced-motion 块仍禁），
+ *   由本文件的同名测试断言（T14 一并更正这条过时标签）。
  */
 import type { ReactNode } from "react";
 import { Icon, type IconName } from "../ui/icons";

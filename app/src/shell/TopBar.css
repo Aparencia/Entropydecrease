@@ -2,8 +2,14 @@
  * TopBar.css — A′ 顶栏（规格 §6.1）。批 3 只做静态布局与两档溢出。
  *
  * Why 需要这个文件（现网 App.tsx 的顶栏是内联 style）：两档溢出是**媒体查询**的活，内联 style
- *   表达不了。动效（墨渍 hover / 按下微陷 / 焦点环落纸）属批 6 ⇒ 本文件**不得**出现
- *   transition / animation / @keyframes（TopBar.test.tsx 的静态守卫逐条扫）。
+ *   表达不了。动效（墨渍 hover / 按下微陷 / 焦点环落纸）批 3 时**属批 6**；批 6 T14 起按 R1.2 的
+ *   到期改判**解禁为条件式** —— 本文件**可以**写 transition / animation，但三个条件必须同时成立：
+ *   ① 时长与缓动只许 `var(--ed-dur-*)` / `var(--ed-ease*)`（裸 ms/s 与裸曲线一律红）；
+ *   ② 落点必须落在 `motion.css` 的**元素级回执**覆盖面内（顶栏交互元素全是裸 `<button>` ⇒ 由
+ *      `button:not(.ed-btn)` 承担）⇒ 本文件**不自写**第二条 = 不造第二个真源（R1.1）；
+ *   ③ **仍不得**出现 `@keyframes`（§8.2 桶边界：keyframes 只留 Loading/Skeleton/Probe），也**不得**
+ *      自写 `@media (prefers-reduced-motion…)`（`app/src` 内唯一那条块在 `motion.css`）。
+ *   判据 = `TopBar.test.tsx` 的 ③ 条（token 双向 + 类序 + 回执真源 + 第二条块）。
  *
  * 高度消费 --ed-nav-h（批 3 T2 的 token 真源）；三处档位数值消费 `shell/breakpoints.ts`
  *   （nav / navFull / navActionsFull），但 CSS 媒体查询**读不到 TS 常量** ⇒ 两侧必须同值，
