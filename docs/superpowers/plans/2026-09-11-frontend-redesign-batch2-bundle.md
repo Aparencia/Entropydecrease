@@ -1105,7 +1105,7 @@ git commit --only -m "test(build): guard reserved gsap vendor chunk slot" -- app
 - Create: `.superpowers/sdd/2026-09-11-frontend-redesign-batch2-bundle/tmp/build-task6.txt`（不入库）
 
 > **2026-09-12 更正（Task 12 回写，原文一律保留）**：本任务的 Files 清单**漏了一项必须的改动** —— `docs/standards/line-limit-exemptions.md`。`App.tsx` 实测 **439 → 519 行**（仍落 301–600 档），登记值必须由 `node scripts/line-limits.mjs --write` 刷新，否则 `line-limits --full` 的 (e)「登记值 == 实测值」当场变红。**Task 8 的 Files 清单有同一处遗漏**。
-> **2026-09-12 更正（Task 12 回写）**：本任务全篇写的「**9 页**按页 `lazy`」是**计划态**，**交付态是 8 懒 + 课堂页静态**（控制方 2026-09-12 裁决 2 末条：课堂是默认页，懒它等于首屏必拉一次动态 chunk，且该 chunk 首屏即被抓取却被记作 lazy ⇒ **首屏读数被低估 20.04 kB**）。受影响的行：**L1101**（预期「页面静态 import = 9」）、**L1104**（Step 3 标题）、**L1109**（注释「9 个页面」）、**L1114**（`ClassroomPage` 不在交付的 lazy 清单里）、**L1236**（提交 subject 实为 `perf(app): lazy-load eight pages on first visit`，见 `62c4c369`）、**L1243 V1**（实测 **8**）、**L1244 V2**（实测 **1**，不是 0）。
+> **2026-09-12 更正（Task 12 回写）**：本任务全篇写的「**9 页**按页 `lazy`」是**计划态**，**交付态是 8 懒 + 课堂页静态**（控制方 2026-09-12 裁决 2 末条：课堂是默认页，懒它等于首屏必拉一次动态 chunk，且该 chunk 首屏即被抓取却被记作 lazy ⇒ **首屏读数被低估 20.04 kB**）。受影响处（按**步骤与原文**定位，**刻意不写行号** —— 本注自身已使用其下各行整体下移）：**Step 2 的预期行**（「页面静态 import = 9」）· **Step 3 标题**（「把 9 个静态 import 换成 `lazy` 工厂」）· **Step 3 的注释**（「9 个页面从静态 import 改为按页动态 import」）· **Step 3 代码块里的 `const ClassroomPage = lazy(…)` 一行**（课堂页交付时**仍是静态 import**）· **Step 8 的提交命令**（落地 subject 是 `perf(app): lazy-load eight pages on first visit`，见 `62c4c369`）· **V1**（实测 **8**）· **V2**（实测 **1**，不是 0）。
 
 **Interfaces:**
 - Consumes: Task 4 的 vendor chunk 拓扑
@@ -1361,7 +1361,8 @@ git commit --only -m "perf(app): lazy-load capture float and overlay panels" -- 
 ```
 
 > **2026-09-12 更正（Task 12 回写）**：上面这个 commit subject **53 字符，超 `AGENTS.md` §5 的 ≤50 字上限**。交付时改用 **42 字符**的 `perf(app): lazy-load window variant panels`（`63536018`，同一动作、同一显式路径）。
-> ⚠️ **Task 12 逐条普查（码点计数，脚本 `tmp/task12/subject-len.mjs`）发现：计划里超限的提交命令不是 1 处而是 3 处** —— 本行（53）· **Task 1 步骤（L400，51）** · **Task 2 Step 5（L582，51）**；后两条**被逐字照抄落地**（`e46e0e82` / `f0592654`）。**根因是这条规则没有任何机器门禁**：`commitlint.config.js` 沿用 `@commitlint/config-conventional` 的 `header-max-length = 100`，**未覆盖为 50**，故 51 字符的提交**能通过 commit-msg 钩子**（已实测：两条确实入库）。⇒ 后续批次派发词里的提交命令**必须人工数字符数**（或另立一条 `header-max-length` 规则 —— 登记批 8）。
+> ⚠️ **Task 12 逐条普查（码点计数，脚本 `tmp/task12/subject-len.mjs`）发现：计划里超限的提交命令不是 1 处而是 3 处** —— 本行（53）· **Task 1 的 Step 7 提交命令（51）** · **Task 2 的 Step 5 提交命令（51）**；后两条**被逐字照抄落地**（`e46e0e82` / `f0592654`）。**根因是这条规则没有任何机器门禁**：`commitlint.config.js` 沿用 `@commitlint/config-conventional` 的 `header-max-length = 100`，**未覆盖为 50**，故 51 字符的提交**能通过 commit-msg 钩子**（已实测：两条确实入库）。⇒ 后续批次派发词里的提交命令**必须人工数字符数**（或另立一条 `header-max-length` 规则 —— 登记批 8）。
+> 📌 同一普查还发现本任务 **V4** 的 vitest 期望 `124 / 1124` 过期（见 Task 6 Files 注与 Task 10 注）：批 2 交付态是 **125 / 1233**。
 
 **Verification**
 
@@ -1469,7 +1470,7 @@ git commit --only -m "perf(app): mount conversation dock on first open" -- app/s
 > **为什么是「审计型」任务**：控制方交办要求「清理测量揭示的重复/重依赖」。计划者**已经测过**，结论是**四条候选里没有一条同时满足「只减尺寸 ∧ 零行为变化」**（见下表）。本任务的价值不是「动手删」，而是**在分裂之后重测一遍**（分裂改变了什么在首屏、什么在懒 chunk），把结论固化成 Task 11 瓶颈清单的一节，并**把每条登记给正确的批次**。
 > ⚠️ **纪律**：本任务**默认产物是 0 个代码改动**。若某条重测后**过闸**（同时满足「只减尺寸」与「零行为变化、零测试改动」），实施者**必须先 STOP 报控制方**，取得授权后再作为独立子步执行并单独提交。**不得自行扩大范围。**
 
-> **2026-09-12 更正（Task 12 回写，原文保留）**：计数写错了 —— 上文与 **L1438**（`Produces: … 四行结论表`）都说「**四**条候选」，而 Step 1 实际逐条测的是 **五**条：(1) `katex` 双版本 · (2) `structuredBlocks.ts` 孤儿 · (3) `@codemirror/lang-markdown` 传递链 · (4) `basicSetup` 附带件 · (5) 59 个 KaTeX 字体。交付态是**五行结论表**（`tmp/dep-audit.md`），Task 11 的瓶颈清单逐条引用了全部五条，**无一条过「size-only ∧ behavior-neutral」双闸**。
+> **2026-09-12 更正（Task 12 回写，原文保留）**：计数写错了 —— 上文与本任务 **§Interfaces 的 `Produces:` 行**（「四行结论表」）都说「**四**条候选」，而 Step 1 实际逐条测的是 **五**条：(1) `katex` 双版本 · (2) `structuredBlocks.ts` 孤儿 · (3) `@codemirror/lang-markdown` 传递链 · (4) `basicSetup` 附带件 · (5) 59 个 KaTeX 字体。交付态是**五行结论表**（`tmp/dep-audit.md`），Task 11 的瓶颈清单逐条引用了全部五条，**无一条过「size-only ∧ behavior-neutral」双闸**。
 
 **Files:**
 - Create: `.superpowers/sdd/2026-09-11-frontend-redesign-batch2-bundle/tmp/dep-audit.md`（不入库）
@@ -1896,7 +1897,7 @@ git commit --only -m "docs(batch2): close bundle governance batch" -- docs/super
 | # | 落点 | 更正内容 |
 |---|---|---|
 | 1 | Task 6 Files（+ Task 8 Files） | Files 清单**漏 `docs/standards/line-limit-exemptions.md`** 刷新 |
-| 2 | Task 6 Files / L1101 / L1104 / L1109 / L1114 / L1236 / V1 / V2 | 「9 页 lazy」→ 交付态 **8 懒 + 课堂静态**；提交 subject 实为 `eight pages`；V1=8、V2=1 |
+| 2 | Task 6 Files / Step 2 预期 / Step 3 标题+注释+代码 / Step 8 提交 / V1 / V2 | 「9 页 lazy」→ 交付态 **8 懒 + 课堂静态**；提交 subject 实为 `eight pages`；V1=8、V2=1 |
 | 3 | Task 6 Verification 注 | vitest 基线 `124/1124` → 交付态 **125/1233** |
 | 4 | Task 7 Step 5 注 | 计划给的 commit subject **53 字符超 50 限**，实际用 42 字符 |
 | 5 | Task 7「窗口变体首屏」段 | 「入口 + **零** vendor」**为假**，实测 **入口 + 4 vendor = 97.29 / 94.19 kB**；`< 60 kB` **结构性不可达** |
