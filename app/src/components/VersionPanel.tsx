@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiUsageRecord, DiffOp, NoteVersion, NoteVersionSource } from "../types";
 import RefineWorkbench from "./RefineWorkbench";
+import { ConfirmDialog } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "4px 8px", cursor: "pointer", fontSize: 11, borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" };
 
@@ -44,6 +45,9 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
   const [v2Id, setV2Id] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
   const [compareData, setCompareData] = useState<{ ruleMd: string; refinedMd: string; sessionId: number } | null>(null);
+  // 批 4 T11：回滚确认（原 `window.confirm` 一行 → 受控弹层 + 待确认版本）
+  const [pendingRollback, setPendingRollback] = useState<NoteVersion | null>(null);
+  const [rollingBack, setRollingBack] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -75,17 +79,32 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
       .catch(() => setDiff(null));
   }, [open, v1Id, v2Id, noteId]);
 
-  const rollback = async (versionId: number) => {
+  /**
+   * 回滚到某一版（批 4 T11：`window.confirm` → `ConfirmDialog`）。
+   *
+   * Why 不再用 `window.confirm`：规格 §5.1 —— WebView2 下可能**静默返回 false**（点「回滚到此处」
+   * 没反应）；且它是 noteId 维度的一次真实写入，值得一个能列明「新版本 / 历史链保留」的框（§5.3）。
+   * Why 保留 `versions.find` 这一步：原文 `if (!v) return` 是**点击时**的守卫（列表可能已刷新）——
+   * 移到 `openRollback` 里逐字等价；`runRollback` 里 `invoke` 实参与 `setMsg`/`onChanged`/`load`
+   * 的顺序与迁移前一行不差。
+   */
+  const openRollback = (versionId: number) => {
     const v = versions.find((x) => x.id === versionId);
     if (!v) return;
-    if (!window.confirm(`回滚到「${SOURCE_BADGE[v.source].label}」版本（${fmtTime(v.createdAt)}）？将创建新版本，历史链保留。`)) return;
+    setPendingRollback(v);
+  };
+
+  const runRollback = async (v: NoteVersion) => {
+    setRollingBack(true);
     try {
-      await invoke<{ id: number }>("note_versions_rollback", { noteId, targetVersionId: versionId });
+      await invoke<{ id: number }>("note_versions_rollback", { noteId, targetVersionId: v.id });
       setMsg("已回滚（新版本 user-edit，历史链未破坏）");
       onChanged?.();
       await load();
     } catch (e) {
       setMsg(`回滚失败：${e}`);
+    } finally {
+      setRollingBack(false);
     }
   };
 
@@ -131,7 +150,7 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
                     对比
                   </button>
                   {i !== versions.length - 1 && (
-                    <button style={{ ...btn, color: "#b45309" }} onClick={() => void rollback(v.id)}>
+                    <button style={{ ...btn, color: "#b45309" }} onClick={() => openRollback(v.id)}>
                       回滚到此处
                     </button>
                   )}
@@ -186,6 +205,21 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
           onClose={() => setCompareData(null)}
         />
       )}
+
+      {/* 回滚确认：原文案「回滚到「…」版本（…）？将创建新版本，历史链保留。」逐字拆为
+          标题（问句）+ impacts（两条说明子句，第二条为保留项）*/}
+      <ConfirmDialog
+        open={pendingRollback !== null}
+        title={pendingRollback
+          ? `回滚到「${SOURCE_BADGE[pendingRollback.source].label}」版本（${fmtTime(pendingRollback.createdAt)}）？`
+          : ""}
+        impacts={[{ text: "将创建新版本" }, { text: "历史链保留", keep: true }]}
+        confirmLabel="回滚"
+        busy={rollingBack}
+        onConfirm={() => { const v = pendingRollback; setPendingRollback(null); if (v) void runRollback(v); }}
+        onCancel={() => setPendingRollback(null)}
+        testId="version-rollback-confirm"
+      />
     </div>
   );
 }

@@ -15,6 +15,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import type { Note, NoteFilterResult, TextFilterDecision, TextFilterReview, TextFilterStatus } from "../types";
 import { escapeHtml, renderTimestampAnchors } from "../utils/html";
 import AiRefineCard from "./AiRefineCard";
+import { ConfirmDialog } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 
@@ -94,6 +95,8 @@ export default function NotePreviewView({
   const [baseUrl, setBaseUrl] = useState("");
   // v0.10.1：data_dir 基准（`session-images/...` 前缀引用的解析根）
   const [dataDir, setDataDir] = useState("");
+  // 批 4 T11：AI 复核的云端授权确认（原 `window.confirm` 一行 → 受控弹层）
+  const [reviewOpen, setReviewOpen] = useState(false);
   // 2026-08-21：AI 精修采纳后预览联动——采纳成功 → 拉取笔记（精修版）就地展示，
   // 解决「精修成功但预览无变化、看起来没被使用」的体验缺口（原 onApplied 未接线）
   const [adopted, setAdopted] = useState<Note | null>(null);
@@ -148,17 +151,28 @@ export default function NotePreviewView({
   };
 
   /** AI 复核（REQ-085）：授权确认 → 云端三态判定 → 就地更新预览 */
-  const aiReview = async () => {
+  const aiReview = () => {
     const enabled = aiStatus?.enabled;
     if (!enabled) {
       setStatus("AI 复核未启用（需配置 DEEPSEEK_API_KEY 与 AI_TEXT_FILTER_ENABLED）");
       return;
     }
-    const count = preview?.filtered.length ?? 0;
-    if (!window.confirm(`将发送 ${count} 段边界文本至 DeepSeek（模型 ${aiStatus?.model}）进行删除/保留/合并判定。是否继续？`)) {
-      setStatus("已取消（预览保持纯规则结果）");
-      return;
-    }
+    setReviewOpen(true);
+  };
+
+  /**
+   * 授权被拒（`ConfirmDialog` 的取消 / ESC / 点遮罩）。
+   * Why 单独一条：原 `window.confirm` 返回 false 的那条分支**有副作用** ——
+   * `setStatus("已取消（预览保持纯规则结果）")`；迁成受控弹层后这条分支只在 onCancel 触发，
+   * 若不显式接回来就会静默丢掉那句用户可见反馈（「等价性」最容易漏的一处）。
+   */
+  const cancelAiReview = () => {
+    setReviewOpen(false);
+    setStatus("已取消（预览保持纯规则结果）");
+  };
+
+  /** 授权通过：云端三态判定 → 就地更新预览（`invoke` 实参与迁移前逐字相同） */
+  const runAiReview = async () => {
     setAiBusy(true);
     setStatus("");
     try {
@@ -307,6 +321,20 @@ export default function NotePreviewView({
           )}
         </div>
       )}
+
+      {/* 云端授权确认（REQ-085 授权默认关）：原文案「将发送 N 段…进行删除/保留/合并判定。是否继续？」
+          逐字拆为标题（问句）+ message（首句）+ impacts；取消路径的 `setStatus` 在 cancelAiReview 里 */}
+      <ConfirmDialog
+        open={reviewOpen}
+        title="是否继续？"
+        message={`将发送 ${preview?.filtered.length ?? 0} 段边界文本至 DeepSeek（模型 ${aiStatus?.model}）进行删除/保留/合并判定。`}
+        impacts={[{ text: "进行删除/保留/合并判定" }, { text: "纯规则结果原样输出", keep: true }]}
+        confirmLabel="继续"
+        busy={aiBusy}
+        onConfirm={() => { setReviewOpen(false); void runAiReview(); }}
+        onCancel={cancelAiReview}
+        testId="ai-review-confirm"
+      />
     </div>
   );
 }

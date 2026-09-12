@@ -16,6 +16,7 @@ import type { Fragment, Note, NoteGroup } from "../types";
 // REQ-316（批 7）：碎片删除/升笔记返回契约（源空组清理留痕数据源）
 import type { DeleteFragmentResult, PromoteNoteResult } from "../types/notes";
 import { fragmentPreview, promoteTitleFor } from "../utils/inbox";
+import { ConfirmDialog } from "../ui/primitives";
 
 interface Props {
   /** 列宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 320=历史值） */
@@ -80,6 +81,8 @@ export default function FeedFragmentList({ width = 320, onChanged, onPromoted, o
   // 归组下拉选项（升笔记时惰性加载容器组）
   const [containerGroups, setContainerGroups] = useState<NoteGroup[] | null>(null);
   const [busy, setBusy] = useState(false);
+  /** 待确认删除的碎片（批 4 T11）：`window.confirm` 的同步返回值 → 受控弹层 + 这份待确认态 */
+  const [pendingDelete, setPendingDelete] = useState<Fragment | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -158,9 +161,14 @@ export default function FeedFragmentList({ width = 320, onChanged, onPromoted, o
     }
   };
 
-  // 🗑 删除（二次确认；绑定卡保留）
+  /**
+   * 🗑 删除（二次确认；绑定卡保留）。
+   *
+   * Why 确认移到 `ConfirmDialog`（批 4 T11）：规格 §5.1 —— `window.confirm` 在 WebView2 下可能**静默
+   * 返回 false**（真机表现为"点了删除没反应"，且不可观测）；原一行命令式确认的字面量逐字拆进弹层
+   * （title 首行 + message 碎片预览 + impacts 保留项），`invoke` 实参与 `busy` 时序与迁移前相同。
+   */
   const runDelete = async (f: Fragment) => {
-    if (!window.confirm(`删除这条碎片？\n「${f.text.slice(0, 30)}…」\n（绑定的闪卡会保留）`)) return;
     setBusy(true);
     try {
       const r = await invoke<DeleteFragmentResult>("delete_fragment", { fragmentId: f.id });
@@ -217,7 +225,7 @@ export default function FeedFragmentList({ width = 320, onChanged, onPromoted, o
                 ⚙ 升为闪卡
               </button>
               <button
-                onClick={() => void runDelete(f)}
+                onClick={() => setPendingDelete(f)}
                 disabled={busy}
                 style={{ fontSize: 10, cursor: "pointer", padding: "1px 8px", borderRadius: 4, border: "1px solid #fecaca", background: "#fff", color: "#dc2626" }}
                 title="删除碎片（绑定卡保留）"
@@ -272,6 +280,18 @@ export default function FeedFragmentList({ width = 320, onChanged, onPromoted, o
 
         {err && <p data-testid="inbox-error" style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>{err}</p>}
       </div>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="删除这条碎片？"
+        message={pendingDelete ? `「${pendingDelete.text.slice(0, 30)}…」` : undefined}
+        impacts={[{ text: "绑定的闪卡会保留", keep: true }]}
+        confirmLabel="删除"
+        busy={busy}
+        onConfirm={() => { const f = pendingDelete; setPendingDelete(null); if (f) void runDelete(f); }}
+        onCancel={() => setPendingDelete(null)}
+        testId="fragment-delete-confirm"
+      />
     </div>
   );
 }

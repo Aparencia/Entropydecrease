@@ -11,6 +11,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { ConfirmDialog } from "../ui/primitives";
 
 interface BackupSummary {
   archivePath: string;
@@ -30,6 +31,8 @@ export default function BackupPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  /** 待确认恢复的备份路径（批 4 T11：`window.confirm` → `ConfirmDialog`，见 `pickRestore` 的 Why） */
+  const [pendingRestore, setPendingRestore] = useState<string | null>(null);
 
   const createBackup = async () => {
     setBusy(true);
@@ -45,19 +48,30 @@ export default function BackupPanel() {
     }
   };
 
-  const restore = async () => {
+  /**
+   * 选文件 → 置待确认态（批 4 T11）。
+   *
+   * Why 不再是 `window.confirm`：规格 §5.1 —— `window.confirm` 在 WebView2 下**可能静默返回 false**，
+   * 而这里是「覆盖当前全部数据」的高危不可逆动作（§5.3），静默 false 会表现为"点了没反应"。
+   * Why 拆两段（选文件 / 真恢复）：`window.confirm` 是同步的一行，`ConfirmDialog` 是受控弹层 ——
+   * 选中的路径必须留在 state 里活到用户点确认；`runRestore` 里的 `busy` 置位/清理与 `invoke` 实参
+   * 与迁移前**逐字相同**，只是触发点从 confirm 的返回值变成确认按钮。
+   */
+  const pickRestore = async () => {
     // 文件选择（zip）
     const selected = await open({ multiple: false, filters: [{ name: "备份文件", extensions: ["zip"] }] });
     if (typeof selected !== "string" || !selected) return;
     // 显式确认（恢复覆盖当前数据——TRUST-1 高影响操作）
-    if (!window.confirm("恢复将覆盖当前全部数据（现有数据库改名 .pre-restore 兜底）。\n继续？")) {
-      return;
-    }
+    setPendingRestore(selected);
+  };
+
+  /** 真正执行恢复（确认按钮触发；`archivePath` 即原来那个 `selected`） */
+  const runRestore = async (archivePath: string) => {
     setBusy(true);
     setError("");
     setInfo("");
     try {
-      const n = await invoke<number>("backup_restore", { archivePath: selected });
+      const n = await invoke<number>("backup_restore", { archivePath });
       setInfo(`恢复完成（${n} 个文件）。请重启应用使数据生效。`);
     } catch (e) {
       setError(`恢复失败: ${e}`);
@@ -79,7 +93,7 @@ export default function BackupPanel() {
           {busy ? "处理中…" : "创建备份"}
         </button>
         <button
-          onClick={() => void restore()}
+          onClick={() => void pickRestore()}
           disabled={busy}
           style={{ padding: "3px 10px", fontSize: 11, border: "1px solid #fca5a5", borderRadius: 6, background: "#fff", color: "#dc2626", cursor: busy ? "wait" : "pointer" }}
           title="从备份 zip 恢复（覆盖当前数据，需重启生效）"
@@ -92,6 +106,25 @@ export default function BackupPanel() {
       <div style={{ fontSize: 10, color: "#9ca3af" }}>
         备份保存在应用数据目录 backups/（本地优先：数据不出本机）；如需异地保存请自行拷贝备份文件
       </div>
+
+      {/* 高危确认（§5.3）：原文案「恢复将覆盖当前全部数据（现有数据库改名 .pre-restore 兜底）。\n继续？」
+          逐字拆为 title（首句）+ impacts（括号内的保留项）+ 确认按钮「继续」 */}
+      <ConfirmDialog
+        open={pendingRestore !== null}
+        title="恢复将覆盖当前全部数据"
+        impacts={[
+          { text: "现有数据库改名 .pre-restore 兜底", keep: true },
+        ]}
+        confirmLabel="继续"
+        busy={busy}
+        onConfirm={() => {
+          const path = pendingRestore;
+          setPendingRestore(null);
+          if (path !== null) void runRestore(path);
+        }}
+        onCancel={() => setPendingRestore(null)}
+        testId="backup-restore-confirm"
+      />
     </div>
   );
 }

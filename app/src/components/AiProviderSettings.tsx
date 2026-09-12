@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiProviderInput, AiProviderView } from "../types";
+import { ConfirmDialog } from "../ui/primitives";
 
 const btn: React.CSSProperties = {
   padding: "5px 10px",
@@ -51,6 +52,8 @@ export default function AiProviderSettings() {
   const [keyInput, setKeyInput] = useState("");
   // I-3：预设双源——后端 ai_provider_presets 优先，失败回退内置常量
   const [presetOptions, setPresetOptions] = useState(PRESET_OPTIONS);
+  /** 批 4 T11：待确认的危险动作（删 Provider / 清密钥）——`window.confirm` 的同步返回值 → 受控弹层 */
+  const [pending, setPending] = useState<{ kind: "remove" | "clearKey"; id: string } | null>(null);
 
   useEffect(() => {
     void load();
@@ -91,8 +94,7 @@ export default function AiProviderSettings() {
     });
 
   const removeProvider = (id: string) => {
-    if (!window.confirm("删除后该 Provider 配置与密钥将永久清除，且不可恢复。确定删除？")) return;
-    run(() => invoke("ai_provider_remove", { id }), "已删除");
+    setPending({ kind: "remove", id });
   };
 
   const setDefault = (id: string) =>
@@ -117,8 +119,27 @@ export default function AiProviderSettings() {
     );
 
   const clearKey = (id: string) => {
-    if (!window.confirm("清除后密钥不可恢复（需重新输入）。确定清除？")) return;
-    run(() => invoke("ai_provider_clear_key", { id }), "密钥已清除");
+    setPending({ kind: "clearKey", id });
+  };
+
+  /**
+   * 确认后执行（批 4 T11：两处 `window.confirm` → 一个受控 `ConfirmDialog`）。
+   *
+   * Why 两处合成一个 `pending`：两个动作**确认后的分支**只差 invoke 命令与成功文案，
+   *   而 `window.confirm` 的同步返回值无法在受控弹层里表达 ⇒ 待确认的「动作种类 + 目标 id」
+   *   必须进 state；`kind` 判别式让两条路径共用一个弹层、一份 `busy` 门。
+   * Why 不再用 `window.confirm`：规格 §5.1 —— WebView2 下可能**静默返回 false**（点删除没反应），
+   *   且 §5.3 要求高危不可逆动作在框内列明级联影响与保留项。
+   * Why 先 `setPending(null)` 再执行：与原文「confirm 返回 true 后立刻往下走」同序 ——
+   *   弹层进入退场相位（那 160ms 内按钮由 `ConfirmDialog` 置为失活），动作只可能被触发一次。
+   * 文案逐字拆解见渲染处：question 句 → title，说明句 → message，其余 → impacts。
+   */
+  const runPending = () => {
+    const p = pending;
+    setPending(null);
+    if (p === null) return;
+    if (p.kind === "remove") run(() => invoke("ai_provider_remove", { id: p.id }), "已删除");
+    else run(() => invoke("ai_provider_clear_key", { id: p.id }), "密钥已清除");
   };
 
   return (
@@ -153,12 +174,12 @@ export default function AiProviderSettings() {
             {!p.isDefault && <button style={btn} onClick={() => void setDefault(p.id)} disabled={busy}>设为默认</button>}
             <button style={btn} onClick={() => void toggleEnabled(p)} disabled={busy}>{p.enabled ? "禁用" : "启用"}</button>
             {p.hasKey ? (
-              <button style={btn} onClick={() => void clearKey(p.id)} disabled={busy}>清除密钥</button>
+              <button style={btn} onClick={() => clearKey(p.id)} disabled={busy}>清除密钥</button>
             ) : (
               <button style={btn} onClick={() => { setKeyInputId(p.id); setKeyInput(""); }} disabled={busy}>配置密钥</button>
             )}
             {!p.isDefault && (
-              <button style={{ ...btn, color: "#dc2626" }} onClick={() => void removeProvider(p.id)} disabled={busy}>删除</button>
+              <button style={{ ...btn, color: "#dc2626" }} onClick={() => removeProvider(p.id)} disabled={busy}>删除</button>
             )}
           </div>
           {keyInputId === p.id && (
@@ -229,6 +250,23 @@ export default function AiProviderSettings() {
           {msg.text}
         </div>
       )}
+
+      {/* 危险动作确认（§5.3）：原文两处 `window.confirm` 的文案逐字拆为 title（问句）/ message / impacts */}
+      <ConfirmDialog
+        open={pending !== null}
+        title={pending?.kind === "clearKey" ? "确定清除？" : "确定删除？"}
+        message={pending?.kind === "clearKey"
+          ? "清除后密钥不可恢复（需重新输入）。"
+          : "删除后该 Provider 配置与密钥将永久清除，且不可恢复。"}
+        impacts={pending?.kind === "clearKey"
+          ? [{ text: "端点与模型列表保留", keep: true }]
+          : [{ text: "Provider 配置与密钥将永久清除" }, { text: "其它 Provider 不受影响", keep: true }]}
+        confirmLabel={pending?.kind === "clearKey" ? "清除" : "删除"}
+        busy={busy}
+        onConfirm={runPending}
+        onCancel={() => setPending(null)}
+        testId="ai-provider-danger-confirm"
+      />
     </div>
   );
 }

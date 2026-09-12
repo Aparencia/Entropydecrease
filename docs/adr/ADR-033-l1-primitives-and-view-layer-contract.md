@@ -38,7 +38,7 @@ ADR-032 交付了 token 层（色阶 / 字阶 / z-index 标尺 / 图标），但
 | 8 | `Loading` / `Skeleton` / `Probe` | `Loading.tsx` 105 · `Loading.css` 79 · `Loading.test.tsx` 238 | 85 处/30 文件的手写灰字，全站 0 骨架屏 |
 | 9 | `StatusLine` | `StatusLine.tsx` 94 · `StatusLine.css` 42 · `StatusLine.test.tsx` 267 | 196 处/76 文件，三种红并存，错误常在列表最底部 |
 | — | 共享内核 | `usePresence.ts` 200 · `usePresence.test.tsx` 282 · `usePresence.node.test.ts` 71 · `useFocusTrap.ts` 122 · `useFocusTrap.test.tsx` 236 · `ime.ts` 18 · `ime.test.ts` 32 | 卸载时机 / 焦点陷阱 / IME 组合态 |
-| — | 接缝与守卫 | `motion.css` 74 · `index.ts` 45 · `style-seams.test.ts` 271 · `style-contract.test.ts` 233 · `motion-coverage.test.ts` 147 | 动效变量与 reduced-motion 块 · 导出面 · 机器判据见 `style-seams` / `style-contract` / `motion-coverage` 三个测试文件 |
+| — | 接缝与守卫 | `motion.css` 74 · `index.ts` 45 · `style-seams.test.ts` 287 · `style-contract.test.ts` 233 · `motion-coverage.test.ts` 147 | 动效变量与 reduced-motion 块 · 导出面 · 机器判据见 `style-seams` / `style-contract` / `motion-coverage` 三个测试文件 |
 <!-- line-count-src: files=app/src/ui/primitives/motion.css,app/src/ui/primitives/index.ts,app/src/ui/primitives/style-seams.test.ts,app/src/ui/primitives/style-contract.test.ts,app/src/ui/primitives/motion-coverage.test.ts caliber=countLines@scripts/line-limits.mjs authority=HEAD-remeasurement -->
 
 > **行数口径（唯一有效）**：`countLines()`，即 `[System.IO.File]::ReadAllLines(path, UTF8).Count` —— **含空行**的全部行数（禁用 `Get-Content` / `Measure-Object -Line` / 数 `0x0A` 字节）。
@@ -228,6 +228,14 @@ z-index 的迁移纪律（0-A 交接第 3 条）：**必须按叠放段整段推
      `RouteInfoPopover → GroupDeleteConfirm/ModelCardCreateDialog`）⇒ 按 B6 阈值「≥3 共用 ⇒ 改原语」加
      `ConfirmDialogProps.tier?: ModalTier`（默认 `"modal"`）并**透传给 `Modal`**；**不新增档位**
      （`ModalTier` 仍两档 ⇒ `style-contract` 的全枚举表不动）。判据 = `ConfirmDialog.tier.test.tsx`（7 条）。
+     ⚠️ **依据更正（批 4 T11，2026-09-12；上一段那半句「按 B6 阈值 ≥3」原文保留，但不再作为依据）**：
+     那半句**是错的** —— 上面那三对「结构性嵌套」全是**自绘弹层**、**不含 `<ConfirmDialog>`**；实测
+     「弹层内再弹的 `ConfirmDialog` 消费者」= **0 个**（T11 落地前全仓 `ui/primitives` import 数 = 0 ⇒
+     `tier` 无任何消费者；T11 的 8 处迁移全在页面/面板顶层，也不传 `tier`）⇒ **≥3 主判据不成立**。
+     真实依据 = **B6 的特殊条款**（原文**结构上无法表达**）：本缺口的「改调用点」一支不可表达
+     （调用点拿不到 `modalNested`）⇒ 走例外通道加**一个具名、有文档的 prop**。
+     **代码不变**（标准透传、默认 `"modal"`、不新增档位、不碰 `style-contract` 全枚举、未违反 §4）；
+     与 ⑤ 的阈值判据的关系：特殊条款是 ≥3 之外的**唯一**例外通道，本行即该通道的实例。
      **同批同源缺口**：`Modal` 的 **body 滚动锁**（20 个弹层共用 ⇒ 改原语）＝ 引用计数 + 原值快照、
      门控 `presence.mounted`（不是 `open` —— 退场 160ms 内面板还在屏上）；判据 = `Modal.scroll-lock.test.tsx`（6 条）。
      ⚠️ 该观察项的另一半「未做：body 滚动锁」逐字住在**规格**

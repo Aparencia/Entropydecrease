@@ -14,6 +14,7 @@ import InterviewDialog from "./InterviewDialog";
 import GraduateDialog from "./GraduateDialog";
 import RetroTimeline from "./RetroTimeline";
 import GoalPlanApprovalDialog from "./GoalPlanApprovalDialog";
+import { ConfirmDialog } from "../ui/primitives";
 
 interface Props {
   goalId: number;
@@ -42,6 +43,9 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
   const [aiPlan, setAiPlan] = useState<GoalPlanView | null>(null);
   const [aiPlanning, setAiPlanning] = useState(false);
   const [weakConcepts, setWeakConcepts] = useState<ConceptWeaknessView[]>([]);
+  // 批 4 T11：删除目标的二次确认（原 `window.confirm` 两条分支 → 一个受控 `ConfirmDialog`）
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -118,15 +122,23 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
     await invoke("bind_goal_group", { goalId, groupId: bindGroupId });
     setBindGroupId(0); onChanged(); await refresh();
   };
+  /**
+   * 删除目标（批 4 T11：两条 `window.confirm` 分支 → 一个受控弹层）。
+   *
+   * Why 两条分支合成一个弹层：原文的两条 `window.confirm` 只在**文案**上分叉（已毕业 vs 未毕业），
+   * 判定条件与后续动作完全相同 ⇒ 把分叉留在渲染期（`goal.status`），动作只留一条路径，避免两份 invoke。
+   * Why 不再用 `window.confirm`：规格 §5.1 —— WebView2 下可能**静默返回 false**（点了删除没反应）；
+   * 且 §5.3 要求高危不可逆动作在框内列明级联影响与保留项（原文只有一句话）。
+   * 文案逐字拆解见渲染处的 `ConfirmDialog`（首句 = 标题；说明句 = `impacts`）。
+   */
   const removeGoal = async () => {
-    if (goal.status === "graduated") {
-      // 已毕业：删除仅影响目标本体——毕业报告快照永久保留（档案区可读）
-      if (!window.confirm(`确定删除已毕业目标「${goal.name}」？毕业报告快照仍会在「毕业档案」保留。`)) return;
-    } else if (!window.confirm(`确定删除目标「${goal.name}」？里程碑与绑定将一并移除（组本身不受影响）。`)) {
-      return;
+    setDeleting(true);
+    try {
+      await invoke("delete_goal", { id: goalId });
+      onDeleted();
+    } finally {
+      setDeleting(false);
     }
-    await invoke("delete_goal", { id: goalId });
-    onDeleted();
   };
   const abandon = async () => {
     await invoke("goal_abandon", { id: goalId, reason: abandonReason.trim() || null });
@@ -326,7 +338,15 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
         ) : (
           <span style={{ fontSize: 11, color: "#9ca3af" }}>{goal.status === "graduated" ? "已毕业——回顾流与报告见下方" : "已放弃——无惩罚，随时可再立新目标"}</span>
         )}
-        <button onClick={() => void removeGoal()} style={miniDanger} title="删除目标（里程碑/绑定一并移除；毕业报告快照保留）">🗑 删除目标</button>
+        <button
+          data-testid="goal-delete-open"
+          onClick={() => setDeleteOpen(true)}
+          disabled={deleting}
+          style={miniDanger}
+          title="删除目标（里程碑/绑定一并移除；毕业报告快照保留）"
+        >
+          🗑 删除目标
+        </button>
       </div>
 
       {/* v0.18.1：回顾流 + 毕业报告（快照永久保留） */}
@@ -364,6 +384,23 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
           }}
         />
       )}
+
+      {/* 删除确认（§5.3）：文案逐字拆自原文两条 `window.confirm` —— 首句（含问号）作标题，
+          句末 `。` 与包裹括号按分隔符处理，其余子句逐条进 `impacts`（保留项 `keep`）。 */}
+      <ConfirmDialog
+        open={deleteOpen}
+        title={goal.status === "graduated"
+          ? `确定删除已毕业目标「${goal.name}」？`
+          : `确定删除目标「${goal.name}」？`}
+        impacts={goal.status === "graduated"
+          ? [{ text: "毕业报告快照仍会在「毕业档案」保留", keep: true }]
+          : [{ text: "里程碑与绑定将一并移除" }, { text: "组本身不受影响", keep: true }]}
+        confirmLabel="删除"
+        busy={deleting}
+        onConfirm={() => { setDeleteOpen(false); void removeGoal(); }}
+        onCancel={() => setDeleteOpen(false)}
+        testId="goal-delete-confirm"
+      />
     </div>
   );
 }

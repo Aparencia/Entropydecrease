@@ -140,24 +140,64 @@ describe("FeedFragmentList 收件箱状态机", () => {
   });
 
   it("删除：二次确认后移除（取消则保留）", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    // 批 4 T11：确认从 `window.confirm` 迁到 `ConfirmDialog` ⇒ 打桩改成**点按钮**；
+    // 桩仍在位、但断言它**一次都没被调用**（比原来的 mockReturnValue 更强：旧写法证不了"没走命令式确认"）。
+    const confirmSpy = vi.spyOn(window, "confirm");
     render(<FeedFragmentList onChanged={vi.fn()} onPromoted={vi.fn()} />);
     await screen.findByTestId("fragment-card-2");
 
     const card2 = screen.getByTestId("fragment-card-2");
     fireEvent.click(within(card2).getByText("🗑 删除"));
+    // 二次确认：原文案三行逐字进弹层（标题 / 碎片预览 / 保留项）
+    const dialog = await screen.findByTestId("fragment-delete-confirm");
+    expect(dialog.textContent).toContain("删除这条碎片？");
+    expect(dialog.textContent).toContain("「单句灵感…」");
+    expect(dialog.textContent).toContain("绑定的闪卡会保留");
+    fireEvent.click(screen.getByTestId("fragment-delete-confirm-confirm"));
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("delete_fragment", { fragmentId: 2 });
     });
     await waitFor(() => expect(screen.queryByTestId("fragment-card-2")).toBeNull());
 
-    // 取消：确认框拒绝 → 不触发删除
-    confirmSpy.mockReturnValue(false);
+    // 取消：确认框取消 → 不触发删除（碎片仍在）
     invokeMock.mockClear();
     const card1 = screen.getByTestId("fragment-card-1");
     fireEvent.click(within(card1).getByText("🗑 删除"));
+    fireEvent.click(await screen.findByTestId("fragment-delete-confirm-cancel"));
     await new Promise((r) => setTimeout(r, 0));
     expect(invokeMock).not.toHaveBeenCalledWith("delete_fragment", { fragmentId: 1 });
+    expect(screen.getByTestId("fragment-card-1")).toBeTruthy();
+    expect(confirmSpy).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
+  });
+
+  it("删除进行中：重复点击只执行一次（busy 门 —— 批 4 T11 的 M3 判据）", async () => {
+    // Arrange：让 delete_fragment 挂起（动作「在飞」）
+    let release: (v: unknown) => void = () => undefined;
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_fragments") return dbFragments;
+      if (cmd === "resolve_fragment_image") return null;
+      if (cmd === "delete_fragment") return new Promise((r) => { release = r; });
+      throw new Error(`unexpected command: ${cmd}`);
+    });
+    const count = (): number => invokeMock.mock.calls.filter((c) => c[0] === "delete_fragment").length;
+    render(<FeedFragmentList onChanged={vi.fn()} onPromoted={vi.fn()} />);
+    await screen.findByTestId("fragment-card-2");
+    const trigger = (): HTMLButtonElement =>
+      within(screen.getByTestId("fragment-card-2")).getByText("🗑 删除").closest("button") as HTMLButtonElement;
+
+    // Act：确认一次（invoke 在飞）→ 再点触发钮 + 再点确认钮
+    fireEvent.click(trigger());
+    fireEvent.click(await screen.findByTestId("fragment-delete-confirm-confirm"));
+    await waitFor(() => expect(count()).toBe(1));
+    expect(trigger().hasAttribute("disabled"), "动作在飞时触发钮必须 disabled").toBe(true);
+    fireEvent.click(trigger());
+    fireEvent.click(screen.getByTestId("fragment-delete-confirm-confirm"));
+
+    // Assert：**只执行一次**（若 busy 未接：触发钮可再点 ⇒ 新弹层 open=true 且按钮不 busy ⇒ 第二次 invoke）
+    expect(count()).toBe(1);
+    release({ deleted: true, autoCleanedGroups: [] });
+    await waitFor(() => expect(trigger().hasAttribute("disabled")).toBe(false));
+    expect(count()).toBe(1);
   });
 });
