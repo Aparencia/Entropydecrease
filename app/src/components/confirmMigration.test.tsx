@@ -65,21 +65,18 @@ const textOf = (testId: string): string => screen.getByTestId(testId).textConten
 const click = (testId: string): void => { fireEvent.click(screen.getByTestId(testId)); };
 
 /**
- * 弹层按 **DOM 边界**切段（顺序 = 标题 · message · 逐条 impact · 取消 · 确认），供 `toEqual` **逐段恰等**
- * —— 这就是 I-1 的牙：段数、顺序、每段字面量全恰等，「改一个字 / 追加一句」必红。⚠️ 原语侧装饰（关闭钮 +
- * 印章）**不入段**（不属 T11 迁的文案），但由**总长守卫**单独记账 ⇒ 任何未记账字符同样必红。
+ * 弹层按 **DOM 边界**切段，供 `toEqual` **逐段恰等**（段数 · 顺序 · 字面量三者全恰等）—— 这就是 I-1 的牙。
+ * 段 = 标题 · message · 逐条 impact · 取消 · 确认，由**一条按 DOM 序的选择器**取齐（不是按名字拼数组 ——
+ * 拼数组会静默吞掉"段被挪了位置"）。⚠️ 原语侧装饰（关闭钮 + 印章）**不入段**（不属 T11 迁的文案），
+ * 但由**总长守卫**单独记账 ⇒ 面板内任何未记账的字符（多写的说明 / 游离文本）同样必红。
  */
 function segmentsOf(testId: string): string[] {
   const panel = screen.getByTestId(testId);
-  const q = (sel: string): Element | null => panel.querySelector(sel);
-  const body = q(".ed-confirm");
-  const seal = q(".ed-confirm-seal");
-  const ul = q("ul.ed-confirm-impacts");
-  const kids = body === null ? [] : Array.from(body.children).filter((c) => c !== seal && c !== ul);
-  const lis = ul === null ? [] : Array.from(ul.querySelectorAll("li"));
-  const chrome = `${q(".ed-modal-head > button")?.textContent ?? ""}${seal?.textContent ?? ""}`;
-  const segs = [q(".ed-modal-head > div"), ...kids, ...lis,
-    screen.getByTestId(`${testId}-cancel`), screen.getByTestId(`${testId}-confirm`)].map((n) => n?.textContent ?? "");
+  const seal = panel.querySelector(".ed-confirm-seal");
+  const segs = Array.from(panel.querySelectorAll(
+    ".ed-modal-head > div, .ed-confirm > *:not(.ed-confirm-seal):not(ul), ul.ed-confirm-impacts > li, .ed-modal-foot button",
+  )).map((n) => n.textContent ?? "");
+  const chrome = `${panel.querySelector(".ed-modal-head > button")?.textContent ?? ""}${seal?.textContent ?? ""}`;
   expect(panel.textContent?.length, `弹层里有未记账的字符：${panel.textContent}`).toBe(segs.join("").length + chrome.length);
   return segs;
 }
