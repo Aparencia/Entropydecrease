@@ -1,0 +1,93 @@
+/*
+ * CommandPalette.css — ⌘K 命令面板的**静态布局**（规格 §6.1；批 3 Task 11）。
+ *
+ * Why 自带一层样式、不复用原语层：批 3 非目标 2 禁止 import 原语层（那会把它的整层 CSS
+ *   与 motion.css 一起拉进首屏，吃掉批 2 挣来的包体余量）。⇒ 本文件是「遮罩 + 面板 +
+ *   一行一条命令」的最小集合；批 4 迁移到 `Modal` 时**整份删除**（迁移点写在 CommandPalette.tsx 文件头）。
+ *
+ * 层级**不在这里**：它走 `zIndex("modal")` 的行内 style —— 裸数字会被 `ui/zIndex.guard.test.ts`
+ *   当场拦下（本文件因此一个 z-index 都不写）。
+ *
+ * 批 3 不加任何动效：本文件不得出现 transition / animation / @keyframes（属批 6；
+ *   `CommandPalette.test.tsx` 有一条静态守卫逐条扫，判据前先剥注释）。
+ *
+ * 遮罩底色与透明度消费 token（`--ed-overlay` + `--ed-overlay-alpha`），与 `primitives/Modal.css`
+ *   用同一条 `color-mix` 写法 —— 不写 rgba 字面量，颜色只存在于 token 里。
+ */
+
+.ed-cmdk__overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  /* 面板落在视口偏上处（命令台常规位置）：用 padding 定位而不是 transform，免得与批 6 的动效属性同名 */
+  padding: 96px 16px 16px;
+  background: color-mix(in srgb, var(--ed-overlay) calc(var(--ed-overlay-alpha, 0.34) * 100%), transparent);
+}
+
+.ed-cmdk {
+  width: 560px;
+  max-width: 100%;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ed-bg-raised, #fff);
+  border: 1px solid var(--ed-border, #eae7e0);
+  border-radius: var(--ed-radius-overlay, 10px);
+  box-shadow: var(--ed-shadow-2);
+}
+
+.ed-cmdk__input {
+  flex: 0 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--ed-ink-1, #1a1a1a);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--ed-border, #eae7e0);
+  outline: none;
+}
+
+.ed-cmdk__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+}
+
+.ed-cmdk__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--ed-ink-2, #3a3a36);
+  cursor: pointer;
+}
+
+/* 选中项：只改底色 / 字色 / 字重（不含位移与过渡 —— 动效属批 6） */
+.ed-cmdk__item--active {
+  background: var(--ed-bg-sunken, #f1eee7);
+  color: var(--ed-ink-1, #1a1a1a);
+  font-weight: 600;
+}
+
+.ed-cmdk__hint {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--ed-ink-3, #6e6e68);
+}
+
+.ed-cmdk__empty {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--ed-ink-3, #6e6e68);
+}

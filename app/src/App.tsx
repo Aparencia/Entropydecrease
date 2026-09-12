@@ -27,10 +27,15 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 //   「从未访问过的页不进首屏 module graph」与「访问过的页常驻、永不卸载（TD-004）」两条语义
 //   都逐字保留（保活由下面的 PageSlot + mountedPages 实施，本任务未动它们一个字节）。
 // @ai-context: 仍不引入路由库（规格 §3 红线 2）：入口依旧是 useState<Page>。
-import { navComponent, type PageKey } from "./shell/navRegistry";
+// 批 3 T11：⌘K 面板的 `onPick` 收口要用它校验页面键（运行期校验，不信任回调实参）
+import { isPageKey, navComponent, type PageKey } from "./shell/navRegistry";
 // 批 3 T7：A′ 顶栏（规格 §6.1）从本文件的 95 行内联 `<nav>` 提成独立组件 —— 两档溢出是媒体查询的活，
 // 内联 style 表达不了；顶栏的宽度也因此第一次有了可测的单一落点（TopBar.tsx / TopBar.css）。
 import { TopBar, TopBarAction } from "./shell/TopBar";
+// 批 3 T11：⌘K 命令面板（规格 §6.1）—— 规格 §6.1 要它替代手写的 `focus*` 跳转入口，
+// 本批只做**页面级跳转 + 对话面板**两条动作（`focus*` 状态机原样保留，收敛属 T12）。
+// 自足实现、未 import 原语层（非目标 2）：遮罩/Esc/焦点都在它自己文件里，批 4 换成 `Modal`。
+import { CommandPalette } from "./shell/CommandPalette";
 // 批 3 T7（控制方裁决 A3）：AI toast 从 56px 导航行搬到**固定覆盖层** —— 层级走六档标尺，
 // 不许写裸数字（`ui/zIndex.guard.test.ts` 在看着）。实测 toast 是 1024 溢出的唯一主因
 // （单项 373.75 px = 视口的 36.5%；含它 1375.74 px、剔除它 997.99 px），而规格 §6.1 的顶栏
@@ -274,6 +279,23 @@ function MainShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // 批 3 T11：⌘K / Ctrl+K 命令面板（规格 §6.1）。与上面的 Ctrl+Shift+A 并列而**互不遮蔽**：
+  // 本处理器显式排除 Shift 与 Alt，且两条组合各自判 `e.key`（先判更具体的组合是纪律，不是巧合）。
+  // ⚠️ 平台取舍：规格写的是「⌘K」（macOS 的 Command），本实现只判 `ctrlKey` —— 本应用是 Windows
+  // 目标（Tauri 主窗），且 T7 顶栏按钮的文案/提示已定为「Ctrl+K」（单一说法）。
+  // ⇒ macOS 的 `metaKey` 适配登记给做 macOS 支持的那一批（批 4/6 任一处），不在本任务里加半套。
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     // 全局错误边界在 App 外层（批 2b 结构调整后包住 provider+壳，职责不变）
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", fontFamily: "system-ui, sans-serif" }}>
@@ -282,15 +304,16 @@ function MainShell() {
       {/* 批 3 T7：A′ 顶栏（规格 §6.1）。原内联 9-Tab + 双 `marginLeft:auto` 布局已删除，
           改为 `shell/TopBar`（8 个域 Tab + ⌘K + ⚙ 齿轮，两档溢出走媒体查询）。
           `right` 插槽里是**两个常驻状态件**（都是已接线功能，不许在本步消失）：
-            · `dock-toggle` —— REQ-274 全局 AI 对话面板的**唯一显式入口**（T11 决定它进命令面板还是留在顶栏）；
+            · `dock-toggle` —— REQ-274 全局 AI 对话面板的**唯一显式入口**（T11-b 裁定：**保留**；
+              T11 的命令面板里另给一条「对话面板」命令，那条是**增量**入口，不替代它）；
             · 采集徽标 —— ADR-007，切页/最小化后仍可见采集状态（规格 §6.1 明确列了「采集状态」）。
           AI toast **不在**这里：它是本文件下方 `MainShell` 最外层渲染的 fixed 覆盖层（裁决 A3）。 */}
       <TopBar
         page={page}
         onSelect={(key) => setPage(key)}
         onOpenSettings={() => setPage("settings")}
-        // T11 接线命令面板（⌘K 面板与它的数据源都在 T11/T12；本步按钮就位、回调留空）
-        onOpenPalette={() => {}}
+        // 批 3 T11：⌘K 按钮与 Ctrl+K 快捷键都开同一个面板（T7 时这里还是空实现）
+        onOpenPalette={() => setPaletteOpen(true)}
         right={
           <>
             <TopBarAction
@@ -481,6 +504,22 @@ function MainShell() {
           {aiToast.text}
         </div>
       )}
+      {/* 批 3 T11：⌘K 命令面板（规格 §6.1）。它是**壳级覆盖层**，与 toast 一样挂在导航壳最外层、
+          不是任何页面的子节点（切页不重挂、也不参与页面布局）。
+          `onPick` 只收口两种动作 —— 页面级 `setPage`（key 仍经 `isPageKey` 运行期校验，
+          回调实参不被信任）与打开对话面板；`focus*` 深链状态机原样不动（收敛是 T12）。
+          Esc / 点遮罩 / 焦点都在组件内部（自足实现，见 `shell/CommandPalette.tsx` 文件头）。 */}
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onPick={(pick) => {
+          if (pick.kind === "dock") {
+            setDockOpen(true);
+            return;
+          }
+          if (isPageKey(pick.key)) setPage(pick.key);
+        }}
+      />
       {/* REQ-274：全局 AI 对话面板（常驻挂载——开合仅切 display，选中态/后台任务保活）。
           批 2：闸门只加在**首开之前** —— dockMounted 一旦为真永不复位，此后 open/close
           仍是纯 display 切换（保活语义逐字保留）；独立 Suspense(fallback=null) 与 PageSlot
