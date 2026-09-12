@@ -13,8 +13,10 @@
  *   全部**可选** ⇒ 既有 9 个字段与既有夹具一字不动）：播放头（R5.5 #5）必须在本目录的
  *   **零 Tauri 边界**内工作 ⇒ 「音频引用」这一份数据**只能**由容器注入，取数与 URL 拼接
  *   （`invoke("session_audio_path")` + `convertFileSrc`）落在
- *   `components/session-detail/useSessionAudio.ts`。槽类型 `SessionAudioState` 从领域层
- *   `types/sessionAudio.ts` 转出（理由见该文件头注：A2④ 的导入者集合断言 + §7.1 的依赖方向）。
+ *   `components/session-detail/useSessionAudio.ts`。槽类型 `SessionAudioState` 声明在会话域
+ *   `types/session.ts` **并在本文件转出**（Why：本文件顶部的 import 模块名被 G7① 逐字冻结、
+ *   A2④ 又冻结了「非 `views/**` 的导入者集合」⇒ 新增 import 模块或让容器直接 import 本文件都会
+ *   让既有断言变红，而两条断言都**不在**本批授权改动清单内）。
  * @ai-context **中间态声明（批 5 T6 的依赖顺序造成，不是遗漏）**：视图模块要 `import type` 本文件的
  *   槽类型 ⇒ **契约必须先落地**；而「视图清单」（`viewsFor` / `keysFor` / `FROZEN_VIEW_KEYS`）只有
  *   在视图模块落地后才满足判据 G3「每个 `load()` 都能解析出真实模块」。故本文件此刻**只含契约**，
@@ -24,13 +26,12 @@
  */
 import type { ComponentType } from "react";
 import type { Note } from "../types/notes";
-import type { SessionDetail, SessionOcrBlock } from "../types/session";
-import type { SessionAudioState } from "../types/sessionAudio";
+import type { SessionAudioState, SessionDetail, SessionOcrBlock } from "../types/session";
 import type { IconName } from "../ui/icons";
 
-// 槽类型**转出**：`SessionAudioState` 的声明在 `types/sessionAudio.ts`（领域层）—— 见该文件头注
-// 「为什么不与槽同住本文件」（A2④ 的导入者集合断言 + §7.1 的依赖方向）。这里只转出，视图侧
-// 仍可从注册表一处取到整个槽契约。
+// 槽类型**转出**：`SessionAudioState` 的声明在会话域 `types/session.ts`（**不新增 import 模块** ——
+// `registryResolution.test.ts` 的 G7① 逐字冻结了本文件顶部的 4 个模块名，见该测试 `:46`）。
+// 这里只转出 ⇒ 视图侧仍可从注册表一处取到整个槽契约；容器侧从会话域取（A2④ 的导入者集合冻结）。
 export type { SessionAudioState };
 
 /** 视图记忆的**对象类型粒度**（C5 / 规格决策 23）：**不含 `kind`** —— web/photo/video 共记一份。 */

@@ -311,3 +311,57 @@ export interface TextFilterStatus {
   quotaRemaining: number;
   mock: boolean;
 }
+
+/**
+ * 会话音频引用（批 6 T24 · R5.5 / R5.5-b）—— T22 `session_audio_path` 的出参
+ * （Rust `SessionAudioRef`，`serde(rename_all = "camelCase")`）。
+ *
+ * @ai-context 命令**只给路径**：URL 一律由前端 `convertFileSrc` 构造（Tauri `scripts/core.js:13-20`
+ *   的 Windows 形态 = `http://asset.localhost/<encodeURIComponent(绝对路径)>`）⇒ 后端不碰 URL 形态。
+ *   适用范围（硬边界）：**只有实时采集会话有音频** —— 导入会话的音轨落在
+ *   `%TEMP%/entropy-import-{id}/audio.wav` 且导入结束即删、`%TEMP%` 不在 asset scope ⇒ 那条路
+ *   今天**没有承载面**；故契约只表达「有音频 / 无音频」二分，**不猜来源**。
+ */
+export interface SessionAudioRef {
+  /** 应用数据目录内的**绝对路径**（`{data_dir}/session-audio/{id}.wav`）—— **不是** URL。 */
+  readonly path: string;
+  /**
+   * 该录音的 WAV 轴是否与会话轴对齐（T23 的对齐簿记 sidecar）。
+   * `false` 的语义是「**不能保证**对齐」（含**历史录音无 sidecar**），**不是**「一定没对齐」
+   * ⇒ UI 文案不得写成断言式的「未对齐」。精度残余 = **块粒度 ±200 ms**（sidecar 未加键
+   * ⇒ 毫秒级定位需要新契约）。
+   */
+  readonly aligned: boolean;
+  /** 时长（毫秒；由 WAV 头 `data` 长度换算）；`null` = 未 finalize / 未知 ⇒ **不可播**。 */
+  readonly durationMs: number | null;
+}
+
+/**
+ * 视图槽 `SessionViewSlot.audio` 的音频引用（**容器**产出、视图**只读**）。
+ * `url === null` ⇒ 无音频（或取数失败降级）。
+ *
+ * @ai-context 为什么声明在**会话域**而不是与槽同住 `views/registry.ts`（**计划缺陷的就地处置**）：
+ *   两条既有断言从两侧把注册表的类型图冻死了 —— ① `registryResolution.test.ts:46` 的 G7① 逐字
+ *   冻结了 `views/registry.ts` 顶部的 **4 个 import 模块名**（连 `import type` 也算；本任务实测：
+ *   多一个模块 ⇒ 该用例当场红）；② `views/architecture.guard.test.ts` 的 A2④ 逐字冻结了「非
+ *   `views/**` 的导入者**恰 5 个**」（新的容器文件 `import type … from "views/registry"` ⇒ 当场红）。
+ *   两条都**不在**本批授权改动清单内（R1.3 / 计划表 5）⇒ 唯一同时满足两者的落点 = **已在 ① 的
+ *   4 个模块之内的会话域文件**（`../types/session`）：注册表只 `export type` 转出、容器从会话域取。
+ *   收益：依赖方向也更贴规格 §7.1（领域 → 视图 → 容器；容器不反向依赖视图层模块）。
+ *   实证与反例读数见 `.superpowers/sdd/2026-09-12-frontend-redesign-batch6-motion/task-24-report.md`。
+ * 副作用：无（纯类型声明；消费方一律 `import type` ⇒ 构建期整体擦除、零运行时字节）。
+ */
+export interface SessionAudioState {
+  /** 可播放 URL（`convertFileSrc(path)` 的产物）；`null` = 路径不可得。 */
+  readonly url: string | null;
+  /** WAV 轴是否与会话轴对齐（**如实透传**，不许在容器里改写成「看起来更好」的值）。 */
+  readonly aligned: boolean;
+  /**
+   * 只有**已 finalize** 的 WAV 可播（R5.5-b 约束 3：WAV 头的 `data` 长度创建时写 0，
+   * `finalize()` 是唯一回填点）⇒ `false` 时 UI **必须**禁用播放并如实提示（一行
+   * `StatusLine kind="error"`，**不是** toast）。
+   */
+  readonly playable: boolean;
+  /** 时长（毫秒；**如实透传**，含 `0`）；`null` = 未知。 */
+  readonly durationMs: number | null;
+}

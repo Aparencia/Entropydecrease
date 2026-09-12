@@ -28,13 +28,25 @@ const { invokeMock, convertFileSrcMock } = vi.hoisted(() => ({
 vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock, convertFileSrc: convertFileSrcMock }));
 
 import { NO_AUDIO, SESSION_AUDIO_COMMAND, toSessionAudioState, useSessionAudio } from "./useSessionAudio";
-import type { SessionAudioRef } from "../../types/sessionAudio";
+import type { SessionAudioRef } from "../../types/session";
+import type { SessionAudioState } from "../../views/registry";
 
 /** 会话 WAV 的真实路径形态（`{data_dir}/session-audio/{id}.wav`；Windows 反斜杠 + 空格） */
 const WAV_A = "C:\\Users\\x\\AppData\\Roaming\\com.entropydecrease.app\\session-audio\\42.wav";
 const WAV_B = "C:\\Users\\x\\AppData\\Roaming\\com.entropydecrease.app\\session-audio\\43.wav";
 /** Tauri 的真实 asset URL 形态（`scripts/core.js:13-20`）——期望值独立写在断言侧，不借被测模块构造 */
 const assetUrl = (p: string): string => `http://asset.localhost/${encodeURIComponent(p)}`;
+
+/**
+ * **编译期绑定**（A6 同族，零运行时断言）：容器产出的形状必须可赋给**视图槽**的槽位类型 ——
+ * 槽契约漂移（改字段/改类型）或容器产出改形 ⇒ `tsc` 当场红。这里能 import 视图层的类型而**生产**
+ * 文件不能：A2④ 的「非 `views/**` 导入者**恰 5 个**」只数生产文件（`prodUnder` 排除 `*.test.tsx`）。
+ */
+const SLOT_BINDING: readonly SessionAudioState[] = [
+  toSessionAudioState(null),
+  toSessionAudioState({ path: WAV_A, aligned: true, durationMs: 1 }),
+];
+void SLOT_BINDING;
 
 /** 探针：把 hook 的返回值渲染成属性（`data-pending` = **尚未取到**；`none` = 值为 `null`） */
 function Probe({ sessionId }: { sessionId: number }) {

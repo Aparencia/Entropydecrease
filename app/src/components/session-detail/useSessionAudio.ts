@@ -29,7 +29,7 @@
  */
 import { useEffect, useState } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import type { SessionAudioRef, SessionAudioState } from "../../types/sessionAudio";
+import type { SessionAudioRef, SessionAudioState } from "../../types/session";
 
 /** IPC 命令名（T22 交付；`check-command-registry` 计数 313/313 里的那一条）。 */
 export const SESSION_AUDIO_COMMAND = "session_audio_path";

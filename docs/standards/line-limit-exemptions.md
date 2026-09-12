@@ -87,6 +87,7 @@
 | app/src-tauri/src/live_keyframes.rs | 370 | ① handle_full_frame：全帧画面要点落库 + 关键帧样本收集与归档存图（三层图结构参考图集数据源）；② 停止时关键帧投票（session:keyframes 事件）；③ rewrite_with_fusion：融合重写（原属 live_session_frame，REQ-031 无字幕短路）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/windows.rs | 370 | 窗口枚举/评分域 + v0.19.2（REQ-271/272）：CaptureWindow.zOrder/systemWindow 字段 + 抖音/快手/B站客户端评分表（+28）——枚举系统副作用与评分纯函数同域便于单测（既有模式） | 若再增长：z 序/系统标记纯函数拆至 windows_meta.rs |
 | app/src/components/KnowledgeCanvasView.test.tsx | 368 | @xyflow/react 全 mock（ReactFlow 记录 props 供交互断言；节点组件渲染不测——规格 §六「React Flow 渲染用 e2e 或跳过」）。覆盖：① 首次打开全量未布局 → batch_initialize 全量初始化（辐射位置）；② 已存位置 → 跳过初始化且位置来自存储；③ 拖拽防抖保存；④ 节点点击选中联动；⑤ 视口恢复/首次 fitView；⑥ 自动排列覆盖；⑦ 核心问题虚拟节点；⑧ 返回按钮。（自动摘取，待细化） | 若再增长：按职责拆分 |
+| app/src/types/session.ts | 367 | 覆盖会话本体/转写段/OCR 块/画面要点屏、结构图与图内检索、过滤统计与笔记过滤结果（NoteFilterResult）、段搜索命中与 AI 复核。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/commands_fragments.rs | 366 | 碎片命令域 + REQ-316（批 7）结果契约与组域条件广播（登记值缺失为漏登——HEAD 基线已 347，本次补） | 若再增长：碎片组操作命令族拆至 commands_fragments_group.rs |
 | app/src-tauri/src/db_notes.rs | 366 | REQ-316（批 7）：delete_note/update_note_group 改显式事务 + 同事务空组自动清理接线（结果契约扩展 + 旧组读出，净增 ~60 行；此前 305 未登记属漏登，本次补） | 若再增长：移组/删除事务族拆至 db_notes_group_ops.rs |
 | app/src-tauri/src/ocr_cache.rs | 358 | OCR 结果缓存域（内容指纹键/容量淘汰/命中率统计）内聚；缓存策略与指纹算法共享上下文 | 若再增长：指纹算法拆至 ocr_fingerprint.rs |
@@ -118,6 +119,7 @@
 | app/src-tauri/src/bin/asr_forensic.rs | 321 | 定位"结尾识别不全/短句不清晰/断句不准"根因的三连验证：① 会话原始音频（session-audio/{id}.wav，16k 单声道 PCM16）离线SenseVoice 整段转写 → 与 DB 流式链路段对比（句尾是否更完整）；② 对疑似截断段截取音频窗口（start-200ms..end+1200ms）单独离线转写 → 证明"音频里有没有这个尾字"（二分：链路丢 vs 源缺失）；③ 200ms 块 RMS 统计 → 验证"句尾弱音块被判静音"假设的量化依据。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_ai_chat.rs | 321 | AI 对话双表仓储 + v0.19.1（REQ-260）retrieval/meta_json 补列与行映射（+42）——SQL/行映射内聚（db_* 文件先例） | 若再增长：消息侧读写拆至 db_ai_chat_messages.rs |
 | app/src-tauri/src/engine_worker.rs | 321 | 拆分动机（三维复审 #9 + 豁免登记计划）：engine.rs 在接入超时排空机制（三维复审 #5）后逼近 600 行硬拆线，按 line-limit-exemptions登记的拆分计划把 worker 循环与请求处理拆至本文件——engine.rs 保留 EnginePool 句柄与同步 API。（自动摘取，待细化） | 若再增长：按职责拆分 |
+| app/src/shell/usePhaseFreeze.test.tsx | 319 | usePhaseFreeze.test.tsx — #3「相变凝固」的行为级判据（批 6 波 C · T29；规格 §8.6 第 3 行 ·§8.6.1 第 1/3/4 条 · 裁决 R5.3 / R4.5 / R8.1 / R8.2 / R8.4 / R35.4）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/commands_ai_settings.rs | 318 | AI 设置命令域（视图/密钥/授权/目标 AI） + v0.19.1 ai_set_kb_qa 最小面命令（+28）——read-modify-write 同域先例（ai_set_goal_plan）内聚 | 若再增长：kb/goal 最小面命令拆至 commands_ai_settings_extra.rs |
 | app/src/components/AiConversationDock.tsx | 318 | 全局 AI 对话面板（REQ-274）+ 批 1 终态事件刷新接线——2026-09-09 审查纠偏实测登记（此前漏登），300-600 档 | 若再增长：会话列表段拆至 DockSessionList.tsx |
 | app/src-tauri/src/commands_ai_providers.rs | 317 | v0.11.6 M1：Provider 管理命令域（8 命令 + 视图映射 + 密钥解析口 resolve_default_provider_key/default_provider_ready）内聚于命令层；2026-09-11 探活改 chat_plain。`resolve_input`/`to_view` 与命令同域便于契约一致 | 若再增长：默认 Provider 解析与就绪门禁拆至 ai_provider_resolve.rs |
@@ -125,7 +127,6 @@
 | app/src/components/SessionListPanel.test.tsx | 316 | 覆盖批 4 选择/批量交互矩阵——选择模式进出（按钮+Esc）、单击勾选、Ctrl 加/减、Shift 区间、折叠组全选不含隐藏行（P3-1 修复：全选口径=可见行序 visibleOrder 而非 filtered）、列表变化自动裁剪选集、批量删除 pending 防连点与成功清选集（P3-2）、批量转eligible 过滤。invoke 全 mock；数据为本地 props 零后端往返（面板数据驱动经 props——父层 invoke 不在本组件）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/ffmpeg.rs | 313 | ffmpeg 是文件导入（音轨/关键帧）与内嵌字幕（L2）的唯一外部依赖。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/note_filter_ocr.rs | 313 | BodySource::OcrDirect 分支的精简净化链——排序 → 净化链（① 行合并评分器 → ② 行级重识别判定 → ③ 跨帧增量合并，spec §3.1）→ 符号归一（跳过口语净化/口头禅/碎片规则——OCR文本是视觉识别产物，无 ASR 的结巴/填充词/重复）→ 相邻去重→ markdown 组装（"图文提取"标注段）。（自动摘取，待细化） | 若再增长：按职责拆分 |
-| app/src/types/session.ts | 313 | 覆盖会话本体/转写段/OCR 块/画面要点屏、结构图与图内检索、过滤统计与笔记过滤结果（NoteFilterResult）、段搜索命中与 AI 复核。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/ai_provider.rs | 312 | v0.11.6 M1 + v0.12.0 M4：Provider 配置域（类型/校验/存储 IO/预设模板/legacy 迁移/默认链升级）+ 2026-09-11 DeepSeek V4.1 模型名归一（`current_deepseek_model` / `normalize_retired_deepseek_models`）——预设与迁移共处一文件保证"预设即迁移模板"的单一真源 | 若再增长：预设模板与迁移链拆至 ai_provider_migrate.rs |
 | app/src-tauri/src/commands_refine_inner.rs | 312 | v0.5.0 模型版：课后精修编排（清单构建/降级决策/引擎懒加载/逐候选识别/产物回填/HTML→MD 转换）内聚于精修执行域 | 若再增长：html_to_markdown 拆至 html_table_md.rs |
 | app/src-tauri/src/commands_video.rs | 311 | v0.5.0 M1（REQ-043）起：视频档案命令域（检测装配/领域检测/预热/记忆）；v0.13.6（REQ-219~222）形态/领域/细目/记忆命令 + 分区映射形态接线再增；审查轮（H1 领域记忆兜底顺序修复/L2 独立 try）微增 | 若再增长：领域命令组拆至 commands_video_domain.rs |
