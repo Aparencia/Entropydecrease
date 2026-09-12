@@ -157,6 +157,12 @@ describe("① 七类动作逐类覆盖：今天的调用面形态 + 回执落点
         for (const sel of cls.elements) {
           expect(hasLanding(sel), `${cls.name} 的落点 ${sel} 不在响应层节里（基选择器口径）`).toBe(true);
         }
+        // **过渡见证**：本类至少一条落点**声明了 transition** —— 只剩一条状态规则（如 `:checked`）时，
+        // "回执"没有时长/缓动可言（m01 变异实测：删掉 base 规则后仅靠状态规则仍会假绿）。
+        const withTransition = cls.elements.some((shape) =>
+          TRANSITION_SELECTORS.some((t) => baseSelector(t).includes(shape)),
+        );
+        expect(withTransition, `${cls.name} 的落点里没有一条声明 transition ⇒ 回执没有时长/缓动`).toBe(true);
         return;
       }
       expect(cls.primitive, `${cls.name} 既没有元素级落点、也没有原语承载`).not.toBeNull();
@@ -190,7 +196,9 @@ describe("② 安全网：响应层的声明集合审计（动效不得改变交
 
 describe("③ 未覆盖余量逐条登记（防「把余量写成 0」；登记表必须锚到真实调用点）", () => {
   it(`余量恰 ${UNCOVERED.length} 条，且每条锚点在盘上仍然存在`, () => {
-    expect(UNCOVERED.map((r) => r.key)).toHaveLength(UNCOVERED.length);
+    const keys = UNCOVERED.map((r) => r.key);
+    expect(new Set(keys).size, "余量登记表的键必须唯一（复制粘贴时最容易犯）").toBe(keys.length);
+    expect(keys.every((k) => k.trim().length > 4), "余量登记表的键不得为空").toBe(true);
     expect(UNCOVERED.length, "余量条数变了 ⇒ 先核实再改这个数（不许写 0）").toBe(7);
     for (const r of UNCOVERED) {
       const abs = join(SRC, ...r.file.split("/"));
