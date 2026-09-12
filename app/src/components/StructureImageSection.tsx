@@ -14,8 +14,7 @@ import { listen } from "@tauri-apps/api/event";
 import type { StructureImageRecord } from "../types";
 import { fmtMs } from "../utils/fmt";
 import ImagePreviewOverlay from "./ImagePreviewOverlay";
-
-const btn: React.CSSProperties = { padding: "4px 10px", cursor: "pointer", fontSize: 12 };
+import { Button } from "../ui/primitives";
 
 /** kind 徽标文案（全栈统一术语） */
 const KIND_LABEL: Record<string, string> = {
@@ -89,12 +88,12 @@ export default function StructureImageSection({ sessionId, baseUrl }: { sessionI
     <div style={{ marginTop: 14 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
         <span style={{ fontSize: 12, fontWeight: 600 }}>🧩 结构图（{images.length}）</span>
-        <button style={btn} onClick={() => void recapture()} disabled={busy}>
+        <Button variant="secondary" size="md" busy={busy} onClick={() => void recapture()}>
           {busy ? "分析中…" : "⟳ 分析参考图集"}
-        </button>
-        <button style={btn} onClick={() => void refresh()} disabled={loading}>
+        </Button>
+        <Button variant="secondary" size="md" busy={loading} onClick={() => void refresh()}>
           {loading ? "加载中…" : "刷新"}
-        </button>
+        </Button>
         {error && <span style={{ fontSize: 11, color: "#dc2626" }}>{error}</span>}
         {!error && info && <span style={{ fontSize: 11, color: "#6b7280" }}>{info}</span>}
       </div>

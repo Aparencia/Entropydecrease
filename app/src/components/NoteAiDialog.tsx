@@ -16,7 +16,7 @@
  *              busy 门（`running || showWorkbench` 时不关）现在是**唯一的**关闭门。
  */
 import { useCallback, useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Button, Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { useAiTaskPolling } from "../hooks/useAiTaskPolling";
 import type { AiRefineResult, AiTaskState } from "../types";
@@ -151,12 +151,18 @@ export default function NoteAiDialog({
                 整理当前笔记（去冗余/结构化/按目标改写）——选择目标/变化程度，可实时预览提示词
               </div>
             </button>
-            <button style={menuBtn} onClick={() => setKind("enrich")}>
+            <Button
+              variant="secondary"
+              size="lg"
+              block
+              style={{ display: "block", textAlign: "left", marginBottom: 6 }}
+              onClick={() => setKind("enrich")}
+            >
               <span style={{ fontWeight: 600 }}>✧ 知识补充</span>
               <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
                 补充与笔记相关的新知识（概念展开/步骤补全/例子/进阶/资源）——九子项勾选
               </div>
-            </button>
+            </Button>
           </>
         )}
 

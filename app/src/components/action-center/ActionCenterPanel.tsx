@@ -20,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import SopRunOverlay from "../SopRunOverlay";
 import { PracticeOverlay, QuestionsOverlay } from "../PracticeQuestionsOverlays";
+import { Button } from "../../ui/primitives";
 
 /** 响应结构（SopTemplate/ActionQueueRow/CompletionEvent 均 serde camelCase——字段须 camel 读取） */
 interface SopTemplateView {
@@ -337,8 +338,8 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
             onChange={(e) => { reasonRef.current = e.target.value; }}
             style={{ flex: 1, fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }}
           />
-          <button style={okBtn} onClick={() => void abandon(r.id)}>确认放弃</button>
-          <button style={btn} onClick={() => setReasonFor(null)}>取消</button>
+          <Button variant="primary" size="md" onClick={() => void abandon(r.id)}>确认放弃</Button>
+          <Button variant="secondary" size="md" onClick={() => setReasonFor(null)}>取消</Button>
         </div>
       )}
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
@@ -400,15 +401,15 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
           <>
             {/* v0.20.3（REQ-294）：周回顾批裁决（不留死尸——裁决机制批量面） */}
             <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
-              <button style={ghostBtn} onClick={() => setBatchMode((m) => !m)} data-testid="weekly-batch-toggle">
+              <Button variant="secondary" size="md" testId="weekly-batch-toggle" onClick={() => setBatchMode((m) => !m)}>
                 {batchMode ? "退出批量（⚖ 周回顾）" : "⚖ 批量裁决（周回顾）"}
-              </button>
+              </Button>
               {batchMode && (
                 <>
                   <input value={batchReason} onChange={(e) => setBatchReason(e.target.value)} placeholder="放弃原因（批量放弃共用，可空）" style={{ fontSize: 12, width: 200, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }} />
-                  <button style={okBtn} disabled={checked.size === 0} onClick={() => void runBatch("done")}>
+                  <Button variant="primary" size="md" disabled={checked.size === 0} onClick={() => void runBatch("done")}>
                     ⚖ 执行选中（{checked.size}）
-                  </button>
+                  </Button>
                   <button style={{ ...ghostBtn, color: "#dc2626" }} disabled={checked.size === 0} onClick={() => void runBatch("abandon")}>
                     ✗ 放弃选中（留因）
                   </button>
@@ -485,7 +486,7 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
                 <input value={sopStart} onChange={(e) => setSopStart(e.target.value)} style={{ fontSize: 12, width: 44, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }} />
                 <span style={{ fontSize: 11, color: "#9ca3af" }}>–</span>
                 <input value={sopEnd} onChange={(e) => setSopEnd(e.target.value)} style={{ fontSize: 12, width: 44, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }} />
-                <button style={okBtn} onClick={() => void createTemplate()}>创建</button>
+                <Button variant="primary" size="md" onClick={() => void createTemplate()}>创建</Button>
               </div>
               <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
                 行号 0 起（标题=0）；空行自动跳过；超 50 步拒绝。编辑器内选中段落生成入口在笔记工具栏接线（同款命令）。
@@ -501,8 +502,8 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
                       <span style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{t.name}</span>
                       <span style={{ fontSize: 11, color: "#9ca3af" }}>@{t.noteTitle} · 行 {t.startLine}–{t.endLine} · {t.mode === "confirm" ? "总览核对" : "逐步引导"}</span>
                       <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
-                        <button style={okBtn} onClick={() => setActiveTemplate(t)}>▶ 执行</button>
-                        <button style={ghostBtn} onClick={() => void fetchSuggestions(t.id)}>💡 修订建议</button>
+                        <Button variant="primary" size="md" onClick={() => setActiveTemplate(t)}>▶ 执行</Button>
+                        <Button variant="secondary" size="md" onClick={() => void fetchSuggestions(t.id)}>💡 修订建议</Button>
                         <button style={{ ...ghostBtn, color: "#dc2626" }} onClick={() => void deleteTemplate(t)}>删除</button>
                       </span>
                     </div>

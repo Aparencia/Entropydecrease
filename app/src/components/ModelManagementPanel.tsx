@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { Button } from "../ui/primitives";
 import StructureModelSetting from "./StructureModelSetting";
 // L11 去重：HealthSnapshot/StreamingModelStatus/DownloadProgress 单一定义源在 types/system.ts
 import type { DownloadProgress, HealthSnapshot, OcrDeviceStatus, StreamingModelStatus } from "../types";
@@ -26,7 +27,6 @@ interface SpeakerDownloadStatus {
   error: string | null;
 }
 
-const btn: React.CSSProperties = { padding: "2px 10px", fontSize: 11, borderRadius: 6, border: "1px solid #0d9488", background: "#f0fdfa", color: "#0f766e", cursor: "pointer" };
 const badge: React.CSSProperties = { fontSize: 11, padding: "1px 8px", borderRadius: 10, background: "#f3f4f6", color: "#6b7280" };
 
 export default function ModelManagementPanel() {
@@ -127,7 +127,7 @@ export default function ModelManagementPanel() {
           <span style={{ ...badge, background: "#fef2f2", color: "#dc2626" }}>未下载</span>
         )}
         {!streaming?.ready && !streamBusy && !streamProgress && (
-          <button style={btn} onClick={() => void downloadStreaming()}>下载（~300MB）</button>
+          <Button variant="secondary" size="sm" onClick={() => void downloadStreaming()}>下载（~300MB）</Button>
         )}
         {(streamBusy || streamProgress) && (
           <span style={{ fontSize: 11, color: "#0f766e" }}>
@@ -160,9 +160,9 @@ export default function ModelManagementPanel() {
           </span>
         )}
         {speakerState !== "done" && speakerState !== "downloading" && (
-          <button style={btn} onClick={() => void downloadSpeaker()} disabled={speakerBusy}>
+          <Button variant="secondary" size="sm" busy={speakerBusy} onClick={() => void downloadSpeaker()}>
             {speakerBusy ? "启动中…" : "下载（20-70MB）"}
-          </button>
+          </Button>
         )}
         {speakerState === "failed" && speaker?.error && (
           <span style={{ fontSize: 10.5, color: "#dc2626" }}>{speaker.error}</span>

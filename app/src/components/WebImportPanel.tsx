@@ -9,6 +9,7 @@
  */
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Button } from "../ui/primitives";
 
 /** WebCaptureView 响应结构（serde camelCase——字段须 camel 读取） */
 interface CaptureView {
@@ -32,15 +33,6 @@ const card: React.CSSProperties = {
   padding: 10,
   marginBottom: 8,
   background: "#fff",
-};
-const btn: React.CSSProperties = {
-  padding: "5px 12px",
-  cursor: "pointer",
-  fontSize: 12,
-  borderRadius: 6,
-  border: "none",
-  background: "#0d9488",
-  color: "#fff",
 };
 
 export default function WebImportPanel({ onOpenSessions, onStatus }: Props) {
@@ -91,9 +83,9 @@ export default function WebImportPanel({ onOpenSessions, onStatus }: Props) {
             minWidth: 0,
           }}
         />
-        <button style={btn} onClick={() => void capture()} disabled={busy || !url.trim()}>
+        <Button variant="primary" size="md" disabled={busy || !url.trim()} onClick={() => void capture()}>
           {busy ? "采集中…" : "采集"}
-        </button>
+        </Button>
       </div>
       {msg && <div style={{ fontSize: 11, color: "#047857", marginTop: 5 }}>{msg}</div>}
       {err && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 5 }}>{err}</div>}

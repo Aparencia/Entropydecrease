@@ -10,11 +10,12 @@
  *              父层自动刷新 detail。REQ-080 降级分级：degradedBanner 为一次性横幅（null=不渲染）。
  * @ai-context: DOM 契约——`data-testid="session-title-input"` 与 `data-testid="session-rename-open"`
  *              是既有测试锚点，不得改名；本组件不含 position:sticky（粘性头未实现，勿顺手加）。
- * @ai-context: 样式口径——沿用拆分前的全部 inline style（无 .ed-* 类名），拆分不改色值/结构。
+ * @ai-context: 样式口径——「删除」已走 `Button`（批 4 B4）；「转为笔记」仍是未迁的 spread 形态（余量登记批 5/7）。
  */
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { SessionDetail } from "../../types";
+import { Button } from "../../ui/primitives";
 
 /** 通用小按钮基础样式（拆分前 SessionDetailPanel 的 `btn`——本文件「转为笔记/删除」复用） */
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
@@ -150,9 +151,9 @@ export default function SessionDetailHeader({ detail, fusing, degradedBanner, on
           >
             📝 转为笔记
           </button>
-          <button style={btn} onClick={() => onRemove(sessionId)}>
+          <Button variant="secondary" size="md" onClick={() => onRemove(sessionId)}>
             删除
-          </button>
+          </Button>
         </div>
       </div>
     </>

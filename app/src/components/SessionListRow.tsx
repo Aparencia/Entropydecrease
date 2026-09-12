@@ -17,21 +17,13 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { SessionListItem } from "../types";
 import { fmtDate, fmtDuration } from "../utils/fmt";
+import { Button } from "../ui/primitives";
 
 /** 父层下发的行内重命名请求（nonce 保证同一行连续两次请求都重启编辑） */
 export interface SessionRenameRequest {
   id: number;
   nonce: number;
 }
-
-const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
-const convertBtn: React.CSSProperties = {
-  ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #0d9488",
-  background: "#f0fdfa", color: "#0f766e", fontWeight: 600,
-};
-const viewNoteBtn: React.CSSProperties = {
-  ...btn, fontSize: 11, borderRadius: 6, border: "1px solid #e5e7eb", background: "#fff", color: "#0f766e",
-};
 
 interface Props {
   item: SessionListItem;
@@ -218,28 +210,32 @@ export default function SessionListRow({
           </span>
         )}
         <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          {/* 批 4 B4：`Button` 的 `onClick` 契约是 `() => void`（无事件实参）⇒ 行级冒泡拦截
+              由外层 `<span>` 承担（同 `KnowledgeTreeView` 既有的行内操作包裹写法）。 */}
           {item.hasNote ? (
-            <button
-              style={viewNoteBtn}
-              title="打开关联笔记"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (item.noteId != null) onOpenNote(item.noteId);
-              }}
-            >
-              查看笔记 →
-            </button>
+            <span onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="secondary"
+                size="sm"
+                title="打开关联笔记"
+                onClick={() => {
+                  if (item.noteId != null) onOpenNote(item.noteId);
+                }}
+              >
+                查看笔记 →
+              </Button>
+            </span>
           ) : canConvert ? (
-            <button
-              style={convertBtn}
-              title="一键转为笔记（与详情页同管线）"
-              onClick={(e) => {
-                e.stopPropagation();
-                onConvert(item);
-              }}
-            >
-              转笔记
-            </button>
+            <span onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="secondary"
+                size="sm"
+                title="一键转为笔记（与详情页同管线）"
+                onClick={() => onConvert(item)}
+              >
+                转笔记
+              </Button>
+            </span>
           ) : null}
         </span>
       </div>

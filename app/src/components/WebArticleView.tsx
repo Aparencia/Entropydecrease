@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
+import { Button } from "../ui/primitives";
 
 /** WebPage 响应结构（db_web::WebPage 为 serde camelCase——字段须 camel 读取） */
 interface WebPageView {
@@ -99,9 +100,9 @@ export default function WebArticleView({ sessionId, onToNote, onRemove }: Props)
           >
             {snapBusy ? "快照中…" : "📸 整页快照"}
           </button>
-          <button style={btn} onClick={() => onRemove(sessionId)}>
+          <Button variant="secondary" size="md" onClick={() => onRemove(sessionId)}>
             删除
-          </button>
+          </Button>
         </span>
       </div>
       {snapMsg && <div style={{ fontSize: 12, color: "#047857", marginBottom: 8 }}>{snapMsg}</div>}

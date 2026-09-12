@@ -11,6 +11,7 @@
  *              的树形缩进视图（父锚点可视化），非平铺下拉。
  */
 import { useMemo, useState } from "react";
+import { Button } from "../ui/primitives";
 
 export interface LinkRow {
   id: number;
@@ -33,19 +34,6 @@ interface Props {
   /** Esc 第二段（输入已空）请求关闭浮层 */
   onClose?: () => void;
 }
-
-const rowBtn = (selected: boolean): React.CSSProperties => ({
-  display: "block",
-  width: "100%",
-  textAlign: "left",
-  fontSize: 12,
-  padding: "3px 6px",
-  borderRadius: 4,
-  border: "none",
-  cursor: "pointer",
-  background: selected ? "#f0fdfa" : "transparent",
-  color: selected ? "#0f766e" : "#374151",
-});
 
 export default function LinkEntityPicker({
   rows, selectedId, placeholder, kindLabel, rootAnchorLabel,
@@ -113,16 +101,19 @@ export default function LinkEntityPicker({
           </div>
         )}
         {visible.map((r) => (
-          <button
+          <Button
             key={r.id}
-            data-testid={`note-link-row-${r.id}`}
+            variant={selectedId === r.id ? "primary" : "ghost"}
+            size="md"
+            block
+            style={{ display: "block", textAlign: "left" }}
+            testId={`note-link-row-${r.id}`}
             onClick={() => onPick(r.id)}
-            style={rowBtn(selectedId === r.id)}
           >
             <span style={{ display: "inline-block", width: r.depth * 12 }} />
             {selectedId === r.id ? "✓ " : ""}
             {r.label}
-          </button>
+          </Button>
         ))}
       </div>
       {query.trim() && (

@@ -20,6 +20,8 @@
  * @ai-context 注意：data-testid `session-select-mode-chip` / `session-select-all`
  *              与文案「批量转笔记」「批量删除」「已选 N 个」是测试锚点，逐字保留。
  */
+import { Button } from "../ui/primitives";
+
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 
 interface ControlsProps {
@@ -32,15 +34,6 @@ interface ControlsProps {
 
 /** 头部：选择模式 chip + 「选择」按钮（再点或 Esc 退出；进入后单击行=勾选） */
 export function SessionSelectionControls({ selectionMode, selectedCount, onEnter, onExit }: ControlsProps) {
-  const selectModeBtn = (on: boolean): React.CSSProperties => ({
-    ...btn,
-    fontSize: 11,
-    borderRadius: 6,
-    border: on ? "1px solid #4f46e5" : "1px solid #d1d5db",
-    background: on ? "#eef2ff" : "#fff",
-    color: on ? "#3730a3" : "#4b5563",
-    fontWeight: on ? 600 : 400,
-  });
   return (
     <>
       {/* 批 4：选择模式进入/退出（再点或 Esc 退出；进入后单击行=勾选） */}
@@ -52,14 +45,15 @@ export function SessionSelectionControls({ selectionMode, selectedCount, onEnter
           选择模式{selectedCount > 0 ? `（${selectedCount}）` : ""}
         </span>
       )}
-      <button
-        data-testid="session-select-mode-btn"
-        style={selectModeBtn(selectionMode)}
+      <Button
+        variant={selectionMode ? "primary" : "secondary"}
+        size="sm"
+        testId="session-select-mode-btn"
         onClick={() => (selectionMode ? onExit() : onEnter())}
         title={selectionMode ? "退出选择模式（Esc）" : "进入选择模式：单击会话=勾选（Ctrl/Shift 多选）"}
       >
         选择
-      </button>
+      </Button>
     </>
   );
 }

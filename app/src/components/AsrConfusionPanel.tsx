@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Button } from "../ui/primitives";
 
 interface AsrPairView {
   wrong: string;
@@ -128,9 +129,9 @@ export function AsrConfusionPanel() {
                 <button style={{ ...rowBtn, color: "#047857", borderColor: "#6ee7b7" }} onClick={() => void confirm(c.wrong, c.right)}>
                   确认纠错+热词
                 </button>
-                <button style={rowBtn} onClick={() => void dismiss(c.wrong, c.right)}>
+                <Button variant="secondary" size="md" onClick={() => void dismiss(c.wrong, c.right)}>
                   忽略
-                </button>
+                </Button>
               </span>
             </div>
           ))}

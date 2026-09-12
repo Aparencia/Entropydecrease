@@ -15,6 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { KnowledgeNode, KnowledgeLink, KnowledgeNodeType } from "../types/knowledge";
 import { nodeTypeColor, nodeTypeLabel } from "../types/knowledge";
+import { Button } from "../ui/primitives";
 
 interface Props {
   systemId: number;
@@ -182,9 +183,9 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
           )}
           {!isEditing && (
             <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", gap: 2 }}>
-              <button data-testid={`node-add-${n.id}`} onClick={() => startAdd(n.id)} title="加子节点" style={actionBtn}>➕</button>
-              <button data-testid={`node-edit-${n.id}`} onClick={() => startEdit(n)} title="编辑文本" style={actionBtn}>✏️</button>
-              <button data-testid={`node-del-${n.id}`} onClick={() => void del(n)} title="删除（级联）" style={actionBtn}>🗑</button>
+              <Button variant="secondary" size="md" testId={`node-add-${n.id}`} title="加子节点" onClick={() => startAdd(n.id)}>➕</Button>
+              <Button variant="secondary" size="md" testId={`node-edit-${n.id}`} title="编辑文本" onClick={() => startEdit(n)}>✏️</Button>
+              <Button variant="secondary" size="md" testId={`node-del-${n.id}`} title="删除（级联）" onClick={() => void del(n)}>🗑</Button>
             </span>
           )}
         </div>
@@ -198,16 +199,16 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
               ))}
             </select>
             <input data-testid="node-add-input" value={addText} onChange={(e) => setAddText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void confirmAdd(); }} placeholder="子问题…" style={{ flex: 1, fontSize: 12, padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 4 }} />
-            <button data-testid="node-add-confirm" onClick={() => void confirmAdd()} style={actionBtn}>✓</button>
-            <button data-testid="node-add-cancel" onClick={() => setAddDraft(null)} style={actionBtn}>取消</button>
+            <Button variant="secondary" size="md" testId="node-add-confirm" onClick={() => void confirmAdd()}>✓</Button>
+            <Button variant="secondary" size="md" testId="node-add-cancel" onClick={() => setAddDraft(null)}>取消</Button>
           </div>
         )}
 
         {/* 编辑确认/取消（v0.13.9：缩进随层级同步） */}
         {isEditing && (
           <div style={{ display: "flex", gap: 4, marginLeft: 28 + depth * 16, padding: "3px 0" }}>
-            <button data-testid="node-edit-confirm" onClick={() => void confirmEdit()} style={actionBtn}>✓ 保存</button>
-            <button data-testid="node-edit-cancel" onClick={() => setEditId(null)} style={actionBtn}>取消</button>
+            <Button variant="secondary" size="md" testId="node-edit-confirm" onClick={() => void confirmEdit()}>✓ 保存</Button>
+            <Button variant="secondary" size="md" testId="node-edit-cancel" onClick={() => setEditId(null)}>取消</Button>
           </div>
         )}
 
@@ -290,8 +291,8 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
               ))}
             </select>
             <input data-testid="node-add-input" value={addText} onChange={(e) => setAddText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void confirmAdd(); }} placeholder="根问题…" style={{ flex: 1, fontSize: 12, padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 4 }} autoFocus />
-            <button data-testid="node-add-confirm" onClick={() => void confirmAdd()} style={actionBtn}>✓</button>
-            <button data-testid="node-add-cancel" onClick={() => setAddDraft(null)} style={actionBtn}>取消</button>
+            <Button variant="secondary" size="md" testId="node-add-confirm" onClick={() => void confirmAdd()}>✓</Button>
+            <Button variant="secondary" size="md" testId="node-add-cancel" onClick={() => setAddDraft(null)}>取消</Button>
           </div>
         )}
 
@@ -302,9 +303,3 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
     </div>
   );
 }
-
-/** 节点行内操作小按钮（统一样式） */
-const actionBtn: React.CSSProperties = {
-  fontSize: 12, cursor: "pointer", padding: "1px 6px", borderRadius: 4,
-  border: "1px solid #e5e7eb", background: "#fff", color: "#4b5563", lineHeight: 1.4,
-};

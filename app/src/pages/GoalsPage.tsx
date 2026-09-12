@@ -20,6 +20,7 @@ import GoalCard from "../components/GoalCard";
 import GoalDetail from "../components/GoalDetail";
 import InterviewDialog from "../components/InterviewDialog";
 import { ReportBody } from "../components/GraduateDialog";
+import { Button } from "../ui/primitives";
 
 const HOT_DOMAINS = ["学 Python", "练听力", "画水彩"];
 
@@ -80,8 +81,8 @@ export default function GoalsPage() {
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid #e5e7eb", flexShrink: 0 }}>
         <span style={{ fontWeight: 700, fontSize: 14 }}>🎯 目标</span>
         <span style={{ fontSize: 11, color: "#9ca3af" }}>意图层——把素材串成可毕业的目标</span>
-        <button data-testid="open-interview" onClick={() => setDialog({ mode: "interview" })} style={primaryBtn}>＋ 新建目标（访谈）</button>
-        <button data-testid="open-quick" onClick={() => setDialog({ mode: "quick" })} style={ghostBtn}>只想简单记一下</button>
+        <Button variant="primary" size="md" testId="open-interview" onClick={() => setDialog({ mode: "interview" })}>＋ 新建目标（访谈）</Button>
+        <Button variant="secondary" size="md" testId="open-quick" onClick={() => setDialog({ mode: "quick" })}>只想简单记一下</Button>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
@@ -163,5 +164,4 @@ export default function GoalsPage() {
   );
 }
 
-const primaryBtn: React.CSSProperties = { fontSize: 12, padding: "5px 12px", borderRadius: 6, border: "1px solid #0f766e", background: "#0f766e", color: "#fff", cursor: "pointer" };
 const ghostBtn: React.CSSProperties = { fontSize: 12, padding: "5px 12px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: "#4b5563", cursor: "pointer" };

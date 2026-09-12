@@ -13,7 +13,7 @@
  *              的 `showPass2` 条件挂载）⇒ `open` 恒为 `true`。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Button, Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -192,15 +192,15 @@ export default function SecondPassPanel({ sessionId, onChanged, onClose }: Props
       <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10 }}>
         {!view?.running ? (
           <>
-            <button style={okBtn} onClick={() => void start()} disabled={busy}>
+            <Button variant="primary" size="md" busy={busy} onClick={() => void start()}>
               ▶ 开始第二遍
-            </button>
-            <button style={ghostBtn} onClick={() => void adoptAllPending()} disabled={pending === 0 || busy}>
+            </Button>
+            <Button variant="secondary" size="md" disabled={pending === 0 || busy} onClick={() => void adoptAllPending()}>
               全部采纳（{pending}）
-            </button>
-            <button style={ghostBtn} onClick={() => void rejectAllAdopted()} disabled={adopted === 0 || busy}>
+            </Button>
+            <Button variant="secondary" size="md" disabled={adopted === 0 || busy} onClick={() => void rejectAllAdopted()}>
               全部回退（{adopted}）
-            </button>
+            </Button>
           </>
         ) : (
           <button style={{ ...ghostBtn, color: "#b45309" }} onClick={() => void cancel()} disabled={busy}>

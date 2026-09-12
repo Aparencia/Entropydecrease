@@ -10,9 +10,8 @@
  *              门控）⇒ `open` 恒为 `true`，本组件每次由父层条件挂载。
  */
 import { useEffect, useRef, useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Button, Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
-import type { CSSProperties } from "react";
 
 interface Props {
   noteId: number;
@@ -23,8 +22,6 @@ interface Props {
    *  挂载时一次性读入；对话框每次由父层条件挂载，无需 key 重触发） */
   initialExcerpt?: string;
 }
-
-const btn: CSSProperties = { padding: "5px 12px", cursor: "pointer", fontSize: 12, borderRadius: 6, border: "1px solid #e5e7eb", background: "#fff", color: "#374151" };
 
 export default function ModelCardFromNoteDialog({ noteId, noteTitle, onClose, onCreated, initialExcerpt = "" }: Props) {
   const [name, setName] = useState("");
@@ -62,10 +59,10 @@ export default function ModelCardFromNoteDialog({ noteId, noteTitle, onClose, on
   /** 页脚行动区：原「取消」在面板头右侧、「创建草稿」在内容右下角 —— 两枚都搬进 `Modal` 的 footer 槽 */
   const footer = (
     <>
-      <button style={btn} onClick={onClose} disabled={created}>取消</button>
-      <button style={btn} disabled={busy || created} onClick={() => void create()}>
+      <Button variant="secondary" size="md" disabled={created} onClick={onClose}>取消</Button>
+      <Button variant="secondary" size="md" disabled={busy || created} onClick={() => void create()}>
         {created ? "已创建，即将关闭…" : "创建草稿"}
-      </button>
+      </Button>
     </>
   );
 

@@ -11,7 +11,7 @@
  *              （`SessionDetailPanel` 的 `showProofread` 条件挂载）⇒ `open` 恒为 `true`。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Button, Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { RefineDraftView, SecondPassView } from "./SecondPassPanel";
 
@@ -141,9 +141,9 @@ export default function ProofreadPanel({ sessionId, onClose }: Props) {
           我已阅读并同意：本次仅上传<b>转写文本</b>用于校对（语音/画面永不出本机）
         </label>
         <div style={{ display: "flex", gap: 6 }}>
-          <button style={okBtn} onClick={() => void run()} disabled={busy || pending > 0}>
+          <Button variant="primary" size="md" disabled={busy || pending > 0} onClick={() => void run()}>
             {busy ? "校对中…" : "▶ 运行校对（建议落草稿，不直改）"}
-          </button>
+          </Button>
           {pending > 0 && (
             <span style={{ fontSize: 11, color: "#b45309" }}>有 {pending} 条待裁决草稿——请先裁决（采纳/回退）再重跑，防重复建议</span>
           )}

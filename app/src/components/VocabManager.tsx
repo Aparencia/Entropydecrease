@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { Button } from "../ui/primitives";
 
 /** 词表全量（Rust VocabState） */
 interface VocabState {
@@ -161,9 +162,9 @@ export function VocabManager() {
             placeholder="术语/人名（如：Transformer）"
             style={{ flex: 1, padding: "4px 6px", fontSize: 12, borderRadius: 6, border: "1px solid #e5e7eb" }}
           />
-          <button onClick={() => void addHotword()} style={btn}>
+          <Button variant="secondary" size="sm" onClick={() => void addHotword()}>
             添加
-          </button>
+          </Button>
         </div>
         {state.hotwords.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -211,9 +212,9 @@ export function VocabManager() {
             placeholder="正词（如：王者）"
             style={{ flex: 1, padding: "4px 6px", fontSize: 12, borderRadius: 6, border: "1px solid #e5e7eb" }}
           />
-          <button onClick={() => void addReplacement()} style={btn}>
+          <Button variant="secondary" size="sm" onClick={() => void addReplacement()}>
             添加
-          </button>
+          </Button>
         </div>
         {state.replacements.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -258,14 +259,14 @@ export function VocabManager() {
         <div style={{ marginBottom: 4 }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
             {candidates.map((c) => (
-              <button key={`c-${c}`} onClick={() => void addHotwordsBatch([c])} title="加入热词" style={btn}>
+              <Button key={`c-${c}`} variant="secondary" size="sm" title="加入热词" onClick={() => void addHotwordsBatch([c])}>
                 {c} ＋
-              </button>
+              </Button>
             ))}
             {suggestions.map((s) => (
-              <button key={`s-${s}`} onClick={() => void addHotwordsBatch([s])} title="加入热词" style={btn}>
+              <Button key={`s-${s}`} variant="secondary" size="sm" title="加入热词" onClick={() => void addHotwordsBatch([s])}>
                 {s} ＋
-              </button>
+              </Button>
             ))}
           </div>
           {(candidates.length > 0 || suggestions.length > 0) && (

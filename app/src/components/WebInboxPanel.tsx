@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Button } from "../ui/primitives";
 
 interface InboxView {
   running: boolean;
@@ -16,7 +17,6 @@ interface InboxView {
 }
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6 };
-const okBtn: React.CSSProperties = { ...btn, background: "#0d9488", color: "#fff", border: "none" };
 const ghostBtn: React.CSSProperties = { ...btn, background: "#fff", border: "1px solid #e5e7eb", color: "#374151" };
 
 export function WebInboxPanel() {
@@ -80,12 +80,12 @@ export function WebInboxPanel() {
       {err && <div style={{ fontSize: 11, color: "#dc2626", marginBottom: 4 }}>{err}</div>}
       <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
         {!view?.running ? (
-          <button style={okBtn} onClick={() => void start()}>▶ 启动收件服务</button>
+          <Button variant="primary" size="md" onClick={() => void start()}>▶ 启动收件服务</Button>
         ) : (
           <>
             <span style={{ fontSize: 12 }}>端口 <b>{view.port}</b></span>
             <code style={{ fontSize: 11, background: "#f9fafb", padding: "2px 6px", borderRadius: 4 }}>{view.token}</code>
-            <button style={ghostBtn} onClick={() => void copy()}>复制参数</button>
+            <Button variant="secondary" size="md" onClick={() => void copy()}>复制参数</Button>
             <button style={{ ...ghostBtn, color: "#dc2626" }} onClick={() => void stop()}>⏹ 停止</button>
           </>
         )}

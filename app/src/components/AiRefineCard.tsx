@@ -23,6 +23,7 @@ import type {
 import RefineWorkbench from "./RefineWorkbench";
 import RefineLaunchDialog from "./RefineLaunchDialog";
 import { overrideFromInfo } from "../utils/refineStrategy";
+import { Button } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6 };
 
@@ -242,7 +243,7 @@ export default function AiRefineCard({
                 >
                   🔧 打开工作台
                 </button>
-                <button style={btn} onClick={reset}>放弃（保留规则版）</button>
+                <Button variant="secondary" size="md" onClick={reset}>放弃（保留规则版）</Button>
               </div>
             </div>
           )}

@@ -13,6 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AiAuditEntry, AiSettingsView, RefineStrategyMeta } from "../types";
 import RefineStrategyPicker from "./RefineStrategyPicker";
 import { draftFromPrefs, prefsFromDraft, type StrategyDraft } from "../utils/refineStrategy";
+import { Button } from "../ui/primitives";
 
 /** 通用小按钮样式（与各设置面板一致） */
 const btn: React.CSSProperties = {
@@ -240,9 +241,9 @@ export default function AiServicePanel() {
             <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }} onClick={() => void consent()} disabled={busy}>
               同意并开启
             </button>
-            <button style={btn} onClick={() => setConsentVisible(false)} disabled={busy}>
+            <Button variant="secondary" size="md" disabled={busy} onClick={() => setConsentVisible(false)}>
               暂不
-            </button>
+            </Button>
           </div>
         </div>
       )}

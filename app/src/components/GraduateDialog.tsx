@@ -7,7 +7,7 @@
  * @ai-context: 未达标时按钮不可达（GoalDetail 禁用）；本对话框只管确认流。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Button, Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { GraduationReport, GoalDetailView, GoalProgressView } from "../types/goals";
 
@@ -65,13 +65,13 @@ export default function GraduateDialog({ goalId, onClose, onGraduated }: Props) 
       testId="graduate-dialog"
       footer={
         report ? (
-          <button onClick={onClose} style={primaryBtn}>完成</button>
+          <Button variant="primary" size="md" onClick={onClose}>完成</Button>
         ) : (
           <>
-            <button onClick={onClose} style={ghostBtn}>再等等</button>
-            <button data-testid="confirm-graduate" onClick={() => void confirm()} disabled={saving} style={primaryBtn}>
+            <Button variant="secondary" size="md" onClick={onClose}>再等等</Button>
+            <Button variant="primary" size="md" testId="confirm-graduate" busy={saving} onClick={() => void confirm()}>
               {saving ? "毕业中…" : "🎓 确认毕业"}
-            </button>
+            </Button>
           </>
         )
       }
@@ -144,6 +144,3 @@ export function ReportBody({ report }: { report: GraduationReport }) {
 function Section({ children }: { children: string }) {
   return <div style={{ fontWeight: 600, color: "#374151", marginTop: 8 }}>{children}</div>;
 }
-
-const primaryBtn: React.CSSProperties = { fontSize: 12, padding: "6px 16px", borderRadius: 6, cursor: "pointer", border: "1px solid #0f766e", background: "#0f766e", color: "#fff" };
-const ghostBtn: React.CSSProperties = { fontSize: 12, padding: "6px 12px", borderRadius: 6, cursor: "pointer", border: "1px solid #d1d5db", background: "#fff", color: "#4b5563" };

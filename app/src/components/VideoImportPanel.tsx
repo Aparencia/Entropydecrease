@@ -10,6 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { ImportProgress } from "../types";
+import { Button } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
 
@@ -65,9 +66,9 @@ export default function VideoImportPanel({ onOpenSessions }: { onOpenSessions?: 
         视频文件导入{importing && <span style={{ color: "#dc2626" }}> ● 处理中</span>}
       </div>
       <div style={{ display: "flex", gap: 6 }}>
-        <button style={btn} onClick={pickVideo} disabled={importing}>
+        <Button variant="secondary" size="lg" busy={importing} onClick={pickVideo}>
           选视频
-        </button>
+        </Button>
         <button
           style={{ ...btn, background: videoPath && !importing ? "#0d9488" : "#e5e7eb", color: videoPath && !importing ? "#fff" : "#9ca3af", border: "none", borderRadius: 6, flex: 1 }}
           onClick={runImport}

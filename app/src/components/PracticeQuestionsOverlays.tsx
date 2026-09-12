@@ -11,7 +11,7 @@
  *              （`ActionCenterPanel` 的条件挂载）⇒ `open` 恒为 `true`，160ms 退场相位不触发。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Button, Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 
 /** 响应结构（PracticeItem/QuestionItem 均 serde camelCase——字段须 camel 读取） */
@@ -37,7 +37,6 @@ interface QuestionView {
 }
 
 const btn: React.CSSProperties = { padding: "4px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6 };
-const okBtn: React.CSSProperties = { ...btn, background: "#0d9488", color: "#fff", border: "none" };
 const ghostBtn: React.CSSProperties = { ...btn, background: "#fff", border: "1px solid #e5e7eb", color: "#374151" };
 
 /**
@@ -106,7 +105,7 @@ export function PracticeOverlay({ onClose }: { onClose: () => void }) {
           <option value="daily">daily（每日）</option>
           <option value="manual">manual（手动）</option>
         </select>
-        <button style={okBtn} onClick={() => void create()}>新建</button>
+        <Button variant="primary" size="md" onClick={() => void create()}>新建</Button>
       </div>
       {items.length === 0 ? (
         <p style={{ color: "#9ca3af", fontSize: 12 }}>暂无练习条目——把「需要周期练」的行动内建为练习条目</p>
@@ -120,7 +119,7 @@ export function PracticeOverlay({ onClose }: { onClose: () => void }) {
                 {it.mastery != null ? ` · 熟练 ${it.mastery}/5` : ""}
                 {it.nextDue != null ? ` · 下次 ${new Date(it.nextDue * 1000).toLocaleDateString()}` : ""}
               </span>
-              <button style={okBtn} onClick={() => void tick(it)}>🎯 打点</button>
+              <Button variant="primary" size="md" onClick={() => void tick(it)}>🎯 打点</Button>
             </div>
           ))}
         </div>
@@ -193,20 +192,20 @@ export function QuestionsOverlay({ onClose }: { onClose: () => void }) {
       {err && <div style={{ fontSize: 11, color: "#dc2626", marginBottom: 6 }}>{err}</div>}
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
         <input value={text} onChange={(e) => setText(e.target.value)} placeholder="记下一个值得回答的问题…" style={{ flex: 1, fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 4, padding: "4px 6px" }} />
-        <button style={okBtn} onClick={() => void create()}>添加</button>
+        <Button variant="primary" size="md" onClick={() => void create()}>添加</Button>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {open.map((q) => (
           <div key={q.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }}>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <span style={{ fontSize: 12.5, flex: 1 }}>❓ {q.text}</span>
-              <button style={ghostBtn} onClick={() => setAnswerFor(answerFor === q.id ? null : q.id)}>已答</button>
+              <Button variant="secondary" size="md" onClick={() => setAnswerFor(answerFor === q.id ? null : q.id)}>已答</Button>
               <button style={{ ...ghostBtn, color: "#9ca3af" }} onClick={() => void archive(q)}>归档</button>
             </div>
             {answerFor === q.id && (
               <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
                 <input autoFocus value={answerRef} onChange={(e) => setAnswerRef(e.target.value)} placeholder="答沉淀处回链（笔记 id/卡 id，可空）" style={{ flex: 1, fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }} />
-                <button style={okBtn} onClick={() => void answer(q)}>确认</button>
+                <Button variant="primary" size="md" onClick={() => void answer(q)}>确认</Button>
               </div>
             )}
           </div>

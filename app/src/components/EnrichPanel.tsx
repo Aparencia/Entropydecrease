@@ -13,6 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 // M8：轮询/事件双通道/卡住检测抽入共用 hook（与 AiRefineCard 同源）
 import { useAiTaskPolling } from "../hooks/useAiTaskPolling";
 import { failureGuide } from "./aiTaskFailure";
+import { Button } from "../ui/primitives";
 import type {
   AiEnrichResult,
   AiSettingsView,
@@ -244,7 +245,7 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
               setSettings({ ...settings!, authorized: true });
               await loadConfirm();
             }}>同意并继续</button>
-            <button style={btn} onClick={() => setPhase("idle")}>暂不</button>
+            <Button variant="secondary" size="md" onClick={() => setPhase("idle")}>暂不</Button>
           </div>
         </div>
       )}
@@ -274,7 +275,7 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
             <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }} onClick={() => void start()}>
               开始补充
             </button>
-            <button style={btn} onClick={reset}>取消</button>
+            <Button variant="secondary" size="md" onClick={reset}>取消</Button>
           </div>
         </div>
       )}
@@ -312,8 +313,8 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
             <button style={{ ...btn, background: "#7c3aed", color: "#fff", border: "none" }} onClick={() => void apply()}>
               ✅ 采纳（应用补充）
             </button>
-            <button style={btn} onClick={() => void revert()}>撤销（还原补充前）</button>
-            <button style={btn} onClick={reset}>放弃预览</button>
+            <Button variant="secondary" size="md" onClick={() => void revert()}>撤销（还原补充前）</Button>
+            <Button variant="secondary" size="md" onClick={reset}>放弃预览</Button>
           </div>
         </div>
       )}

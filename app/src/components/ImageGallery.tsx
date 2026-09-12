@@ -13,8 +13,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import ImagePreviewOverlay from "./ImagePreviewOverlay";
 import StructureImageSection from "./StructureImageSection";
-
-const btn: React.CSSProperties = { padding: "4px 10px", cursor: "pointer", fontSize: 12 };
+import { Button } from "../ui/primitives";
 
 export default function ImageGallery({ sessionId }: { sessionId: number }) {
   const [images, setImages] = useState<string[]>([]);
@@ -70,9 +69,9 @@ export default function ImageGallery({ sessionId }: { sessionId: number }) {
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
         <span style={{ fontSize: 12, fontWeight: 600 }}>📷 参考图集（{images.length}）</span>
-        <button style={btn} onClick={() => void refresh()} disabled={loading}>
+        <Button variant="secondary" size="md" busy={loading} onClick={() => void refresh()}>
           {loading ? "加载中…" : "⟳ 刷新"}
-        </button>
+        </Button>
         {error && <span style={{ fontSize: 11, color: "#dc2626" }}>{error}</span>}
       </div>
       {images.length === 0 && !loading && (

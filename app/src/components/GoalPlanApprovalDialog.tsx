@@ -8,7 +8,7 @@
  *              清理登记（丢弃项）诚实展示，绝不静默。
  */
 import { useMemo, useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Button, Modal } from "../ui/primitives";
 import type { GoalPlanView } from "../types/goals";
 
 interface Props {
@@ -88,11 +88,11 @@ export default function GoalPlanApprovalDialog({ view, onConfirm, onClose, onUse
       testId="plan-approval"
       footer={
         <>
-          <button onClick={onUseRules} style={ghostBtn} title="不采纳 AI 建议——回到 M1 规则草案（永远可用的降级基线）">改用规则草案</button>
-          <button onClick={onClose} style={ghostBtn}>再想想</button>
-          <button data-testid="plan-confirm" onClick={() => void confirm()} disabled={saving} style={primaryBtn}>
+          <Button variant="secondary" size="md" onClick={onUseRules} title="不采纳 AI 建议——回到 M1 规则草案（永远可用的降级基线）">改用规则草案</Button>
+          <Button variant="secondary" size="md" onClick={onClose}>再想想</Button>
+          <Button variant="primary" size="md" testId="plan-confirm" busy={saving} onClick={() => void confirm()}>
             {saving ? "落库中…" : "✓ 确认采用"}
-          </button>
+          </Button>
         </>
       }
     >
@@ -181,5 +181,3 @@ function Empty({ children }: { children: React.ReactNode }) {
 }
 
 const numStyle: React.CSSProperties = { width: 56, fontSize: 12, padding: "2px 6px", border: "1px solid #e5e7eb", borderRadius: 4 };
-const primaryBtn: React.CSSProperties = { fontSize: 12, padding: "6px 16px", borderRadius: 6, cursor: "pointer", border: "1px solid #0f766e", background: "#0f766e", color: "#fff" };
-const ghostBtn: React.CSSProperties = { fontSize: 12, padding: "6px 12px", borderRadius: 6, cursor: "pointer", border: "1px solid #d1d5db", background: "#fff", color: "#4b5563" };

@@ -23,12 +23,7 @@ import {
   matchIntent,
   type StrategyDraft,
 } from "../utils/refineStrategy";
-
-const chipBtn = (active: boolean): React.CSSProperties => ({
-  padding: "3px 10px", cursor: "pointer", fontSize: 12, borderRadius: 999,
-  border: active ? "1px solid #4f46e5" : "1px solid #d1d5db",
-  background: active ? "#eef2ff" : "#fff", color: active ? "#3730a3" : "#374151",
-});
+import { Button } from "../ui/primitives";
 
 const optBtn = (active: boolean): React.CSSProperties => ({
   padding: "2px 8px", cursor: "pointer", fontSize: 11, borderRadius: 6,
@@ -76,14 +71,15 @@ export default function RefineStrategyPicker({
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {meta?.intents.map((i) => (
-            <button
+            <Button
               key={i.id}
-              style={chipBtn(value.presetId === `intent:${i.id}`)}
+              variant={value.presetId === `intent:${i.id}` ? "primary" : "secondary"}
+              size="md"
               title={i.keywords.join(" / ")}
               onClick={() => onChange(applyIntent(value, i, meta))}
             >
               {i.label}
-            </button>
+            </Button>
           ))}
         </div>
         <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
@@ -164,14 +160,15 @@ export default function RefineStrategyPicker({
             <span style={{ fontSize: 11, color: "#374151", width: 64, flexShrink: 0 }}>{dim.label}</span>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
               {dim.options.map((o) => (
-                <button
+                <Button
                   key={o.value}
-                  style={optBtn(value.dims[dim.key] === o.value)}
+                  variant={value.dims[dim.key] === o.value ? "primary" : "secondary"}
+                  size="sm"
                   title={o.instruction}
                   onClick={() => onChange(applyDim(value, dim.key, o.value))}
                 >
                   {o.label}
-                </button>
+                </Button>
               ))}
             </div>
           </div>

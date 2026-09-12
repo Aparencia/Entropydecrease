@@ -9,7 +9,7 @@
  *              判定的唯一事实源在后端 goal_interview.rs）。
  */
 import { useEffect, useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Button, Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { Goal, GoalPlanView, MilestoneDraft } from "../types/goals";
 import type { InterviewAnswers } from "../utils/goalInterview";
@@ -222,10 +222,10 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
           {!quickMode && step === 4 && "确认后即创建——里程碑/判据可从详情页调整"}
         </span>
         {!quickMode && step > 0 && (
-          <button onClick={() => setStep((s) => s - 1)} style={ghostBtn}>上一步</button>
+          <Button variant="secondary" size="md" onClick={() => setStep((s) => s - 1)}>上一步</Button>
         )}
         {!quickMode && (step === 1 || step === 3) && (
-          <button data-testid="skip-step" onClick={() => setStep((s) => s + 1)} style={ghostBtn}>跳过／以后想</button>
+          <Button variant="secondary" size="md" testId="skip-step" onClick={() => setStep((s) => s + 1)}>跳过／以后想</Button>
         )}
         {!quickMode && step === 4 && (
           <button
@@ -239,12 +239,12 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
           </button>
         )}
         {!quickMode && step < 4 && (
-          <button data-testid="next-step" onClick={next} style={primaryBtn}>下一步</button>
+          <Button variant="primary" size="md" testId="next-step" onClick={next}>下一步</Button>
         )}
         {(quickMode || step === 4) && (
-          <button data-testid="confirm-create" onClick={() => void create()} disabled={saving || !name.trim()} style={primaryBtn}>
+          <Button variant="primary" size="md" testId="confirm-create" disabled={saving || !name.trim()} onClick={() => void create()}>
             {saving ? "创建中…" : "✓ 确认创建"}
-          </button>
+          </Button>
         )}
       </div>
       {/* v0.18.2：AI 规划确认流（建议制——确认后替换规则草案落库） */}
@@ -270,10 +270,6 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
 const inputStyle: React.CSSProperties = {
   width: "100%", padding: "7px 10px", fontSize: 13, border: "1px solid #e5e7eb",
   borderRadius: 6, boxSizing: "border-box", marginBottom: 10,
-};
-const primaryBtn: React.CSSProperties = {
-  fontSize: 12, padding: "6px 16px", borderRadius: 6, cursor: "pointer",
-  border: "1px solid #0f766e", background: "#0f766e", color: "#fff",
 };
 const ghostBtn: React.CSSProperties = {
   fontSize: 12, padding: "6px 12px", borderRadius: 6, cursor: "pointer",

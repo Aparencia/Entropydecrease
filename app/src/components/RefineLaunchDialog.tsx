@@ -14,7 +14,7 @@
  *              的 `kind` 分支）⇒ `open` 恒为 `true`，本组件每次由父层条件挂载。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Button, Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiSettingsView, BalanceView, RefineEstimateView, RefineStrategyMeta } from "../types";
 import {
@@ -164,7 +164,7 @@ export default function RefineLaunchDialog({
   /** 页脚行动区：原自绘底栏两枚按钮逐字搬进 `Modal` 的 footer 槽 */
   const footer = (
     <>
-      <button style={btn} onClick={onClose}>取消</button>
+      <Button variant="secondary" size="md" onClick={onClose}>取消</Button>
       <button
         style={{ ...btn, background: "#4f46e5", color: "#fff", border: "none",
           opacity: selectable && !starting ? 1 : .5 }}
@@ -199,7 +199,7 @@ export default function RefineLaunchDialog({
           是否同意？
           <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
             <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }} onClick={() => void consent()}>同意并继续</button>
-            <button style={btn} onClick={onClose}>暂不</button>
+            <Button variant="secondary" size="md" onClick={onClose}>暂不</Button>
           </div>
         </div>
       )}

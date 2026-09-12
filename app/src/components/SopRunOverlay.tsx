@@ -13,7 +13,7 @@
  *              （`ActionCenterPanel` 的条件挂载）⇒ `open` 恒为 `true`，160ms 退场相位不触发。
  */
 import { useEffect, useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Button, Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 
 /** 响应结构（SopTemplate/SopRunStep/SopRun/SopRunDetail 均 serde camelCase——字段须 camel 读取） */
@@ -61,7 +61,6 @@ interface Props {
 }
 
 const btn: React.CSSProperties = { padding: "4px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6 };
-const okBtn: React.CSSProperties = { ...btn, background: "#0d9488", color: "#fff", border: "none" };
 const ghostBtn: React.CSSProperties = { ...btn, background: "#fff", border: "1px solid #e5e7eb", color: "#374151" };
 
 export default function SopRunOverlay({ template, onClose, onChanged }: Props) {
@@ -186,9 +185,9 @@ export default function SopRunOverlay({ template, onClose, onChanged }: Props) {
       {stage === "run" && detail && (
         <>
           <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8 }}>
-            <button style={ghostBtn} onClick={() => setConfirmMode((m) => !m)} title="两种执行模式可随时切换">
+            <Button variant="secondary" size="md" title="两种执行模式可随时切换" onClick={() => setConfirmMode((m) => !m)}>
               {confirmMode ? "切到逐步引导" : "切到总览核对"}
-            </button>
+            </Button>
             <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: "auto" }}>
               进行中 {detail.stats.done + detail.stats.failed + detail.stats.skipped}/{detail.stats.total} · 待办 {pending}
             </span>
@@ -210,14 +209,14 @@ export default function SopRunOverlay({ template, onClose, onChanged }: Props) {
                   {!done && !failed && !skipped && (
                     <>
                       <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }}>
-                        <button style={okBtn} disabled={busy} onClick={() => void stepAction(s.stepNo, "done")}>✓ 完成</button>
-                        <button style={ghostBtn} disabled={busy} onClick={() => void stepAction(s.stepNo, "skipped")}>⏭ 跳过</button>
+                        <Button variant="primary" size="md" busy={busy} onClick={() => void stepAction(s.stepNo, "done")}>✓ 完成</Button>
+                        <Button variant="secondary" size="md" busy={busy} onClick={() => void stepAction(s.stepNo, "skipped")}>⏭ 跳过</Button>
                         <button style={{ ...ghostBtn, color: "#dc2626" }} disabled={busy} onClick={() => { setFailOpen(failOpen === s.stepNo ? null : s.stepNo); setFailNote(""); }}>✗ 失败</button>
                       </div>
                       {failOpen === s.stepNo && (
                         <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
                           <input autoFocus placeholder="失败原因（建议记录可观测信号差在哪）" value={failNote} onChange={(e) => setFailNote(e.target.value)} style={{ flex: 1, fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }} />
-                          <button style={okBtn} disabled={busy} onClick={() => void stepAction(s.stepNo, "failed")}>记录失败</button>
+                          <Button variant="primary" size="md" busy={busy} onClick={() => void stepAction(s.stepNo, "failed")}>记录失败</Button>
                         </div>
                       )}
                       {s.status === "todo" && (
@@ -238,9 +237,9 @@ export default function SopRunOverlay({ template, onClose, onChanged }: Props) {
             })}
           </div>
           <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-            <button style={okBtn} disabled={busy || pending > 0} onClick={() => void finish("done")}>
+            <Button variant="primary" size="md" disabled={busy || pending > 0} onClick={() => void finish("done")}>
               ✅ 结算（完成）
-            </button>
+            </Button>
             <button style={{ ...ghostBtn, color: "#b45309" }} disabled={busy} onClick={() => void finish("aborted")}>
               ⏹ 中止并归档
             </button>
@@ -263,7 +262,7 @@ export default function SopRunOverlay({ template, onClose, onChanged }: Props) {
             </div>
           )}
           <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            <button style={okBtn} onClick={onClose}>返回</button>
+            <Button variant="primary" size="md" onClick={onClose}>返回</Button>
           </div>
         </div>
       )}

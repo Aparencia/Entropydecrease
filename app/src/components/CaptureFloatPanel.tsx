@@ -27,6 +27,7 @@ import { useFloatWindow } from "../hooks/useFloatWindow";
 // 批 2b：本窗独立的采集控制实例（provider 由 App ?float=1 分支包入）
 import { useCaptureControl } from "../hooks/useLiveCaptureControl";
 import { AUTO_RESUME_HINTS, pauseReasonLabel } from "../hooks/liveCaptureState";
+import { Button } from "../ui/primitives";
 
 function fmtTime(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -145,9 +146,9 @@ export default function CaptureFloatPanel() {
             🔒 已锁定
           </span>
         ) : (
-          <button style={iconBtn} title="点击穿透锁定" onClick={toggleLocked}>🔓</button>
+          <Button variant="ghost" size="sm" title="点击穿透锁定" onClick={toggleLocked}>🔓</Button>
         )}
-        <button style={iconBtn} title="展开为面板（Esc）" onClick={expandToPanel}>⤢</button>
+        <Button variant="ghost" size="sm" title="展开为面板（Esc）" onClick={expandToPanel}>⤢</Button>
       </div>
     );
   }
@@ -186,18 +187,18 @@ export default function CaptureFloatPanel() {
         </span>
         <span style={{ color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>⏱ {fmtTime(elapsedMs)}</span>
         <span style={{ marginLeft: "auto", color: "#6b7280" }}>{info?.platform ?? ""}</span>
-        <button style={iconBtn} title={snapshot.topmost ? "取消置顶" : "置顶"} onClick={toggleTopmost}>
+        <Button variant="ghost" size="sm" title={snapshot.topmost ? "取消置顶" : "置顶"} onClick={toggleTopmost}>
           {snapshot.topmost ? "📌" : "📍"}
-        </button>
-        <button style={iconBtn} title={snapshot.locked ? "点击穿透已锁定（Ctrl+Shift+F 解锁）" : "点击穿透锁定"} onClick={toggleLocked}>
+        </Button>
+        <Button variant="ghost" size="sm" title={snapshot.locked ? "点击穿透已锁定（Ctrl+Shift+F 解锁）" : "点击穿透锁定"} onClick={toggleLocked}>
           {snapshot.locked ? "🔒" : "🔓"}
-        </button>
+        </Button>
         {snapshot.locked && (
           <span style={{ fontSize: 10, color: "#b45309", flexShrink: 0 }} title="点击穿透已锁定——按 Ctrl+Shift+F 解锁">
             已锁定
           </span>
         )}
-        <button style={iconBtn} title="收起为字幕条（Esc）" onClick={shrinkToBar}>⤡</button>
+        <Button variant="ghost" size="sm" title="收起为字幕条（Esc）" onClick={shrinkToBar}>⤡</Button>
       </div>
 
       {/* 中部：最近转写 */}
