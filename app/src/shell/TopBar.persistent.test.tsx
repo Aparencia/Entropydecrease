@@ -132,6 +132,15 @@ const RIGHT_SLOT = jsxPropBody(APP, "right");
 if (APP.slice(RIGHT_SLOT_AT, RIGHT_SLOT_AT + RIGHT_SLOT.length) !== RIGHT_SLOT) {
   throw new Error("right 正文起点与正文对不上（解析器自检失败）");
 }
+/**
+ * 「下标落在 right 正文区间内」的**唯一判据**（半开区间 `[起点, 起点+长度)`）。
+ * ⚠️ 抽出成命名函数是为了能对**区间自身**做双向对照（④ 的收尾）：写成内联的
+ *   `x >= RIGHT_SLOT_AT && x < RIGHT_SLOT_AT + RIGHT_SLOT.length` 时，把 **`x` 也写成
+ *   `RIGHT_SLOT_AT`** 就退化成 `x >= x`（**恒真**，收口评审 M-6 实测的形状）——
+ *   那样的「阳性对照」什么都没证明。
+ * @ai-context 副作用：无（纯函数）。边界：区间**半开**（右端不含）——右端下标必须判 false。
+ */
+const inRightRegion = (index: number): boolean => index >= RIGHT_SLOT_AT && index < RIGHT_SLOT_AT + RIGHT_SLOT.length;
 const DOCK_MARKER = 'testId="dock-toggle"';
 const BADGE_MARKER = "{capture.active && (";
 /**
@@ -202,11 +211,18 @@ describe("I-2 结构尺：App.tsx 的 right 插槽正文里必须含两个常驻
     expect((APP.match(/testId="dock-toggle"/g) ?? []).length, "出现了第二个装配点（判据会失去方向）").toBe(1);
     const at = APP.indexOf(DOCK_MARKER);
     expect(at, "全文件找不到 dock 装配点").toBeGreaterThan(-1);
-    const inRightRegion = at >= RIGHT_SLOT_AT && at < RIGHT_SLOT_AT + RIGHT_SLOT.length;
-    expect(inRightRegion, "dock 装配点的第一次出现在 right 正文区间之外（即被挪去别处）").toBe(true);
-    // 阳性对照：同一区间判定对 right 的**起点**必须为真、对文件起点必须为假（证明区间不是全真）
-    expect(RIGHT_SLOT_AT >= RIGHT_SLOT_AT && RIGHT_SLOT_AT < RIGHT_SLOT_AT + RIGHT_SLOT.length).toBe(true);
-    expect(0 >= RIGHT_SLOT_AT).toBe(false);
+    // 判据复用模块级的 `inRightRegion`（**不要**在这里再声明一个同名局部量：既遮蔽判据本身、
+    // 又正是 M-6 那条「就地内联 ⇒ 容易写成自引用恒真」的老路）。
+    expect(inRightRegion(at), "dock 装配点的第一次出现在 right 正文区间之外（即被挪去别处）").toBe(true);
+    // 双向对照（收口评审 M-6 的修法）：同一区间判定必须**两侧都能红** ——
+    //   真侧 = 由独立证据定位的**区间内**下标（dock 标记的首次出现；其「只有一处」已由上行钉住）；
+    //   假侧 = 两个**与区间端点无关、可独立证明落在区间外**的下标：文件起点 `0`、文件长度 `APP.length`。
+    //     （右侧**不用** `RIGHT_SLOT_AT + RIGHT_SLOT.length`：那正是端点自己，会退回「自引用」形态。）
+    // ⚠️ 反面教材：写成 `expect(RIGHT_SLOT_AT >= RIGHT_SLOT_AT && …).toBe(true)`（`x >= x` 恒真）时，
+    //   它实际只断言了 `RIGHT_SLOT.length > 0`（已被 ① 的 `> 200` 覆盖）⇒ 没有证明「区间判定不是全真」。
+    expect(inRightRegion(at), "区间判定必须对区间内的真实下标为真（真侧）").toBe(true);
+    expect(inRightRegion(0), "文件起点 0 不可能落在 right 正文区间内（假侧 · 独立下标 0）").toBe(false);
+    expect(inRightRegion(APP.length), "文件长度下标必然越界，必须在区间外（假侧 · 独立下标 APP.length）").toBe(false);
   });
 });
 

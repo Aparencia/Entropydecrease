@@ -54,6 +54,11 @@
 > **控制方裁定：走 Task 9 侧（主路）** —— 理由：它与既有 **6 处调用点的形态一致**（页面持 hook、把列规格传给子组件）；Global Constraints 的写法会让 `ChatSidebar` 变成唯一「组件自建 hook」的例外。
 > ⇒ **本行应按此读**：「**页面持 hook + 传 props；`ChatPage.tsx` 允许恰好一处 props 传递**」。**代价已登记**：`ChatPage.tsx` 变 **599/600（余 1 行）** ⇒ **下一个动它的任务必须先拆**；T9 的 fallback（hook 下沉进 `ChatSidebar`、页面回到 593）**未实测**，作为备选登记。
 > **另注（W27）**：本批 `line-limits` 的 pre-commit 跑**全树**、`--write` 又按**工作树**刷新登记表 ⇒ **并行实施必然产生「提交树不自洽」窗口**，本批已实证 **3 次**（`92ea5d6b` / `4f8f3d3c` / `fd83abb4` 之前同类）⇒ 建议批 8 给门禁加 `--staged` 模式（**只登记，不擅自改流程**）。
+> **🔻 收口评审 I-1 加注（2026-09-12，**上句原文保留**）——「3 次」记错，实测为 5 个提交，且 `fd83abb4` 自洽**：上句是我读台账时的**误记**。收口评审把批 3 的**全部 22 棵提交树逐一导出**（`git -c core.autocrlf=false archive -o t.tar <sha>` + `tar -xf`）再跑**该树自带的** `node scripts/line-limits.mjs --full`，实测 **5 个 exit 1 / 17 个 exit 0**（落盘脚本与原始日志：`.superpowers/sdd/2026-09-11-frontend-redesign-batch3-shell/tmp/review-closing/selfconsistency.{ps1,log}`，**该目录按 `.gitignore` 口径不入库**）：
+> - **`92ea5d6b`**（T8）——`(e) 行数不一致：app/src/App.tsx 声明 **509** / 实测 **503**`；
+> - **`4f8f3d3c`（T9）· `882a61ef`（T8 补强）· `ecc36a8d`（微单元 M-c）· `6b81f414`（T10）**——四处逐字同形：声明 **548** / 实测 **509**，**全落在 `fd83abb4`(T7) 与 `477bf604`(T11) 之间的同一并行窗口**；
+> - **`fd83abb4` 其实自洽**（上句把它列进来是错的）；其余 **17 个（含收口提交 `42e88740`）全部 exit 0**。
+> ⇒ **口径更正：批 3 实证 = 5 个提交**（不是 3 次），点名 **5 个 sha**；另须注明 **`ecc36a8d` 的门禁读数取自工作树**（该单元报告 §1 的「提交后门禁 exit 0」只在工作树口径成立，它自己的提交树带一处并行窗口不自洽 —— 性质与修法见 `docs/versions/v0.22.md` 批 3 节的「提交树自洽性更正」）。**机理结论不变**（`--write` 按工作树刷新）⇒ 批 8 `--staged` 的**依据比原先更强**（不是 3 次，是 5 个）。
 - **改造后必须平齐的门禁基线（`dev@f5c35990` 计划者实测，八条）**
 
   | 门禁 | 基线 |
@@ -244,6 +249,12 @@ node ".superpowers\sdd\2026-09-11-frontend-redesign-batch3-shell\tmp\edge-probe\
 2. **一次只切一处**：改一处 → 跑门禁 → 绿则继续，红则**回退这一处**并记录，**不得**为了变绿去改测试、改 mock、加 `await`。
 3. **验收判据是「既有测试逐条原样通过」+「新增用例只增不减」**；**任何既有断言的修改 ⇒ STOP 并报控制方**。
 4. **凡涉及尺寸/宽度/断点的任务**都要跑一次 `node scripts/check-bundle-budget.mjs --no-build` 记首屏 gzip（本批在首屏入口 chunk 里加代码，**这是唯一会动的预算读数**），以及 `node scripts/bundle-eager-graph.mjs` 记首屏可达文件数（基线 **47 文件 / 4 包**）。
+
+> **🔻 收口评审 M-3 加注（2026-09-12）——本条与本节 7 处「仍 47 文件 / 4 包」的判据已被「三件套」取代（原文保留）**：`47 / 4` 是**开工提交点 `85d51d83` 的工具原始读数**（复跑 `node scripts/bundle-eager-graph.mjs` = `首屏静态可达应用源文件：47` / `首屏拉入的 npm 包：4`），**不是**本批任何一步的期望值。本批实测：**工具口径 47 → 67 文件 / 4 → 4 包**；**真实边口径**（TS 编译器 API 剔纯类型边、含 CSS）**36 → 56 文件 / 4 → 4 包**；**Δ 两口径都是 +20，新增集合完全相同**（20 个全是批 3 的 `shell/*` + `ui/icons/*` + `ui/tokens*` + `ui/zIndex` + `utils/kbHits`，**`pages/**` 新增 0 · npm 包新增 0**）。⇒ **判据一律改为三件套：① 工具原始读数（注明口径把 `import type` 也算）② Δ（相对开工提交点）③ 机理核查 —— 永不使用裸绝对数**（见 §收口回写 §二 的「首屏静态可达图（三件套）」）。
+
+> **🔻 下列 7 处「仍 47 文件 / 4 包」的判据已按上注重述（原文保留，逐处点名）**：Task 2 V6 · Task 5（Step 5 预期 + V5）· Task 6（Step 5 预期）· Task 7 V4 · **Task 8 V5（★ 那句 `STOP` 是假规则）** · Task 13 V5。**统一读法**：`47 / 4` = 开工点原始读数（**不是期望值**）；判据 = **三件套（工具读数 + Δ + 机理核查）**，**Δ 增大 ∧ 机理核查通过（`pages/**` 无新增 ∧ npm 包数不增）才继续，Δ 增大 ∧ 机理核查不通过（有 `pages/**` 或 npm 包新进首屏）才 STOP**。批 3 实测 Δ = **+20 文件**（36→56 真实边口径）、**+0 包**、**`pages/**` 新增 0** ⇒ 7 处按裸绝对数写的 STOP 条件**全部为假告警**（它们会对正确实现误报）。
+
+> **🔻 收口评审 M-2 加注（2026-09-12）—— 规格 §10 ↳ 批 3 行的「改动面」两处数字不可追溯（原文保留）**：规格 `…-design.md:560` 写「**改动面 8 个文件族**…+ **4 处页面/组件接线**」，实测（`git diff --name-only 85d51d83^..42e88740 -- app/src app/src-tauri app/index.html app/scripts app/package.json`，剔除 `*.test.*` / `test.mjs`）**生产文件改动面 = 31 个**（`app/src/**` **28** + `app/index.html` + `app/scripts/gen-tokens.mjs` + `app/src-tauri/tauri.conf.json`），接线 **6 处**（`ChatSidebar` / `GoalsPage` / `SettingsPage` / `ClassroomRightPane` / `NoteReadingView` / `NotesReadingColumn`）。⇒ 「8 个文件族」是**计划期陈旧估算**（从下文 Step 5「写清 8 个文件的改动面」逐字搬来），**不是实测**；判据**按实测口径读**。本节及以下 V 表/预期里所有「仍 47 文件 / 4 包」**按此读**，那句 `STOP` 规则也**按 Δ + 机理重述**（`47→48` 这类裸绝对数在 `shell/*` 与 `ui/*` 新模块进首屏后**必然误报**）。
 5. **报告必含「你没能验证的地方」**（诚实单列，逐条写清是「仪器不可达」还是「本批未做」）。
 6. **提交**：`git diff --stat` 复核只含自己的文件 → 新建文件先 `git add -- <path>` → `git commit --only -m "<msg>" -- <显式路径…>`（subject 人工数到 ≤50）。
 7. **冲突即 STOP**：发现两条已批准要求互相排斥，或本计划与实测冲突时 —— **STOP，点名冲突，并把「绿色方案」也一并实测出来（读数 + 复现命令 + 代价），一次报控制方裁决**。批 1 有三处、批 2 有两处，**属正常，不是失败**；**不许自行取舍，也不许两条都硬做**。本批已预判两处（A2 的 emoji 存废、A3 的 toast 归宿），遇到新的照此办理。
@@ -606,7 +617,7 @@ git commit --only -m "refactor(shell): consume nav height token" -- app/src/App.
 | V3 | `node -e "const fs=require('fs');const d='app/src';const f=['App.tsx','components/AiConversationDock.tsx','pages/ActionPage.tsx','pages/ClassroomPage.tsx','pages/KnowledgePage.tsx','pages/NotesPage.tsx','pages/ReviewPage.tsx','pages/SessionsPage.tsx','pages/SettingsPage.tsx'];let n=0,v=0;for(const x of f){const L=fs.readFileSync(d+'/'+x,'utf8').split(/\r?\n/);for(const l of L){if(/height:\s*56\b|top:\s*56\b\|100vh\s*-\s*56px/.test(l))n++;if(l.includes('--ed-nav-h'))v++;}}console.log('bare56='+n,'varHits='+v);"` | `bare56=0` · `varHits=10` |
 | V4 | 八门禁 | 逐条 exit 0；`vitest` **125 文件 / 1236 用例**（+3，本任务新增）；`cargo` 逐字持平 |
 | V5 | `node scripts/check-bundle-budget.mjs --no-build` | 首屏 **≤ 92.79 kB**（本任务只把数字换成 `var()`，字节应基本不动；**若涨 >5 kB 说明误 import 了东西，STOP 排查**） |
-| V6 | `node scripts/bundle-eager-graph.mjs` | 仍 **47 文件 / 4 包**（测试文件不进生产图，`--ed-nav-h` 只是字符串） |
+| V6 | `node scripts/bundle-eager-graph.mjs` | 仍 **47 文件 / 4 包**（测试文件不进生产图，`--ed-nav-h` 只是字符串）<br>**🔻 收口评审 M-3 加注（原文保留）**：判据已被**三件套**取代（见 §一 第 4 条后的 M-3 注）⇒ 本条按 **Δ + 机理核查**判（终态 67 文件 / 4 包，Δ +20，`pages/**` 新增 0），**「仍 47」不是期望值**；`--ed-nav-h` 只是字符串 这条机理**不变** |
 
 ---
 
@@ -925,6 +936,7 @@ npx vitest run src/hooks/useColumnLayout.test.ts
 cd "D:\Program own\aicode\work space\Entropydecrease"; node scripts/bundle-eager-graph.mjs
 ```
 预期：`useColumnLayout.test.ts` 全绿（它与阈值实参无关，用的是自己的夹具）；首屏可达仍 **47 文件 / 4 包**。
+> **🔻 收口评审 M-3 加注（原文保留）**：上句的「仍 47 文件 / 4 包」= **开工点原始读数**、**不是期望值**；判据 = **三件套（Δ + 机理核查）**（见 §一 第 4 条后的 M-3 注）。
 **在报告里写清观感变化**：默认窗从 960 改成 **1280** 之后，`notes-outline` 的阈值从 1100 抬到 1280 ⇒ **在 1280 宽的默认窗里大纲列处于「恰好在阈值上（1280 ≥ 1280 ⇒ 不折叠）」**。这是规格要的「大纲列最晚折叠」，但它是**一个边界值**；若控制方希望默认窗内更稳，可把 `outlineCol` 定 1260 —— **登记为待观察项，不自行改**（规格写的就是 1280）。
 
 - [ ] **Step 6: 八门禁 + 提交**
@@ -949,7 +961,7 @@ git commit --only -m "feat(shell): add single source of breakpoints" -- app/src/
 | V2 | `node -e "const fs=require('fs');const f=['ClassroomPage','SessionsPage','NotesPage','KnowledgePage'].map(x=>'app/src/pages/'+x+'.tsx');let n=0;for(const p of f){const L=fs.readFileSync(p,'utf8').split(/\r?\n/);L.forEach((l,i)=>{if(/autoFoldBelow:\s*\d/.test(l)){n++;console.log(p+':'+(i+1)+'  '+l.trim());}});}console.log('bare-thresholds='+n);"` | `bare-thresholds=0` |
 | V3 | `node -e "const fs=require('fs');const s=['ClassroomPage','SessionsPage','NotesPage','KnowledgePage'].map(x=>fs.readFileSync('app/src/pages/'+x+'.tsx','utf8')).join('');console.log((s.match(/breakpointFor\(/g)||[]).length);"` | `6`（6 处改判） |
 | V4 | 八门禁 | 逐条 exit 0；`vitest` **127 文件**（+2 新测试文件）/ 用例数 +4 |
-| V5 | `node scripts/bundle-eager-graph.mjs` | 仍 **47 文件 / 4 包** |
+| V5 | `node scripts/bundle-eager-graph.mjs` | 仍 **47 文件 / 4 包**<br>**🔻 收口评审 M-3 加注（原文保留）**：判据 = **三件套（Δ + 机理核查）**，**「仍 47」不是期望值**（见 §一 第 4 条后的 M-3 注） |
 | V6 | `git status --porcelain` | 只含本任务 6 个路径 |
 
 ---
@@ -1182,6 +1194,7 @@ node scripts/check-bundle-budget.mjs --no-build
 node scripts/bundle-eager-graph.mjs
 ```
 预期：`nav_natural_width` 与 T1 的 **1375.74** 逐字相同（`legacyLabel` 逐字沿用旧 emoji 长名 ⇒ 宽度不变）；首屏 gzip **≤ 92.79 + 4 kB**（注册表是一个 ≤120 行的小模块，进首屏入口 chunk）；首屏可达**仍 47 文件 / 4 包**（注册表把 8 个 `lazy` **搬了个位置**，不增加静态可达）。
+> **🔻 收口评审 M-3 加注（原文保留）**：上句「仍 47 文件 / 4 包」= **开工点原始读数**、**不是期望值**；判据 = **三件套（Δ + 机理核查）**（见 §一 第 4 条后的 M-3 注）。**机理部分保留**：注册表确实只把 `lazy` 搬位置、不增加静态可达（终态实测 `pages/**` 新增 0）。
 
 - [ ] **Step 6: 八门禁 + 提交**
 
@@ -1486,7 +1499,7 @@ git commit --only -m "feat(shell): rebuild top bar with icon tabs" -- app/src/sh
 | V1 | `cd app; npx vitest run src/shell/TopBar.test.tsx` | 6 用例全绿 |
 | V2 | `node -e "const s=require('fs').readFileSync('app/src/shell/TopBar.css','utf8');console.log('transition='+/transition\s*:/.test(s),'animation='+/animation\s*:/.test(s));"` | `transition=false animation=false` |
 | V3 | `node -e "const s=require('fs').readFileSync('app/src/shell/TopBar.tsx','utf8');console.log('primitives='+/ui\/primitives/.test(s),'inlineSvg='+/<svg/.test(s));"` | `primitives=false inlineSvg=false` |
-| V4 | `node scripts/bundle-eager-graph.mjs` | **47 文件 / 4 包**（TopBar 与 CSS 不新增 npm 依赖；若包数涨到 5 ⇒ STOP，说明误装了依赖或误 import 了重模块） |
+| V4 | `node scripts/bundle-eager-graph.mjs` | **47 文件 / 4 包**（TopBar 与 CSS 不新增 npm 依赖；若包数涨到 5 ⇒ STOP，说明误装了依赖或误 import 了重模块）<br>**🔻 收口评审 M-3 加注（原文保留）**：**「47」= 开工点原始读数、不是期望值**（该步实测已是 67 / 4）；**STOP 条件重述为「Δ 增大 ∧ 机理核查不通过（有 `pages/**` 或 npm 包新进首屏）才 STOP」** ⇒ 原句「包数涨到 5」判据**保留有效**（终态实测 **4 → 4**、未触发）
 | V5 | 八门禁 | 逐条 exit 0；首屏 gzip 记下新值（应 ≤ 92.79 + 8 kB） |
 | V6 | `git status --porcelain` | 只含本任务 6 个路径 |
 
@@ -1740,7 +1753,7 @@ git commit --only -m "feat(shell): add column spec registry" -- app/src/shell/co
 | V2 | `node -e "const fs=require('fs');const f=['ClassroomPage','SessionsPage','NotesPage','KnowledgePage'].map(x=>'app/src/pages/'+x+'.tsx');let bad=[];for(const p of f){const L=fs.readFileSync(p,'utf8').split(/\r?\n/);L.forEach((l,i)=>{if(/useColumnLayout\(/.test(l)&&!/columnSpec\(/.test(l))bad.push(p+':'+(i+1));});}console.log(bad.join('\n')||'all-from-registry');"` | `all-from-registry` |
 | V3 | `cd app; npx vitest run src/components/NoteReadingView.test.tsx src/components/KnowledgePage.test.tsx` | 全绿（**零断言修改**） |
 | V4 | 八门禁 | 逐条 exit 0；`vitest` **129 文件**（+1）/ 用例 +6 |
-| V5 | `node scripts/bundle-eager-graph.mjs` | **47 文件 / 4 包**（注册表是纯数据模块；**若变 48 ⇒ 说明有页面被静态拉回首屏，STOP**） |
+| V5 | `node scripts/bundle-eager-graph.mjs` | **47 文件 / 4 包**（注册表是纯数据模块；**若变 48 ⇒ 说明有页面被静态拉回首屏，STOP**）<br>**🔻 收口评审 M-3 加注（★ 本条是假 STOP 规则，原文保留）**：**「47」= 开工点原始读数**（注册表自己就是新增的 20 个首屏模块之一 ⇒ 本步之后读数**必然** 47→67，裸绝对数判据**必然误报**）。**STOP 条件重述为「Δ 增大 ∧ 机理核查不通过（有 `pages/**` 或 npm 包新进首屏）才 STOP」** ⇒ 终态实测：**Δ +20 文件 / +0 包 · `pages/**` 新增 0**，**未触发**（即原句「变 48 就 STOP」在正确实现下是假告警） |
 | V6 | `git status --porcelain` | 只含本任务改动路径 |
 
 ---
@@ -1998,6 +2011,7 @@ git commit --only -m "fix(classroom): unify right pane width wrapper" -- app/src
 
 **Files:**
 - Create: `app/src/shell/CommandPalette.tsx`（≤220 行）
+  > **🔻 收口评审 M-8 就地加注（2026-09-12，原文保留）**：T11 交付时 **179/220**，**T12 追加「取数 / 降级 / skipped」三条渲染 +40 行 ⇒ 收口实测 `219/220`（余 1 行）**（口径 = `scripts/line-limits.mjs` 的 `countLines()`）。**仍 ≤300 硬限、无需豁免登记**，但**下一个动它的单元（批 4 的 `Modal` 迁移必动它）会立刻撞预算** ⇒ 控制方建议：**批 4 迁移时把预算提升到 ≤260，或先抽出 `CommandList` 子组件**（二选一，由批 4 计划裁决）。已同步登记进 `docs/versions/v0.22.md` 批 3 节的「贴边文件」表。
 - Create: `app/src/shell/CommandPalette.css`（≤120 行）
 - Create: `app/src/shell/CommandPalette.test.tsx`（≤200 行）
 - Modify: `app/src/App.tsx`（toast 归宿 + 面板挂载 + `Ctrl+K` 监听）
@@ -2312,7 +2326,7 @@ git commit --only -m "feat(shell): add slot error boundary and loading" -- app/s
 | V2 | `node -e "const s=require('fs').readFileSync('app/src/shell/ShellFallback.tsx','utf8');console.log('primitives='+/ui\/primitives/.test(s));"` | `false` |
 | V3 | `node -e "const s=require('fs').readFileSync('app/src/App.tsx','utf8');console.log('fallbackNull='+/Suspense fallback=\{null\}/.test(s),'boundaries='+(s.match(/SlotErrorBoundary/g)||[]).length);"` | `fallbackNull=false` · `boundaries≥4` |
 | V4 | 八门禁 | 逐条 exit 0；首屏增幅 ≤ 3 kB |
-| V5 | `node scripts/bundle-eager-graph.mjs` | 仍 **47 文件 / 4 包** |
+| V5 | `node scripts/bundle-eager-graph.mjs` | 仍 **47 文件 / 4 包**<br>**🔻 收口评审 M-3 加注（原文保留）**：判据 = **三件套（Δ + 机理核查）**，**「仍 47」不是期望值**（见 §一 第 4 条后的 M-3 注） |
 
 ---
 
@@ -2594,6 +2608,7 @@ git commit --only -m "docs(spec): close out shell batch three" -- docs/superpowe
 9. **首屏可达的绝对数不可复现**（38/39/49/47/67 五种读数）⇒ 本节只用 **Δ + 机理**三件套。
 10. **`bundle-eager-graph.mjs` 的 `import type` 缺陷未修**（修它会改历史读数 ⇒ 必须新旧口径并列）⇒ 登记 follow-up #2。
 11. **`ChatPage.tsx` 599/600（余 1 行）· `NotesPage.tsx` 300/300（余 0）** ⇒ 下一个动它们的任务**必须先拆件**。
+    > **🔻 收口评审 M-8 就地加注（2026-09-12，原文保留）**：本条的**硬限贴边**只列了两个（`ChatPage` 余 1 / `NotesPage` 余 0）。**按「任务预算贴边」口径还须加第三个：`app/src/shell/CommandPalette.tsx` 219/220（余 1 行，硬限 ≤300 不贴边，但任务预算贴边）** —— 批 4 的 `Modal` 迁移必动它 ⇒ 同列登记（见 Task 11 Files 行的 M-8 注与 `docs/versions/v0.22.md` 的「贴边文件」表）。
 12. **本批的七处控制方裁决（A1–A7）散在 gitignored 的批次台账里**，`ADR-034` 未写 ⇒ 决策缺 durable 载体（见 §七 #17）。
 
 ### 七、follow-ups（逐条具名归属）
@@ -2601,6 +2616,8 @@ git commit --only -m "docs(spec): close out shell batch three" -- docs/superpowe
 | # | 项 | 归属 |
 |---|---|---|
 | 1 | **W27**：`.husky/pre-commit` 跑**全树** `line-limits --full`、`--write` 按**工作树**刷新 ⇒ 并行提交**必然**产生「提交树不自洽」窗口（批 3 实证 **3 次**）⇒ 建议加 **`--staged`** 模式（或规定登记表刷新只由批次最后一个提交做） | **批 8** |
+
+> **🔻 收口评审 I-1 加注（2026-09-12，**上表原文保留**）——本行「实证 **3 次**」应为 **5 个提交**，且 `fd83abb4` 自洽**：22 棵提交树逐一导出重跑（方法与落盘证据同 §一 W27 注）实测 **5 个 exit 1** = `92ea5d6b`（509/503）+ `4f8f3d3c` · `882a61ef` · `ecc36a8d` · `6b81f414`（548/509，同一并行窗口）；**`fd83abb4` 自洽**（原句把它算进来是错的）；其余 **17 个（含 `42e88740`）exit 0**。⇒ **本 follow-up 的依据按 5 个读**（`--staged` 的收益比原先记的更大）；`ecc36a8d` 另须注明**其门禁读数取自工作树**。
 | 2 | **`bundle-eager-graph.mjs` 把 `import type` 计成静态边**（11 个假阳性文件）⇒ 修工具；**改它会改历史读数 ⇒ 必须新旧口径并列** | **批 4 或独立小单元** |
 | 3 | **`T5` 无变异体证明**（阈值正确性已由评审独立复核 ⇒ 不返工） | **批 4 计划模板强制「新判据必带变异体」** |
 | 4 | `docs/tech-debt/`（1555 行审查文档）**仍未跟踪**（`docs-check` 已用「故意不写链接」规避断链） | **待用户裁决** |
