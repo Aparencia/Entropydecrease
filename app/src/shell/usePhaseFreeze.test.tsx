@@ -67,6 +67,12 @@ const scales = (): number[] =>
   bars().map((b) => Number.parseFloat(/scaleY\(([^)]+)\)/.exec(b.style.transform)?.[1] ?? "NaN"));
 const distinct = (xs: readonly number[]): number => new Set(xs).size;
 const timeline = () => seen.api!.handle.current!.timeline;
+/**
+ * 动态 import 的等待窗口（**不是**动画的等待窗口）：`controls.ts` 首次被转换要连带 `gsap` 家族，
+ * 全量并行跑时实测可超过 `waitFor` 的 1000ms 默认值（本批已知 6 个负载敏感 flake 的同族）
+ * ⇒ 只放宽**等待上限**，断言一字不改。
+ */
+const WAIT = { timeout: 5000 } as const;
 /** 确定性推进（R8.1）：paused timeline + `tl.time(t)`，并 flush 编排层的 setState。 */
 const seek = (t: number): void => {
   act(() => {
@@ -77,7 +83,7 @@ const seek = (t: number): void => {
 async function flip(view: { rerender: (ui: React.ReactElement) => void }, phase: ShellPhase): Promise<void> {
   const before = seen.api?.handle.current ?? null;
   view.rerender(<Probe phase={phase} />);
-  await waitFor(() => expect(seen.api?.handle.current).not.toBe(before));
+  await waitFor(() => expect(seen.api?.handle.current).not.toBe(before), WAIT);
 }
 beforeEach(() => {
   seen.api = null;
@@ -228,7 +234,7 @@ describe("F6~F7 · 三档自消费（R35.4）与属性集合审计（R8.4）", (
       view.rerender(<Probe phase="idle" />);
       if (tier === "eco") {
         // eco 也不经编排 timeline：终态由出口的零时长 tween 写（走动态 import ⇒ 等它到达）
-        await waitFor(() => expect(seen.api!.freeze).toBeCloseTo(1, 3));
+        await waitFor(() => expect(seen.api!.freeze).toBeCloseTo(1, 3), WAIT);
         expect(seen.api!.handle.current, "§8.5：节能档 ⇒ 编排层直接跳终态（不建编排 timeline）").toBeNull();
         expect(tweenCount(ink())).toBe(0);
         expect(inkNow(), "终态 = 常态档墨度").toBeCloseTo(DUE_INK_NORMAL, 3);

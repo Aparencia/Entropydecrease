@@ -59,6 +59,12 @@ const need = (sel: string): HTMLElement => {
   if (el === null) throw new Error(`找不到元素：${sel}`);
   return el;
 };
+/**
+ * 动态 import 的等待窗口（**不是**动画的等待窗口）：`controls.ts` 首次被转换要连带 `gsap` 家族，
+ * 全量并行跑时实测可超过 `waitFor` 的 1000ms 默认值（本批已知 6 个负载敏感 flake 的同族：
+ * 首轮提交树全量里本文件恰因它红过一次）⇒ 只放宽**等待上限**，断言一字不改。
+ */
+const WAIT = { timeout: 5000 } as const;
 
 describe("S1 · 琥珀退去（R4.5）：只引 `--ed-due` 族、零颜色字面量、零 `--ed-*` 定义", () => {
   it("退去规则逐条：琥珀族引用非空 · 越族引用为空 · 无色值字面量 · 覆盖复习态", () => {
@@ -113,7 +119,7 @@ describe("S2 · 接线：`LiveBar` 的墨度层与波形真的接上了编排层
     expect([...shapes].every((t) => t.startsWith("scaleY(")), "几何只经 scaleY 表达（R8.4）").toBe(true);
 
     view.rerender(bar("idle"));
-    await waitFor(() => expect(layer.style.opacity, "相位翻转后墨度层必须被编排层写").not.toBe(""));
+    await waitFor(() => expect(layer.style.opacity, "相位翻转后墨度层必须被编排层写").not.toBe(""), WAIT);
     const v = Number.parseFloat(layer.style.opacity);
     // 生产侧时间线**不 paused**（ticker 驱动）⇒ 只断「落在 [常态档, 满墨] 之间、方向朝常态档」；
     // 逐端点的精确读数归 `usePhaseFreeze.test.tsx` 的 F2/F3（那是 paused + `freezeAt` 的确定性面）。
@@ -128,8 +134,9 @@ describe("S3 · 相位从 `PhaseChrome` 真的转发到了编排层（缺这一�
     const layer = need('[data-testid="live-ink"]');
     expect(layer.style.opacity, "挂载时相位未变 ⇒ hook 零动作").toBe("");
     view.rerender(<PhaseChrome phase="idle"><i /></PhaseChrome>);
-    await waitFor(() =>
-      expect(layer.style.opacity, "`LiveBarHost` 没拿到相位（转发断了）⇒ 编排层永远零动作").not.toBe(""),
+    await waitFor(
+      () => expect(layer.style.opacity, "`LiveBarHost` 没拿到相位（转发断了）⇒ 编排层永远零动作").not.toBe(""),
+      WAIT,
     );
     const v = Number.parseFloat(layer.style.opacity);
     expect(v, "退去方向朝常态档").toBeGreaterThanOrEqual(DUE_INK_NORMAL - 0.005);
