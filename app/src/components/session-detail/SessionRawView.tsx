@@ -21,6 +21,13 @@
  *              ③ 术语表 `<details>` 的整圈边框用 **token 变量** `var(--ed-border)` —— 不迁
  *                 `Surface`：`Surface.css` 是 `.ed-surface` 类族，而本元素是 `<details>` 折叠块
  *                 （`SurfaceTag` 不含 `details`；加档=改原语契约，不在本任务范围）。
+ * @ai-context: **逐条自审（控制方回执③）后仍保留的字面量**：`fontSize: 13`（三处 `<h3>` 标题，
+ *              合法档 —— 规格 §4.2 字阶下界是 12px）· `fontSize: 12`（术语表折叠块）·
+ *              `borderRadius: 8`（= `radiusScale.panel` 档）· `background: "#fafafa"`（**未迁移**：
+ *              `#fafafa`/`#f8fafc` 与 token 表**零碰撞**且是**全站既有**底色，本仓 9 处同族写法
+ *              —— 只改会话侧会造出跨面板不一致，登记给批 6/7 的底色收敛）· `#111827`/`#f0fdfa`
+ *              等**逐字继承自原面板、未被我改写**且**不在任何棘轮集合内**的字面量。⇒ 五类棘轮
+ *              （圆角 / 字号 / 弱化灰 / 卡片边框 / 三红）在本件全 0 命中。
  */
 import SessionScreenCards from "./SessionScreenCards";
 import ImageGallery from "../ImageGallery";

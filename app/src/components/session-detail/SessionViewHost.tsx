@@ -15,13 +15,15 @@
  * @ai-context: 按钮仍走原生 `<button>` + 行内 style（拆分前形态，`btn` 常量随切换组一起
  *              搬进本件）⇒ 按钮形态**逐字未变**；迁移到 `Button` 原语不在本任务范围
  *              （`nativeButton.ratchet` 的守恒由 `nativeButtonBaseline.SPLIT_MOVES` 登记）。
- * @ai-context: **棘轮口径（控制方 2026-09-12 插播裁决：新文件创建时就须干净，不许改 `*Baseline.ts`）**
+ * @ai-context: **棘轮口径（控制方 2026-09-12 插播裁决 + 回执②「落到档位，不是躲开冻结字面量集合」）**
  *              —— 切换组的**选中/未选中边框与文字色改走 token**：`var(--ed-ok)`（品牌青，与拆分前
  *              `#0d9488`/`#0f766e` 同族）· `var(--ed-border)`（拆分前 `#e5e7eb`）· `var(--ed-bg-surface)`
  *              （拆分前 `#fff`）· `var(--ed-ink-2)`（拆分前 `#374151`）；选中态底色 `#ccfbf1` 在 token 表里
- *              **无对应档**（`--ed-ok` 只有实色）⇒ 改用最近的 `var(--ed-bg-sunken)`；越界圆角 `6`
- *              （不在 `radiusScale` 的四档 3/5/8/10 里）→ `4`（同样不在四档内但**不触发棘轮二**，
- *              且不冒充某个档位语义）。⇒ 本件 0 处 `1px solid #e5e7eb` / 0 处越界圆角 / 0 处裸 `fontSize`。
+ *              **无对应档** ⇒ 改用最近的 `var(--ed-bg-sunken)`。圆角 `6` 不在 `radiusScale`（3/5/8/10）里
+ *              ⇒ **落到最近档位 `control`**：`borderRadius: "var(--ed-radius-control, 5px)"`
+ *              （**登记 Δ：6 → 5**；⚠️ 第一版曾写成裸 `4` —— 那只是「躲开冻结集合」，同时制造了一个
+ *              **新的非档位值**，控制方回执②点名 ⇒ 已改回 token 形态）。
+ *              ⇒ 本件 0 处 `1px solid #e5e7eb` / 0 处越界圆角字面量 / 0 处裸 `fontSize`。
  *              **不迁 `Surface`**：这是 flex 行里的两个成组按钮（`SurfaceTag` 不含 `button`，
  *              加档=改原语契约）；按钮类名空间属 T5 的 `ViewSwitcher` 原语（批 5 后续任务）。
  */
@@ -81,7 +83,7 @@ export default function SessionViewHost({
             onClick={() => onViewModeChange(mode)}
             style={{
               ...btn,
-              borderRadius: 4,
+              borderRadius: "var(--ed-radius-control, 5px)",
               border: viewMode === mode ? "1px solid var(--ed-ok)" : "1px solid var(--ed-border)",
               background: viewMode === mode ? "var(--ed-bg-sunken)" : "var(--ed-bg-surface)",
               color: viewMode === mode ? "var(--ed-ok)" : "var(--ed-ink-2)",

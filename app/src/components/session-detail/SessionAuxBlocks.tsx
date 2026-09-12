@@ -19,7 +19,12 @@
  *              **语义 token**（`tone="stamp"|"due"` 与 `var(--ed-link)`）；整圈边框走
  *              `var(--ed-border)` —— **不迁 `Surface`**：徽标/折叠块是行内元素与 `<details>`，
  *              `SurfaceTag` 不含它们（加档=改原语契约，不在本任务范围）。
- * @ai-context: 样式口径——其余 inline style 沿用拆分前（不改间距、不改底色）。
+ * @ai-context: **逐条自审（控制方回执③）后仍保留的字面量**：`borderRadius: 10`
+ *              （= `radiusScale.overlay` 档；**逐字继承自原面板、未被我改写**，且棘轮二只收
+ *              `6|12|14|999|2` ⇒ 本就不在集合内 —— 非规避）· `fontSize: 12`（折叠块标题，合法档）·
+ *              徽标底色 `background` 由 `#f9fafb` 改为 `var(--ed-bg-canvas)`（**登记 Δ**：
+ *              `#f9fafb` 与 token 表零碰撞、非档位值 ⇒ 落到真正的底色档）。
+ *              四处计数徽标的色值改走 **`Text` 的语义 `tone`**（`stamp`/`due`/`ink-1`/`link`）。
  */
 import { useEffect } from "react";
 import ProofreadPanel from "../ProofreadPanel";
