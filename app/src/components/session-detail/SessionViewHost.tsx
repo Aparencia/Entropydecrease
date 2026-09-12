@@ -37,6 +37,11 @@
  *              `nativeButtonBaseline.SPLIT_MOVES` 里 T2 登记的那条搬运的**目标侧计数降到 0**，
  *              该守恒判据（`nativeButton.ratchet.test.ts` ④）的处置见 T10 报告（**STOP 项，
  *              未擅自改基线**）。
+ * @ai-context: **批 6 T24 的三个可选槽（`audio` / `playheadMs` / `onSeekMs`）零改动透传**：本件把
+ *              `slot` **整体**交给非默认视图（`createElement(LazyView, slot)`），故新槽随原对象同行
+ *              —— 既不挑选字段、也不在这里取数（T24 的取数在 `session-detail/useSessionAudio.ts`，
+ *              **本件仍零 `invoke`**，H0 判据一字不动）。「过桥」的容器侧判据见
+ *              `SessionViewHost.test.tsx` 的 T24 两条。
  * 副作用：无（纯展示 + 只调 `onViewKeyChange`；不读 store、不发请求、不写磁盘、**不 import
  *   Tauri**）。`lazy` 表由 `useMemo` 按 `views` 引用记忆化 ⇒ 调用点必须传稳定数组。
  * 边界：`views` 为空表（G5 的未知 `objectType`）时 `defaultKey` 退化为 `""`，切换器渲染空组、

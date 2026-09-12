@@ -19,7 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useEffect, useRef } from "react";
 import type { SessionDetail } from "../../types";
-import type { SessionViewSlot, ViewSpec } from "../../views/registry";
+import type { SessionAudioState, SessionViewSlot, ViewSpec } from "../../views/registry";
 import { FROZEN_VIEW_KEYS, viewsFor } from "../../views/registry";
 import { useViewMemory } from "../../views/useViewMemory";
 
@@ -72,6 +72,19 @@ const STUB_VIEWS: readonly ViewSpec<SessionViewSlot>[] = [
 const HANGING: readonly ViewSpec<SessionViewSlot>[] = [
   STUB_VIEWS[0],
   { key: "hang", label: "悬挂", icon: "image", appliesTo: "session", load: () => new Promise<never>(() => {}) },
+];
+
+/** T24 的过桥探针：把宿主交给视图的**整个槽**记下来（新可选槽是否真到达视图，靠它判） */
+const seenSlots: SessionViewSlot[] = [];
+const SLOT_PROBE = {
+  default: (props: SessionViewSlot) => {
+    seenSlots.push(props);
+    return <div data-testid="view-slot-probe" />;
+  },
+};
+const SLOT_PROBE_VIEWS: readonly ViewSpec<SessionViewSlot>[] = [
+  STUB_VIEWS[0],
+  { key: "slotprobe", label: "槽探针", icon: "clock", appliesTo: "session", load: () => Promise.resolve(SLOT_PROBE) },
 ];
 
 function detailOf(id = 1042, kind: string | null = null): SessionDetail {
@@ -246,5 +259,35 @@ describe("SessionViewHost · T10 判据（H1–H6 + 默认视图重锚）", () =
   it("H0 宿主自身不 invoke（视图数据全经 `slot` 注入，C14②）", () => {
     render(<HostHarness />);
     expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("T24 音频引用可选槽经宿主**逐字**到达非默认视图（过桥的容器侧判据）", async () => {
+    const audio: SessionAudioState = { url: "http://asset.localhost/x%5C42.wav", aligned: false, playable: false, durationMs: null };
+    const sought: number[] = [];
+    const onSeekMs = (ms: number) => sought.push(ms);
+    seenSlots.length = 0;
+    render(<HostHarness views={SLOT_PROBE_VIEWS} slot={{ ...slotOf(), audio, playheadMs: 52_500, onSeekMs }} />);
+    fireEvent.click(seg("槽探针"));
+    await screen.findByTestId("view-slot-probe");
+    const got = seenSlots[seenSlots.length - 1];
+    expect(got.audio, "`audio` 槽没到达视图（或在途中被改写）").toBe(audio);
+    expect(got.playheadMs).toBe(52_500);
+    expect(got.onSeekMs).toBe(onSeekMs);
+    expect(got.detail, "既有 9 槽必须随同一份对象同行（不许因为新槽被复制/重排）").toBe(seenSlots[0].detail);
+    got.onSeekMs?.(52_500);
+    expect(sought, "视图 → 容器的回调没有原样到达").toEqual([52_500]);
+  });
+
+  it("T24 可选槽缺省 ⇒ 视图侧读到 `undefined`（可选语义：既有 9 槽夹具一字不改仍可用）", async () => {
+    seenSlots.length = 0;
+    render(<HostHarness views={SLOT_PROBE_VIEWS} />);
+    fireEvent.click(seg("槽探针"));
+    await screen.findByTestId("view-slot-probe");
+    const got = seenSlots[seenSlots.length - 1];
+    expect([got.audio, got.playheadMs, got.onSeekMs], "缺省的新槽不得被宿主补成别的值").toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
   });
 });

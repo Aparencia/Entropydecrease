@@ -9,6 +9,12 @@
  *   `pages/NotesPage.tsx` 直接 import。理由：`shell/**` 与 `ui/primitives` barrel 都落在首屏静态
  *   可达集内，注册表一旦被它们 import，非默认视图的 `load` 目标就跟着进首屏图。本文件自身
  *   **不产生任何运行时依赖边**（顶部全是 `import type`）⇒ 静态 import 它 ≠ 把它拉进产物。
+ * @ai-context 批 6 T24 追加的**三个可选槽**（`audio` / `playheadMs` / `onSeekMs`，全部 `readonly`、
+ *   全部**可选** ⇒ 既有 9 个字段与既有夹具一字不动）：播放头（R5.5 #5）必须在本目录的
+ *   **零 Tauri 边界**内工作 ⇒ 「音频引用」这一份数据**只能**由容器注入，取数与 URL 拼接
+ *   （`invoke("session_audio_path")` + `convertFileSrc`）落在
+ *   `components/session-detail/useSessionAudio.ts`。槽类型 `SessionAudioState` 从领域层
+ *   `types/sessionAudio.ts` 转出（理由见该文件头注：A2④ 的导入者集合断言 + §7.1 的依赖方向）。
  * @ai-context **中间态声明（批 5 T6 的依赖顺序造成，不是遗漏）**：视图模块要 `import type` 本文件的
  *   槽类型 ⇒ **契约必须先落地**；而「视图清单」（`viewsFor` / `keysFor` / `FROZEN_VIEW_KEYS`）只有
  *   在视图模块落地后才满足判据 G3「每个 `load()` 都能解析出真实模块」。故本文件此刻**只含契约**，
@@ -19,7 +25,13 @@
 import type { ComponentType } from "react";
 import type { Note } from "../types/notes";
 import type { SessionDetail, SessionOcrBlock } from "../types/session";
+import type { SessionAudioState } from "../types/sessionAudio";
 import type { IconName } from "../ui/icons";
+
+// 槽类型**转出**：`SessionAudioState` 的声明在 `types/sessionAudio.ts`（领域层）—— 见该文件头注
+// 「为什么不与槽同住本文件」（A2④ 的导入者集合断言 + §7.1 的依赖方向）。这里只转出，视图侧
+// 仍可从注册表一处取到整个槽契约。
+export type { SessionAudioState };
 
 /** 视图记忆的**对象类型粒度**（C5 / 规格决策 23）：**不含 `kind`** —— web/photo/video 共记一份。 */
 export type ObjectType = "session" | "note";
@@ -46,6 +58,21 @@ export interface SessionViewSlot {
   readonly onClearToast: () => void;
   readonly autoRefineTaskId: number | null;
   readonly onRefineTaskStarted?: (sessionId: number, taskId: number) => void;
+  /**
+   * 音频引用（`null`=无音频；缺省=**尚未取到**）。**只允许容器侧填充**
+   * （`components/session-detail/useSessionAudio.ts`）。
+   * @ai-context 为什么是**注入槽**而不是视图自己取：本目录有一条**整目录**硬边界
+   *   （`views/architecture.guard.test.ts` 的 A3③：生产文件**含 `import type` 在内**零 Tauri 边），
+   *   而取数（`invoke("session_audio_path")`）与 URL 构造（`convertFileSrc`）都在 Tauri 面上
+   *   ⇒ 它们**只能**在容器侧发生，视图侧只读注入值（依赖方向 §7.1：领域 → 视图 → 容器 → 原语）。
+   *   边界：**只有实时采集会话有音频**；`aligned === false` 的语义是「**不能保证**对齐」
+   *   （精度残余 = 块粒度 ±200 ms）；`playable === false`（未 finalize）⇒ 视图必须禁用播放。
+   */
+  readonly audio?: SessionAudioState | null;
+  /** 播放头位置（毫秒，**会话轴**）；`null`/缺省 = 无播放头。**只允许容器侧填充**。 */
+  readonly playheadMs?: number | null;
+  /** 请求跳到某毫秒（**视图 → 容器**）：容器负责 `setState` + 播放头动效（视图自身零副作用）。 */
+  readonly onSeekMs?: (ms: number) => void;
 }
 
 /** 笔记视图槽（同上：零 `invoke`）。`onOpenSession` 可选 —— `session_id` 为空的手动笔记没有目标。 */
