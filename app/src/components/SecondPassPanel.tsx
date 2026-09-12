@@ -213,7 +213,8 @@ export default function SecondPassPanel({ sessionId, onChanged, onClose }: Props
       </div>
 
       {view === null ? (
-        <p style={{ color: "#9ca3af", fontSize: 12 }}>加载中…</p>
+        /* 批 4 T14：草稿行数未知（`view === null` 时无计数）⇒ 带文案的 Loading（默认「加载中…」） */
+        <Loading />
       ) : view.total === 0 ? (
         view.running ? (
           <Loading label="任务已启动，等待首个窗口…" />

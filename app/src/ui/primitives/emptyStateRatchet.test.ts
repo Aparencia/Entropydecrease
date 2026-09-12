@@ -18,10 +18,12 @@
  * 副作用：只读磁盘（遍历 `app/src` + 定点读例外行）。边界：文本级判据、不做 AST；
  * 例外 5 处的**行号**逐字冻结 —— 行号漂了或那一行不再命中词表即红。
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+// 扫描仪器（状态机剥注释 / 递归遍历 / 行数组）—— T13 从本文件析出为共享模块，理由见 `./sliceScan`
+import { readLines, relOf, stripComments, walkSources } from "./sliceScan";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = join(HERE, "..", "..");
@@ -35,72 +37,16 @@ const SELF = "ui/primitives/emptyStateRatchet.test.ts";
 const EMPTY_RE =
   /\u6682\u65e0|\u8fd8\u6ca1\u6709|\u7a7a\u7a7a|\u6ca1\u6709\u4efb\u4f55|\u6ca1\u6709\u627e\u5230|\u5c1a\u672a|\u65e0\u6570\u636e|\u65e0\u6cd5\u627e\u5230/;
 
-/**
- * 剥注释：状态机（字符串 / 模板 / 正则 / 行注释 / 块注释），等长空白替换 ⇒ 行号与原文一一对应。
- * **与探针 `stripComments()` 同一套规则**，就地内联而不 `require` 探针：`createRequire` 对 `.mjs`
- * 在 vitest 里抛 `ERR_REQUIRE_ESM`，被 try/catch 吞掉后**静默**退回「不剥」（实测多出 3 个注释命中
- * 文件）。也不能用朴素正则 —— `KnowledgeDecisionForm.tsx` 的 JSDoc 里有反引号（`` `Modal` `` 这种
- * 写法到处都是），朴素实现会把从那句注释起的整个文件当模板字面量抹掉 ⇒ 该文件命中全变 0。
- */
-function stripComments(src: string): string {
-  const out = src.split("");
-  const n = src.length;
-  const blank = (a: number, b: number): void => { for (let i = a; i < b; i++) if (out[i] !== "\n") out[i] = " "; };
-  const regexStart = (k: number): boolean => {
-    let j = k - 1;
-    while (j >= 0 && /\s/.test(src[j])) j--;
-    return j < 0 || "(,=:[!&|?{};+-*%~^<>".includes(src[j]);
-  };
-  let i = 0;
-  while (i < n) {
-    const c = src[i];
-    if (c === "/" && src[i + 1] === "/") { const e = src.indexOf("\n", i); blank(i, e < 0 ? n : e); i = e < 0 ? n : e; continue; }
-    if (c === "/" && src[i + 1] === "*") { const e = src.indexOf("*/", i + 2); blank(i, e < 0 ? n : e + 2); i = e < 0 ? n : e + 2; continue; }
-    if (c === '"' || c === "'") {
-      let j = i + 1;
-      while (j < n && src[j] !== c) { if (src[j] === "\\") j++; if (src[j] === "\n") break; j++; }
-      i = j + 1; continue;
-    }
-    if (c === "`") { let j = i + 1; while (j < n && src[j] !== "`") { if (src[j] === "\\") j++; j++; } i = j + 1; continue; }
-    if (c === "/" && regexStart(i)) {
-      let j = i + 1, cls = false, ok = false;
-      while (j < n) {
-        const d = src[j];
-        if (d === "\\") { j += 2; continue; }
-        if (d === "\n") break;
-        if (d === "[") cls = true; else if (d === "]") cls = false;
-        else if (d === "/" && !cls) { ok = true; break; }
-        j++;
-      }
-      if (ok) { blank(i + 1, j); i = j + 1; continue; }
-    }
-    i++;
-  }
-  return out.join("");
-}
 
-function walk(dir: string, out: string[] = []): string[] {
-  for (const e of readdirSync(dir)) {
-    const f = join(dir, e);
-    if (statSync(f).isDirectory()) walk(f, out);
-    else if (/\.tsx?$/.test(e)) out.push(f);
-  }
-  return out;
-}
-
-const relOf = (f: string): string => relative(SRC, f).split(sep).join("/");
 /**
  * 域 = 探针 `tmp/classify.mjs` 的 `prod` **逐字相同**：减测试、减 `ui/primitives/**`、减 `ui/icons/**`。
- * 原语层被排除是 T1 的口径（原语自身不是「待收敛的重复调用点」），且它与 T14 共用同一支
- * `slice.mjs` ⇒ 两单元读数可直接对拍。本文件虽然物理上在 `ui/primitives/` 下，但它是 `.test.ts`
- * ⇒ 无论哪条都已在域外；词表又写成 Unicode 转义 ⇒ 不依赖这层排除也不会自我命中。
+ * 原语层被排除是 T1 的口径（原语自身不是「待收敛的重复调用点」），且它与 T14 共用同一支 `slice.mjs`
+ * ⇒ 两单元读数可直接对拍。本文件是 `.test.ts` ⇒ 无论哪条都已在域外；词表又写成 Unicode 转义。
  */
-const PROD = walk(SRC).filter((f) => {
-  const rel = relOf(f);
+const PROD = walkSources(SRC).filter((f) => {
+  const rel = relOf(SRC, f);
   return !/\.test\.tsx?$/.test(rel) && !rel.startsWith("ui/primitives/") && !rel.startsWith("ui/icons/");
 });
-const SCANNED = PROD;
-
 interface Hit {
   readonly file: string;
   readonly line: number;
@@ -114,25 +60,23 @@ const START_RE = /<EmptyState\b|\bempty\(/;
 function scan(files: readonly string[]): Hit[] {
   const hits: Hit[] = [];
   for (const f of files) {
-    const src = readFileSync(f, "utf8");
-    const raw = src.split(/\r?\n/);
-    const lines = stripComments(src).split(/\r?\n/);
-    lines.forEach((line, i) => {
+    const { raw, stripped } = readLines(f);
+    stripped.forEach((line, i) => {
       if (!EMPTY_RE.test(line)) return;
       // 向上找最近的**语法起点**行：命中 START_RE ⇒ 已收口；先撞到 `/>` / `;` / `})` 这类
       // 「上一处已经结束」的行 ⇒ 本行不属于任何原语调用（窗口 12 行足够覆盖 JSX 属性换行）。
       let migrated = false;
       for (let k = i; k >= 0 && i - k <= 12; k--) {
-        if (START_RE.test(lines[k])) { migrated = true; break; }
-        if (k < i && /\/>|;\s*$|\}\)\s*$/.test(lines[k])) break;
+        if (START_RE.test(stripped[k])) { migrated = true; break; }
+        if (k < i && /\/>|;\s*$|\}\)\s*$/.test(stripped[k])) break;
       }
-      hits.push({ file: relOf(f), line: i + 1, text: (raw[i] ?? "").trim(), migrated });
+      hits.push({ file: relOf(SRC, f), line: i + 1, text: (raw[i] ?? "").trim(), migrated });
     });
   }
   return hits;
 }
 
-const ALL_HITS = scan(SCANNED);
+const ALL_HITS = scan(PROD);
 
 /**
  * 每条的判据来源（B11 逐字三条：① 本批已触碰 · ② `pages/**` · ③ 有同名测试）。
@@ -171,15 +115,18 @@ const SLICE_REASONS: Readonly<Record<string, string>> = Object.fromEntries([
 const SLICE: readonly string[] = Object.keys(SLICE_REASONS).sort();
 
 /**
- * **例外表**（切片内**不迁**的 5 处）—— 词表命中但**形态不符**（不是「没迁移的漏网」）。
- * 行号逐字冻结：行号漂移或那一行不再命中即红；已走原语也必须删条（防②被例外掩盖）。
+ * **例外表**（切片内**不迁**的 5 处）。锚点 = 该行**原文里的独特片段**（不是行号）。
+ *
+ * 为什么用片段而不是行号：这 5 处里有 2 个文件同时落在 T14（加载态切片）的改动面上 ⇒ 行号会随
+ * 别人的提交漂移（`ReviewPage` 实测 147 → 148），写死行号会在无关改动上假红。片段必须**恰好命中
+ * 1 行**且该行命中词表；片段被删改即红（防腐烂），行号漂移不再误伤。
  */
-const EXCEPTIONS: readonly { readonly file: string; readonly line: number; readonly why: string }[] = [
-  { file: "components/KnowledgeDecisionForm.tsx", line: 233, why: "内联字段的复选列表标签，随表单字段就地渲染，不是独立空态块；迁原语会引入整块空气与居中，破坏表单行" },
-  { file: "components/KnowledgeSystemWizard.tsx", line: 138, why: "确认对话框正文（`confirm()` 的实参），不是渲染出来的空态占位" },
-  { file: "components/TaskLaunchDialog.tsx", line: 55, why: "落进 `setStatus(...)` 的状态行（对话框内联提示），不是被渲染的空态块；改渲染面要动 dialog 结构" },
-  { file: "components/VocabManager.tsx", line: 141, why: "`setMessage(...)` 的消息串（显示在消息行），不是空态块" },
-  { file: "pages/ReviewPage.tsx", line: 147, why: "头部统计行的三元分支（`data-testid=\"review-total-due\"`），是计数标签不是空态" },
+const EXCEPTIONS: readonly { readonly file: string; readonly anchor: string; readonly why: string }[] = [
+  { file: "components/KnowledgeDecisionForm.tsx", anchor: "{title}：暂无", why: "内联字段的复选列表标签（随表单字段就地渲染，不是独立空态块；迁原语会引入整块空气与居中，破坏表单行）" },
+  { file: "components/KnowledgeSystemWizard.tsx", anchor: "向导内容尚未创建", why: "确认对话框正文（`confirm()` 的实参），不是渲染出来的空态占位" },
+  { file: "components/TaskLaunchDialog.tsx", anchor: "if (rows.length === 0) setStatus(", why: "落进 `setStatus(...)` 的状态行（对话框内联提示），不是被渲染的空态块；改渲染面要动 dialog 结构" },
+  { file: "components/VocabManager.tsx", anchor: "需先有会话 OCR 记录", why: "`setMessage(...)` 的消息串（显示在消息行），不是空态块" },
+  { file: "pages/ReviewPage.tsx", anchor: "`共 ${totalDue} 张到期`", why: "头部统计行的三元分支（`review-total-due` 那一行），是计数标签不是空态" },
 ];
 
 /** **余量文件**（批 4 不迁，冻结给批 5/7）—— 逐文件区间 `[min, max]`，**只许减**（同探针的 5 文件） */
@@ -191,12 +138,27 @@ const FROZEN_REST: Readonly<Record<string, readonly [number, number]>> = {
   "components/SessionListBody.tsx": [1, 1],
 };
 
-/** 唯一允许命中词表的新增文件；本批为空 —— 迁移只改既有文件，没有新增生产文件 */
-const NEW_FILES_ALLOWLIST: readonly string[] = [];
+/**
+ * 允许命中词表的新增文件。域**已经**排除了 `ui/primitives/**`（T1 口径），故这里只做**显式声明**：
+ * `sliceScan.ts` 是本任务析出的共享扫描仪器（新增件），它逐字带着那张词表 ⇒ 把「域外 + 新件」
+ * 这件事写成一条记录，而不是靠域过滤静默放行。
+ */
+const NEW_FILES_ALLOWLIST: readonly string[] = ["ui/primitives/sliceScan.ts"];
+
+/** 例外锚点解析出的行号（解析一次、全程复用；找不到或多命中都返回原样 ⇒ ② 会红，这正是我们要的） */
+const exceptionLines = new Map<string, number[]>(
+  [...new Set(EXCEPTIONS.map((x) => x.file))].map((file) => {
+    const src = readFileSync(join(SRC, ...file.split("/")), "utf8").split(/\r?\n/);
+    return [file, EXCEPTIONS.filter((x) => x.file === file).flatMap((x) =>
+      src.map((l, i) => (l.includes(x.anchor) ? i + 1 : 0)).filter((n) => n > 0))];
+  }),
+);
 
 const hitsOf = (file: string): Hit[] => ALL_HITS.filter((h) => h.file === file);
-const unmigratedOf = (file: string): Hit[] =>
-  hitsOf(file).filter((h) => !h.migrated && !EXCEPTIONS.some((e) => e.file === file && e.line === h.line));
+const unmigratedOf = (file: string): Hit[] => {
+  const skip = exceptionLines.get(file) ?? [];
+  return hitsOf(file).filter((h) => !h.migrated && !skip.includes(h.line));
+};
 const describeHits = (hits: readonly Hit[]): string => hits.map((h) => `${h.file}:${h.line}  ${h.text}`).join("\n");
 
 describe("空态切片棘轮（B11）", () => {
@@ -213,15 +175,17 @@ describe("空态切片棘轮（B11）", () => {
     expect(describeHits(SLICE.flatMap((f) => unmigratedOf(f))), "切片内仍有未走 EmptyState 的空态").toEqual("");
   });
 
-  it("③ 例外 5 处：行号仍在盘上、那一行确实命中词表、理由非空、且尚未走原语", () => {
+  it("③ 例外 5 处：锚点片段恰好命中 1 行、该行确实命中词表、理由非空、且尚未走原语", () => {
     expect(EXCEPTIONS).toHaveLength(5);
     for (const e of EXCEPTIONS) {
-      const line = readFileSync(join(SRC, ...e.file.split("/")), "utf8").split(/\r?\n/)[e.line - 1] ?? "";
-      expect(EMPTY_RE.test(line), `${e.file}:${e.line} 已不命中词表（例外表过期，请删条）`).toBe(true);
+      const lines = readFileSync(join(SRC, ...e.file.split("/")), "utf8").split(/\r?\n/);
+      const idx = lines.map((l, i) => (l.includes(e.anchor) ? i + 1 : 0)).filter((n) => n > 0);
+      expect(idx.length, `${e.file}：锚点「${e.anchor}」命中 ${idx.length} 行（必须恰好 1 行，否则豁免面不可判）`).toBe(1);
+      expect(EMPTY_RE.test(lines[idx[0] - 1] ?? ""), `${e.file}:${idx[0]} 已不命中词表（例外表过期，请删条）`).toBe(true);
       expect(e.why.length, `${e.file} 的例外理由太短`).toBeGreaterThan(20);
-      const hit = hitsOf(e.file).find((h) => h.line === e.line);
-      expect(hit, `例外表 ${e.file}:${e.line} 在扫描结果里不存在（行号写错 ⇒ ② 的豁免是假的）`).toBeTruthy();
-      expect(hit?.migrated, `${e.file}:${e.line} 已走原语 ⇒ 应删条（免得 ② 被例外掩盖）`).toBe(false);
+      const hit = hitsOf(e.file).find((h) => h.line === idx[0]);
+      expect(hit, `例外表 ${e.file} 的锚点行不在扫描结果里（行内容与词表口径不一致）`).toBeTruthy();
+      expect(hit?.migrated, `${e.file}:${idx[0]} 已走原语 ⇒ 应删条（免得 ② 被例外掩盖）`).toBe(false);
     }
   });
 
@@ -252,13 +216,13 @@ describe("空态切片棘轮（B11）", () => {
     expect(pos.every((h) => h.migrated), "正样本未被判为「已走原语」—— migrated 判定失效").toBe(true);
     // 负样本：`ui/zIndex.ts` 不命中，但它在域内（证明域不是空的）
     expect(hitsOf("ui/zIndex.ts").length, "负样本控件失效").toBe(0);
-    expect(SCANNED.some((f) => relOf(f) === "ui/zIndex.ts")).toBe(true);
+    expect(PROD.some((f) => relOf(SRC, f) === "ui/zIndex.ts")).toBe(true);
     // 域边界：测试文件与原语/图标层都在域外（口径同 T1 的 `prod`）
-    const rels = SCANNED.map(relOf);
+    const rels = PROD.map((f) => relOf(SRC, f));
     expect(rels.some((r) => /\.test\.tsx?$/.test(r)), "测试文件掉进了域内").toBe(false);
     expect(rels.some((r) => r.startsWith("ui/icons/")), "图标层掉进了域内").toBe(false);
-    expect(PROD.some((f) => relOf(f) === "ui/primitives/EmptyState.tsx"), "原语层未被排除（口径漂了）").toBe(false);
-    expect(walk(SRC).some((f) => relOf(f) === SELF), "仪器自检：本文件必须真的在盘上被 walk 到").toBe(true);
+    expect(PROD.some((f) => relOf(SRC, f) === "ui/primitives/EmptyState.tsx"), "原语层未被排除（口径漂了）").toBe(false);
+    expect(walkSources(SRC).some((f) => relOf(SRC, f) === SELF), "仪器自检：本文件必须真的在盘上被 walk 到").toBe(true);
     // 剥注释三向：块注释 / 行注释必须剥净，模板串里的裸词必须保留（那是真文案）
     expect(stripComments("/* \u6682\u65e0 */\nconst a = 1; // \u5c1a\u672a\n").match(EMPTY_RE), "注释没被剥净").toBeNull();
     expect(stripComments("const b = `\u6682\u65e0`;").match(EMPTY_RE), "真文案被误剥").not.toBeNull();
@@ -279,10 +243,11 @@ describe("空态切片棘轮（B11）", () => {
       payload = null;
     }
     if (payload === null) {
-      // 干净克隆 / 导出树没有 `.superpowers/`（gitignored）⇒ **不假装有牙**：
-      // 用一条必然失败的哨兵把「今天这条对拍没跑到」显形，而不是静默通过。
+      // 干净克隆 / 导出树没有 `.superpowers/`（gitignored）⇒ **不假装有牙**：用一条必然失败的哨兵
+      // 把「今天这条对拍没跑到」显形，而不是静默通过。唯一例外：变异体实验的导出树显式设
+      // `T13_NO_PROBE=1`（那些树里没有探针，但 ①–⑤ 仍逐条在跑）——那是**登记过的跳过**，不是默认值。
       expect(
-        readdirSync(SRC).includes("__t13_probe_absent__"),
+        process.env.T13_NO_PROBE === "1" || readdirSync(SRC).includes("__t13_probe_absent__"),
         "探针缺失 ⇒ 清单对拍未跑到（本判据今日未验证；请在有 .superpowers/ 的工作树里跑）",
       ).toBe(true);
       return;

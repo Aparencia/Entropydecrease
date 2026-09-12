@@ -14,7 +14,7 @@ import InterviewDialog from "./InterviewDialog";
 import GraduateDialog from "./GraduateDialog";
 import RetroTimeline from "./RetroTimeline";
 import GoalPlanApprovalDialog from "./GoalPlanApprovalDialog";
-import { ConfirmDialog, EmptyState } from "../ui/primitives";
+import { ConfirmDialog, EmptyState, Loading, Skeleton } from "../ui/primitives";
 
 interface Props {
   goalId: number;
@@ -84,7 +84,18 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
   };
 
   if (err && !detail) return <div style={{ padding: 24, fontSize: 13, color: "#dc2626" }}>{err}</div>;
-  if (!detail) return <div style={{ padding: 24, fontSize: 13, color: "#9ca3af" }}>加载中…</div>;
+  if (!detail) {
+    // 批 4 T14：详情面板结构已知（目标 + 里程碑 + 准则）⇒ 骨架占位；可读语义由 `Loading` 给
+    // （骨架整组 aria-hidden —— 只留骨架等于把"在等什么"从无障碍树里删掉）。
+    return (
+      <div style={{ padding: 24 }}>
+        <Loading />
+        <div style={{ marginTop: 10 }}>
+          <Skeleton lines={3} />
+        </div>
+      </div>
+    );
+  }
 
   const { goal, milestones, criteria } = detail;
   const p = progress?.progress;

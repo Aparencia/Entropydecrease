@@ -41,10 +41,10 @@
 | app/src-tauri/src/db_sop.rs | 490 | v0.20.3（REQ-296/297）SOP 三表数据域（模板/run/步骤/保鲜/聚合）+ 审查加固（保链更新/幂等守卫/步数计数）内聚 | 若再增长：run 执行族拆至 db_sop_run.rs |
 | app/src-tauri/src/live_session_persist.rs | 488 | 定稿落库域（persist_final/digest_merged/handle_final_event）+ P2 flush_tail_and_persist（停止/暂停共用尾句落库）内聚 | 若再增长：flush_tail_and_persist 与 digest_merged 拆至 live_session_persist_tail.rs |
 | app/src-tauri/src/db_sessions.rs | 482 | 会话仓储；批 4 delete_sessions_batch + 审查修复轮 3（transaction() 改造）——2026-09-09 实测纠偏（登记值 394 过期） | 若再增长：recent_ocr_texts 等建议查询拆至 db_sessions_queries.rs |
+| app/src/components/RefineWorkbench.tsx | 482 | 并排双栏（规则版 + 精修版）+ 章节级 diff 高亮 + 同步滚动 +采纳/重新生成/放弃。批 3（问题11）：行级三态染色（removed删除线红/added 绿）与 并排/差异 单列视图切换——数据源为整篇有序行级 diff（diff_markdown_ops，见 load 内 Why）。数据源：非只读带 taskResult（采纳前内存结果）→ refine_workbench回传 result（消除未落库右侧恒空）；无 taskResult →refine_workbench（后端兜底未采纳任务/已落库笔记，重启可恢复）；只读（VersionPanel）→ ruleMd/refinedMd 透传。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/commands_ai_enrich.rs | 479 | v0.8.0 M3（REQ-142）+ F1/F2/F3：知识补充命令域（九子项校验/预估/异步任务/采纳/撤销 + 配额去重门控 + 成本硬拦截 + 任务落库）——与精修共用任务注册表上下文，命令域内聚；2026-09 修复（章节目录注入/逐块审查回执）微增 | 若再增长：门控/拦截拆至 commands_ai_enrich_gate.rs |
 | app/src-tauri/src/app_commands.rs | 478 | 宏约束下的**唯一**注册点：**312 条** `generate_handler!` 条目是**数据不是逻辑**（批 1 删除批收口实测：334 → 312，−22；此数由本行人工维护，`--write` 只刷新数字列） —— `Invoke` 按值语义使分域组合不可行（见文件头），拆成多份只会在域间新增「命令名 → 域」路由漂移面；一致性由 `scripts/check-command-registry.mjs` 机器门禁守 | 不拆（数据文件）；新增命令时同步条目，由门禁强制 |
 | app/src-tauri/src/region_tracker.rs | 478 | v0.4.0 M2（REQ-037）起：ROI 跟踪状态机（播放区域检测/锁定聚簇/重扫/前台切换冻结）+ 纯函数单测内联；与 RoiTracker 状态强耦合 | 若再增长：lock_roi/prior_roi 纯函数拆至 region_lock.rs |
-| app/src/components/RefineWorkbench.tsx | 478 | 并排双栏（规则版 + 精修版）+ 章节级 diff 高亮 + 同步滚动 +采纳/重新生成/放弃。批 3（问题11）：行级三态染色（removed删除线红/added 绿）与 并排/差异 单列视图切换——数据源为整篇有序行级 diff（diff_markdown_ops，见 load 内 Why）。数据源：非只读带 taskResult（采纳前内存结果）→ refine_workbench回传 result（消除未落库右侧恒空）；无 taskResult →refine_workbench（后端兜底未采纳任务/已落库笔记，重启可恢复）；只读（VersionPanel）→ ruleMd/refinedMd 透传。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/layout_analyzer.rs | 475 | v0.5.0 M3（REQ-047）：规则版版面分析（行/列投影 + 表格线检测 + 区域分类启发式）内聚于同一分类管线；审查加固（公式启发 + 低信息纯色方差滤除） | 若再增长：区域分类启发式拆至 layout_classify.rs |
 | app/src-tauri/src/commands_session_note.rs | 472 | 既有登记 314 为过期快照——2026-09-06 实测纠偏（v0.20 装载合成/web 分支/批量 inner 扩展后 +144） | 若再增长：convert_to_note 拆至 commands_session_note_convert.rs |
 | app/src-tauri/src/streaming_asr.rs | 466 | sherpa-onnx OnlineRecognizer（Zipformer transducer 中英双语流式），流程移植自原项目 streamingAsr.ts（生产调参验证）：partial 节流（≥150ms + 文本变化才推）→ 端点断句 → final →重建流；静音块隔块喂入（静音期低 CPU）；停止时尾句 flush 去重。（自动摘取，待细化） | 若再增长：按职责拆分 |
@@ -60,12 +60,12 @@
 | app/src-tauri/src/commands_knowledge_tests.rs | 435 | v0.13.1（REQ-202~205）：知识体系命令层单测域（校验纯函数 + inner 编排 + 四类 target/审计信号聚合）单模块 #[path] 挂载 | 若再增长：引用与审计组拆至 commands_knowledge_links_tests.rs |
 | app/src-tauri/src/screens_tests.rs | 433 | 画面要点屏构建测试域（分组/聚类/图匹配/可消费块过滤回归）单模块 #[path] 挂载 | 若再增长：可消费块过滤组拆至 screens_filter_tests.rs |
 | app/src-tauri/src/note_filter_golden_tests.rs | 431 | v0.7.5（REQ-172）：黄金语料回归域（会话31/29 实证 + 结构渲染 2 例 + 审查补测）单模块 #[path] 挂载 | 若再增长：结构渲染组拆至 note_filter_golden_structure_tests.rs |
+| app/src/components/GoalDetail.tsx | 427 | 一致性契约——进度信号每次现算（get_goal_progress），动作后局部刷新；毕业仪式/回顾流属 M2（按钮留壳禁用不误导）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_note_groups_tests.rs | 426 | v0.11.0 组数据层测试域 + v0.14.1 删除/影响面用例（级联归零/悬空清理/迁移回归）——单模块 #[path] 挂载（video_profile_tests.rs 同款先例），组删除语义变更集中验证 | 若再增长：删除/影响面组拆至 db_note_groups_delete_tests.rs |
 | app/src-tauri/src/analysis.rs | 423 | v0.5.0 M2 起结构化分析编排域（章节/重点/术语/讲者 + 事件消费 + step_boundaries/practice_segments/player_actions 三字段 + 审查修复按类型判定）；各机制输出聚合内聚于单一分析函数 | 若再增长：build_chapter_signals 事件版拆至 analysis_signals.rs |
 | app/src-tauri/src/app_setup.rs | 420 | 本模块承载 setup 的 AppState 初始化（数据目录/DB/引擎池/可校准配置/内存态存储）与装配期辅助函数（模型路径构造/捆绑同步/ORT运行时目录注入）——lib.rs 只保留声明与 command 注册，职责单一。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/bin/asr_eval.rs | 418 | 目的——"无人工语料也能测 ASR"（2026-09-03 用户裁决①）：批量样本（wav + 同名 .srt 外挂字幕 = 参考信道 L1 ~100% 无损）→ SenseVoice 离线转写（预处理开/关两路，A/B）→ CER + 混淆画像→ 汇总/A/B 对比/画像 top-N → 相对基线回归门（退出码契约）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/vocab.rs | 416 | 词表域（存储/纠错/候选提取/n-gram 分词）内聚；分词纯逻辑与存储同域便于单测 | 若再增长：collect_tokens/split_runs 拆至 vocab_tokens.rs |
-| app/src/components/GoalDetail.tsx | 416 | 一致性契约——进度信号每次现算（get_goal_progress），动作后局部刷新；毕业仪式/回顾流属 M2（按钮留壳禁用不误导）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/ui_junk.rs | 415 | UI 噪声过滤域（水印/字幕条/角标检测规则 + 窗口过滤启发式）内聚于同一判定管线，规则共享窗口几何上下文 | 若再增长：窗口过滤拆至 ui_junk_window.rs |
 | app/src/components/NoteEditView.tsx | 412 | v0.13.6（审查 H1 修复）：forwardRef 命令式 flushSave 出口（ESC 先保存后刷新）+ flushLatest 最终保存；v0.15 剪贴板图片 paste（useClipboardImagePaste+插入）+ 外链图下载导入——编辑视图保存/快捷键/工具栏/图片入口内聚（textarea 降级路径与 CM 版同步） | 若再增长：工具栏与 MarkdownEdit 快捷键拆至 NoteToolbar.tsx |
 | app/src-tauri/src/live_session_loop.rs | 410 | v0.7.0 M0 拆分产物（音频编排循环）：主循环 + 长静音/音量骤变/VAD 段事件写入 + drain/停止 flush；LiveSessionCtx 聚合上下文；A1 暂停边沿 + P1 停止 drain 重构；H1 修复（drain_deadline 改 Option，draining 置位时才计算） | 若再增长：事件写入块拆至 live_session_events.rs |

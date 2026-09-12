@@ -19,7 +19,7 @@
  *              两栏的**独立滚动 + 同步滚动**保留（见 `PANE_MAX_H` 的 Why）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, EmptyState } from "../ui/primitives";
+import { Modal, EmptyState, Loading, Skeleton } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiRefineResult, DiffOp, MarkdownDiffOps, RefineStrategyInfo, RefineStrategyMeta, WorkbenchData } from "../types";
 import { escapeHtml } from "../utils/html";
@@ -282,8 +282,12 @@ export default function RefineWorkbench({
   if (status === "loading") {
     return (
       <Modal open onClose={onClose} title="精修工作台" size="l" testId="refine-workbench">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 160 }}>
-          <p style={{ fontSize: 13, color: "#6b7280" }}>⏳ 加载工作台数据…</p>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 160 }}>
+          {/* 批 4 T14：双栏对照的形状已知 ⇒ 骨架；文案逐字保留（含 ⏳ —— 装饰 emoji 规则只覆盖弹层标题） */}
+          <Loading label="⏳ 加载工作台数据…" />
+          <div style={{ marginTop: 10, width: "100%" }}>
+            <Skeleton lines={4} />
+          </div>
         </div>
       </Modal>
     );

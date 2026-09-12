@@ -19,18 +19,19 @@
  *   ③ 行口径：同一行多次命中只算 1 行（与 T1 的 18 行同源，保证前后读数可比）。
  *
  * ★ 迁移读数（T14 实施者实测，仪器 = 与守卫同源的正则扫描）
- *   冻结时（`dev@f6dd012f`）**18 行 / 18 文件** ⇒ T14 第一提交后 **13 行 / 13 文件**。
- *   逐文件 Δ 之和 = −5，与迁过的 5 个文件逐一对拍（每个文件 1 行 → 0 行）⇒ 机理成立。
+ *   冻结时（`dev@f6dd012f`）**18 行 / 18 文件** ⇒ 第一提交（`271a281c`）后 **13 行 / 13 文件**
+ *   ⇒ 第二提交后 **8 行 / 8 文件**（4 处带理由的残留：1 例外 + 3 按钮内忙碌文案；4 处切片外余量）。
+ *   逐文件 Δ 之和逐一对拍：18 → 8 的 **−10** = 本单元迁的 9 处（第一提交 5 + 第二提交 4）
+ *   + T13 在它的空态提交里顺手迁走的 1 处（`AsrConfusionPanel` 的加载臂，控制方 17:58 协调）。
  *
  * ★ 余量去向（B11 附带硬要求：切片 + 棘轮 = **中间态**，不是"五类已各自收敛成一个原语"）
  *   ① 4 处余量（`LearningLibraryPanel` / `RetroTimeline` / `SessionDetailPanel` / `SessionListBody`）
  *      不在 B11 切片内 ⇒ 登记给**批 5/7**，由本棘轮冻结；
- *   ② 5 处**在切片内但本提交未迁**（`AsrConfusionPanel` / `GoalDetail` / `RefineWorkbench` /
- *      `SecondPassPanel` / `pages/ReviewPage`）——它们同时是 T13 空态切片的成员（同文件甚至
- *      **同一行/同一三元链**），并行窗口内改同一文件即撞车 ⇒ 按纪律让路，交 T14 的第二提交
- *      （T13 落库后）逐处迁；本文件那时把它们的上限从 1 降到 0（棘轮只降不升）。
+ *   ② 3 处 `button-busy`（`ImageGallery` / `StructureImageSection` / `WindowSelectCard`）的文案是
+ *      **按钮标签**（随 loading 切换）⇒ 由 `Button busy` 承载，不再迁 `Loading`；
+ *   ③ 1 处例外（`CaptureOverlayPanel` 深底浅字）见 `RESIDUAL` 的理由。
  */
-export const FROZEN_LOADING_TEXT_TOTAL = 13;
+export const FROZEN_LOADING_TEXT_TOTAL = 8;
 
 /**
  * 相对 `app/src` 的路径 → 允许残留的可见加载文案**行数上限**（只许降、不许升；键不许删）。
@@ -39,37 +40,45 @@ export const FROZEN_LOADING_TEXT_TOTAL = 13;
  */
 export const FROZEN_LOADING_TEXT_BY_FILE: Readonly<Record<string, number>> = {
   // 已迁移（0 = 该文件的加载态已交给 L1 原语）
+  "components/AsrConfusionPanel.tsx": 0,
+  "components/GoalDetail.tsx": 0,
   "components/NotePreviewView.tsx": 0,
   "components/RefineLaunchDialog.tsx": 0,
   "components/RefineStrategyPicker.tsx": 0,
+  "components/RefineWorkbench.tsx": 0,
+  "components/SecondPassPanel.tsx": 0,
   "components/WebArticleView.tsx": 0,
   "components/review/ReviewSessionPanel.tsx": 0,
+  "pages/ReviewPage.tsx": 0,
   // 残留（1 = 见 RESIDUAL 的分类与理由）
-  "components/AsrConfusionPanel.tsx": 1,
   "components/CaptureOverlayPanel.tsx": 1,
-  "components/GoalDetail.tsx": 1,
   "components/ImageGallery.tsx": 1,
   "components/LearningLibraryPanel.tsx": 1,
-  "components/RefineWorkbench.tsx": 1,
   "components/RetroTimeline.tsx": 1,
-  "components/SecondPassPanel.tsx": 1,
   "components/SessionDetailPanel.tsx": 1,
   "components/SessionListBody.tsx": 1,
   "components/StructureImageSection.tsx": 1,
   "components/WindowSelectCard.tsx": 1,
-  "pages/ReviewPage.tsx": 1,
 };
 
 /**
  * 迁移面：这些文件的加载态**必须**由原语承载 ⇒ 判据要求「0 命中 + 含 `<Loading`/`<Skeleton`」。
  * 少一个文件就是回潮，多一个文件要先把它在 `FROZEN_LOADING_TEXT_BY_FILE` 里降到 0。
+ *
+ * 其中 `components/AsrConfusionPanel.tsx` 的加载臂**由 T13 迁走**（控制方 2026-09-12 17:58 协调：
+ * 该行同时承载加载态与空态，整行归 T13；本单元只复核 + 收紧上限）。
  */
 export const MIGRATED_FILES: readonly string[] = [
+  "components/AsrConfusionPanel.tsx",
+  "components/GoalDetail.tsx",
   "components/NotePreviewView.tsx",
   "components/RefineLaunchDialog.tsx",
   "components/RefineStrategyPicker.tsx",
+  "components/RefineWorkbench.tsx",
+  "components/SecondPassPanel.tsx",
   "components/WebArticleView.tsx",
   "components/review/ReviewSessionPanel.tsx",
+  "pages/ReviewPage.tsx",
 ];
 
 /** 残留命中的分类：`exception` = 原语结构上表达不了 · `button-busy` = 按钮内忙碌文案 · `backlog` = 余量/让路 */
@@ -101,27 +110,6 @@ export const RESIDUAL: readonly { file: string; kind: ResidualKind; reason: stri
     kind: "button-busy",
     reason: "原生 `<button disabled={loading}>` 的忙碌文案 ⇒ T14 改为 `<Button variant=\"ghost\" size=\"sm\" busy={loading}>`；文案仍随 loading 切换（保留可读标签），探针/aria-busy 由原语给",
   },
-  {
-    file: "components/AsrConfusionPanel.tsx",
-    kind: "backlog",
-    reason: "在切片内但让路：该行与 T13 的空态迁移点是**同一行**（`view === null ? \"加载中…\" : \"暂无新候选…\"`）；T13 已在它的空态提交里把这条三元一并换成 `<Loading label=\"加载中…\"/>` ⇒ 待 T13 落库后由 T14 第二提交把它移到 `MIGRATED_FILES` 并把上限收紧为 0",
-  },
-  {
-    file: "components/GoalDetail.tsx",
-    kind: "backlog",
-    reason: "在切片内但让路：该文件同时是 T13 空态切片成员 ⇒ 交 T14 第二提交（目标：`Skeleton lines={3}` + `Loading`，见 `Loading.tsx:10` 点名的靶子）",
-  },
-  {
-    file: "components/RefineWorkbench.tsx",
-    kind: "backlog",
-    reason: "在切片内但让路：该文件同时是 T13 空态切片成员 ⇒ 交 T14 第二提交",
-  },
-  {
-    file: "components/SecondPassPanel.tsx",
-    kind: "backlog",
-    reason: "在切片内但让路：加载分支与 T13 的空态分支在**同一三元链**上（`:216` / `:219`）⇒ 交 T14 第二提交",
-  },
-  { file: "pages/ReviewPage.tsx", kind: "backlog", reason: "在切片内但让路：该文件同时是 T13 空态切片成员 ⇒ 交 T14 第二提交" },
   { file: "components/LearningLibraryPanel.tsx", kind: "backlog", reason: "不在 B11 切片内 ⇒ 余量登记给批 5/7" },
   { file: "components/RetroTimeline.tsx", kind: "backlog", reason: "不在 B11 切片内 ⇒ 余量登记给批 5/7" },
   { file: "components/SessionDetailPanel.tsx", kind: "backlog", reason: "不在 B11 切片内 ⇒ 余量登记给批 5/7" },
