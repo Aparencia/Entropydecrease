@@ -1722,6 +1722,13 @@ git commit --only -m "docs(spec): close out primitives batch four" -- docs/super
 > **四张表的读数工具（可复跑）**：`node tmp/t18/census2.mjs`（括号配对扫描，逐表项数 + 与 `ANCHOR.entries` / `FROZEN_*_TOTAL` 交叉核对）· `node tmp/t18/compare-perfile.mjs`（vitest 逐文件对拍）· `node tmp/t18/dialog20.mjs` · `node tmp/t18/ratchet-census.mjs`（v1，**已知会误算**：被注释里的 `}` 提前截断 ⇒ 保留作反例）。
 > **③ 的「若控制方选 (A) 全量」余量清单在此**：五类的余量**逐条**写在各自的 `*Baseline.ts` 里（`RESIDUAL` 每条带非空理由，且「僵尸豁免」判据会红）—— 例：`textBaseline.RESIDUAL` **44 条**、`surfaceBaseline.SHADOW_RESIDUAL` **24 条**、`surfaceResidual.ts` 的边框/圆角残留 **31 + 13 条**、`emptyStateRatchet.EXCEPTIONS` **8 条**、`loadingBaseline.RESIDUAL` **8 条**、`statusLineBaseline.MIN_CALLS`（8 键）。**不必重新普查。**
 
+> **🔻 收口后更正（2026-09-12 · 收口评审 **I-6** + 修复单元 `ed07d491`；**上面这张表与两条注的原文一字未改**，此处只追加）**：上表「弱化文本」行的 **63 处 / 44 文件 / 7 类**（含其逐类分解 `interactive*` 35 · `ternary-no-equivalent` 10 · `nontext` 6 · `b1-non-migrated` 9 · `tag` 1 · `colorMap` 2 · C 类 2）与「棘轮冻结数（终态）」里的 `FROZEN_MUTED_GRAY_TOTAL = 63` **两处都错**：
+> - **① 该分解自列之和 = 65 ≠ 63**，且 **`colorMap` 与「C 类 2」是同一类的重复计数**（65 − 63 = 2 正来自这里）。
+> - **② 收口修复后弱化灰例外 63 → 64**：`ed07d491` 修掉 `sliceScan.stripComments` 把 JSX 闭合标签 `</x>` 的 `/` 当正则起点的假阴 ⇒ 受害行 `components/NoteRowContextMenu.tsx:175` 由「被抹掉」变「被数到」⇒ **`FROZEN_MUTED_GRAY_TOTAL = 64`**、逐文件格 `components/NoteRowContextMenu.tsx` **1 → 2**（条目数/文件数仍 44/44）。物理恒等式 = **250 = 迁移 186 + 例外 64**（`249 = 186 + 63` 是旧仪器口径）。
+> - **真源（我自测：`node .superpowers/sdd/2026-09-12-frontend-redesign-batch4-primitives/tmp/docfix/d2-kind.mjs`，解析 `app/src/ui/primitives/textBaseline.ts` 的 `RESIDUAL` 44 条 + `FROZEN_MUTED_GRAY_BY_FILE` 44 键联立）**：**条目数** `interactive` 14 · `interactive-no-equivalent` 8 · `ternary-no-equivalent` 9 · `b1-non-migrated` 7 · `nontext` 4 · `tag` 1 · `colorMap` 1（**Σ44**）· **处数** `interactive` 19 · `interactive-no-equivalent` 11 · `ternary-no-equivalent` 11 · `b1-non-migrated` **14** · `nontext` 7 · `tag` 1 · `colorMap` 1（**Σ64**）；**合并口径** `interactive*` = **22 条目 / 30 处**（不是 35）。
+> - **独立复算（三口径并列，HEAD 工作树）**：OLD 仪器（`091d1c3d` 的 `sliceScan`）**63 行 / 44 文件** · NEW（HEAD）**64 行 / 44 文件** · NAIVE（朴素剥注释）**64 行 / 44 文件**；唯一差异文件 = `components/NoteRowContextMenu.tsx`（1 / 2 / 2）。命令：`node …/tmp/docfix/measure.mjs app/src`。
+> - 该行的「`FROZEN_*` 终态」其余数字（226 / 261 / 24 / 14）与加载 **8**、错误行 **114/67**、空态 **28 + 8 + 5** 经本单元复算**未变**。
+
 ### 二、八门禁终态表
 （逐条命令 + exit code + 读数；vitest 必须给**既有 1370 逐文件一条不少**的比对结论）
 
@@ -1746,6 +1753,9 @@ git commit --only -m "docs(spec): close out primitives batch four" -- docs/super
 - **SHRUNK（既有文件用例变少）= 0**。
 - **GROWN（既有文件用例增加）逐条点名列全 —— 6 条**：`components/FeedFragmentList.test.tsx: 4 → 5`（T11，窗口确认→`ConfirmDialog` 后把「桩从未被调用」变成新断言）· `components/RefineWorkbench.test.tsx: 7 → 8`（修复单元：假绿换成结构判据 + 1 条 h3 路径）· `ui/primitives/Surface.test.tsx: 17 → 18`（T17-A，加 `pill` 档）· `ui/primitives/Text.test.tsx: 12 → 16`（T16-A，两槽正反两向）· `ui/primitives/style-seams.test.ts: 17 → 18`（T3，`SURFACE_CLASSES` 加类名）· `ui/zIndex.guard.test.ts: 4 → 7`（T4，新增 3 条判据）
 - **ADDED（新增测试文件）共 23 个 / 227 用例**：**`ui/primitives/` 16 个（158 用例）** = `dialogMigration.{a1=6,a2=31,b=18,e=15}` · `buttonMigration=9` · `nativeButton.ratchet=6` · `Modal.scroll-lock=6` · `ConfirmDialog.tier=7` · `Toast.placement=6` · `EmptyState.align=8` · `loadingMigration=3` · `loadingRatchet=8` · `emptyStateRatchet=7` · `statusLineRatchet=4` · `textRatchet=16` · `surfaceRatchet=25`；**`components/` 3 个（30 用例）** = `confirmMigration=10` · `toastMigration=15` · `chat/ChatLaunchMenu.test=5`；**`shell/` 4 个（22 用例）** = `shellReset=5` · `columnKeys.freeze=3` · `shellPrimitives=8` · `commandPalette.modal=6`。**增量等式**：`1608 − 1370 = 238 = 227（23 个新文件的用例）+ 11（6 个既有文件的增长之和：1+1+1+4+1+3）` ✅（原始逐条见 `tmp/t18/raw/vitest-compare.json` 与 `added.txt`）
+
+> **↳ 收口后更正（2026-09-12 · 收口评审 M-1；本行原文一字未改）**：本行 `ui/primitives/` 的「**16 个（158 用例）**」与其紧随其后的自列清单之和**不符** —— **复算 = 175**：`dialogMigration.{a1=6,a2=31,b=18,e=15}` = **70** + `buttonMigration=9` + `nativeButton=6` + `Modal.scroll-lock=6` + `ConfirmDialog.tier=7` + `Toast.placement=6` + `EmptyState.align=8` + `loadingMigration=3` + `loadingRatchet=8` + `emptyStateRatchet=7` + `statusLineRatchet=4` + `textRatchet=16` + `surfaceRatchet=25` = **175**；**分组和 `175 + 30 + 22 = 227` 恰等于同句写的总数 227**（同句的增量等式 `1608 − 1370 = 238 = 227 + 11` 亦自洽）⇒ **总数对、「158」是过期/笔误**，本格应读 **175**（文件数 16 不变）。
+> **独立复算（本单元自跑，不照抄）**：`cd app; node node_modules/vitest/vitest.mjs run src/ui/primitives --reporter=json --outputFile=<绝对路径>` ⇒ **35 文件 / 463 用例 / 0 失败 / exit 0**；上述 16 个文件**逐个命中且逐项用例数与清单完全一致**，**用例之和 = 175**（解析脚本 `tmp/docfix/m1-added.mjs`）。收口修复单元**未新增任何 `it`**（`loadingRatchet` 仍 8 · `textRatchet` 仍 16 · `KnowledgeGraphView` 仍 11）⇒ **227 不变**。
 
 **门禁 6 的首屏 Δ 与机理（对本批计划基线 97.16 kB）**
 
@@ -1840,6 +1850,8 @@ git commit --only -m "docs(spec): close out primitives batch four" -- docs/super
 - **一处历史改写（如实登记，不重写历史）**：`8f5bd9f1` 是 `git commit --amend` 的产物（T13 误 amend 到 T14 的第二提交上，原 sha `0f9dbcc9`）。评审已实证：**内容无缺失 · 无第三方在飞改动丢失 · 历史线性未重写**（`git reflog` 无 `rebase`/`reset`/强推条目）。**处置 = 登记，不 reword、不 rebase。**
 - **一处索引串味**：`54b9b938`（T3）携带了 **T2 的 ADR-033 加注**（T2 写了但未 `git add`，被并行写者带进共享索引）。**内容正确** ⇒ 登记，归因改写为「ADR-033 的 T2 加注由 `54b9b938` 落库」。
 
+- **↳ 收口后更正（2026-09-12 · 收口评审 M-4；上表与本节的原文一字未改）**：上表第 **27** 行与 §四 **B7** 行写的「`ChatPage` **599 → 578**」是 **`7457c7f1` 时点的值**；**579 权威** —— 时间线：`cbc15837`（T13-b 拆件）**599 → 578** → T16-B 的 `be925809`（迁移 `pages/**` 的弱化文本）**578 → 579**；旁证：`docs/standards/line-limit-exemptions.md:24` 声明 **579**、控制方 `[System.IO.File]::ReadAllLines($p,[Text.Encoding]::UTF8).Count` 亲测 **579**（LF **579** · 末尾有换行 · 29,151 B）· `node scripts/line-limits.mjs --full` exit 0（该表认 579）。§五 7 的贴边表同款更正见下条。
+
 ### 四、B1–B10 的实际结果
 （逐条：裁决 → 实际做法 → 证据（文件/守卫/读数））
 
@@ -1887,6 +1899,8 @@ git commit --only -m "docs(spec): close out primitives batch four" -- docs/super
 5. **T15 的守卫回退代价**：为守住 B1/B2，**6 个文件逐字回退**（3 个已提交的 + 3 个从未提交的）⇒ **迁移面 55 → 49**，**三红字面量回升 +6 行**（`emptyStateRatchet` 例外 5 → 8 条）。这是**明确选中**的代价（B21：代价不对称）。
 6. **`Text` 的行高接管是**已知**视觉 Δ**：jsdom 不排版、本批无像素证据 ⇒ **批 8 的像素探针才是判据**（本节 §六 已列）。
 7. **贴边文件（动它必须先拆）—— 控制方实测口径（`[System.IO.File]::ReadAllLines($p,[Text.Encoding]::UTF8).Count`）**：`ui/primitives/dialogMigration.e.test.ts` **300/300（余量 0 ⇒ 禁止再碰）** · `ui/primitives/textBaseline.ts` **299** · `ui/primitives/loadingRatchet.test.ts` **299** · `ui/primitives/emptyStateRatchet.test.ts` **296** · `pages/NotesPage.tsx` **300/300** · `ui/primitives/surfaceRatchet.test.ts` **287** · `ui/primitives/textRatchet.test.ts` **266** · `pages/ChatPage.tsx` **578/600** · `shell/CommandPalette.tsx` **203/220**。**规则：动它们之前必须先拆件（或先提预算并登记）；`dialogMigration.e.test.ts` 余量 0 ⇒ 任何新增都必须先挪走一段。**（另有 `ui/primitives` 侧：`surfaceBaseline.ts` 258 · `surfaceResidual.ts` 82 · `statusLineRatchet.test.ts` 191 · `statusLineBaseline.ts` 93。）
+
+> **↳ 收口后更正（2026-09-12 · 收口评审 M-4 + 修复单元；本行原文一字未改）**：① `pages/ChatPage.tsx` 的 **578/600 是 `7457c7f1` 时点的值** ⇒ **579/600**（`be925809` 起；豁免表 `:24` 与 `line-limits --full` 都认 579）。② **贴边表本身变了**：`ui/primitives/loadingRatchet.test.ts` **299 → 181** —— 收口修复单元 `8a2dd5e1` 把**扫描仪器整段**析出成新件 `app/src/ui/primitives/loadingScan.ts`（**101 行**）⇒ `loadingRatchet.test.ts` **不再是贴边文件**（余量 1 → **119**）。③ `ui/primitives/textBaseline.ts` **仍 299/300**（贴边；`ed07d491` 重冻 +1 并压缩头注回到 299，**未登记豁免**）。④ `ui/primitives/dialogMigration.e.test.ts` **仍 300/300（余量 0 ⇒ 禁止再碰）**。⑤ 其余 6 项（`NotesPage.tsx` 300 · `emptyStateRatchet.test.ts` 296 · `surfaceRatchet.test.ts` 287 · `textRatchet.test.ts` 266 · `CommandPalette.tsx` 203 · 以及 `surfaceBaseline.ts` 258 / `surfaceResidual.ts` 82 / `statusLineRatchet.test.ts` 191 / `statusLineBaseline.ts` 93）**本单元实测未变**。**规则不变**：动它们之前必须先拆件（或先提预算并登记）。
 8. **一条既有 flake 未消除**：`components/KnowledgeGraphView.test.tsx` 的负载敏感用例（**批 3 开工前就有**），本批多份报告各观测到 1 次、**孤立复跑均全绿** ⇒ 非本批引入，未定位根因。
 9. **计划预算被突破的清单（不是违规，是记账）**：`Modal.scroll-lock.test.tsx` 202/180 · `dialogMigration.a2.test.ts` 268/220 · `dialogMigration.b.test.ts` 224/200 · `dialogMigration.e.test.ts` 286/240 · `confirmMigration.test.tsx` 297/220 · `buttonMigration.test.ts` 268/220 · `toastMigration.test.tsx` 235/200 · `nativeButton.ratchet.test.ts` 263/200 · `textRatchet.test.ts` 214/260（**在预算内**）· `loadingRatchet.test.ts` 292/220 → 299 · `emptyStateRatchet.test.ts` 287/260 → 296 · `zIndex.guard.test.ts` 284/200 · `surfaceRatchet.test.ts` 260/260（恰好达标）。**绑定约束（≤300 ∧ 不新增豁免登记）全部满足**；批 3 已有 4 例同类先例，口径一致：**预算是估算，不为落进预算删判据。**
 
@@ -1896,6 +1910,17 @@ git commit --only -m "docs(spec): close out primitives batch four" -- docs/super
 1. **真机 / WebView2：未跑 —— 用户已裁决跳过验证**（不是「本批未做」，是**已裁决**）。**本批任何地方都不得出现「已在真机确认」类表述**；顶栏/面板的像素证据即使存在（T7 的 `RefineWorkbench` 探针）也来自 **headless Chrome，不是 WebView2**。
 2. **像素 / 排版：归批 8**。jsdom **不排版、不加载样式表**（`vitest.config.ts` 的 `css` false）⇒ 本批所有「观感变化」都只有**类级/属性级/源码级**证据；**本批无视觉回归基线**。逐项清单：`6→8` 的 9 处、边框暖色、`canvas` 底、20 处阴影 token 化（含 1 处有损）、`Text` 的行高接管、20 个弹层的档位宽度 Δ、`StatusLine` 的块级/间距、`ChatLaunchMenu` 的锚定几何、`align="start"` 的实际观感、`belowNav` 的 `top` 落点与 `right 16→18` 的 2px 差、`Modal` 退场 160ms 的手感、`iconBtn` 宽度 +12px、`RefineStrategyPicker` 胶囊 chip 变圆角矩形。
 3. **20 个弹层中「无测试覆盖」的那些（逐条列名）**：20 个文件里**只有 5 个有同名测试**——有测试面的是 `ChatSaveNoteDialog.test.tsx` · `InterviewDialog.test.tsx` · `RefineWorkbench.test.tsx` · `KnowledgeSystemWizard.test.tsx` · `TaskLaunchDialog.test.tsx`；**无测试覆盖的 15 个**：`GoalPlanApprovalDialog` · `GraduateDialog` · `GroupCreateDialog` · `GroupDeleteConfirm` · `KnowledgeConceptDialog` · `KnowledgeDecisionForm` · `KnowledgeModelDialog` · `ModelCardCreateDialog` · `ModelCardFromNoteDialog` · `NoteAiDialog` · `PracticeQuestionsOverlays` · `ProofreadPanel` · `RefineLaunchDialog`（`RefineLaunchDialog.vision.test.tsx` 只测视觉开关，**不测弹层形态**）· `SecondPassPanel` · `SopRunOverlay`。**并且**：`.e` 的判据只钉**源码形态**（20 个调用点 0 命中 ∧ `Modal.tsx` 恰 1 命中），「这 20 个调用点**各自渲染出来**的元素真的带 `role="dialog"`」**没有逐点渲染级断言**；`PracticeQuestionsOverlays` / `SopRunOverlay` 这两个弹层**从未被任何测试渲染过**（这也是 `.e` 必须存在的理由）。
+
+   > **🔻 收口评审 I-5 就地更正（2026-09-12；本条正文一字未改）**：本条「**只有 5 个有同名测试 / 无测试覆盖的 15 个**」**实测不成立**。
+   > - **两种口径各测一次**（复现命令：`node .superpowers/sdd/2026-09-12-frontend-redesign-batch4-primitives/tmp/docfix/d1-coverage.mjs`；`DIALOG_20` 从 `app/src/ui/primitives/dialogMigration.e.test.ts` 解析、**不手抄**）：
+   >   - **口径①「同名测试文件 `app/src/**/X.test.tsx` 是否存在」= 有 10 / 无 10**；
+   >   - **口径②「该测试文件是否真的 `render(<X)`」= 是 10 / 否 10**；
+   >   - **两口径完全重合，差额清单为空** —— **没有**「有同名文件却不渲染该组件」的项。
+   > - **有测试面的 10 个（逐条）**：`ChatSaveNoteDialog` · `GoalPlanApprovalDialog` · `GraduateDialog` · `InterviewDialog` · `KnowledgeDecisionForm` · `KnowledgeSystemWizard` · `ModelCardCreateDialog` · `RefineLaunchDialog` · `RefineWorkbench` · `TaskLaunchDialog`。
+   > - **无同名测试文件的 10 个（逐条）**：`GroupCreateDialog` · `GroupDeleteConfirm` · `KnowledgeConceptDialog` · `KnowledgeModelDialog` · `ModelCardFromNoteDialog` · `NoteAiDialog` · `PracticeQuestionsOverlays` · `ProofreadPanel` · `SecondPassPanel` · `SopRunOverlay`。
+   > - 本条原文点名的 5 个（`ChatSaveNoteDialog.test.tsx` · `InterviewDialog.test.tsx` · `RefineWorkbench.test.tsx` · `KnowledgeSystemWizard.test.tsx` · `TaskLaunchDialog.test.tsx`）是这 10 个的**真子集**；被误列为「无覆盖」的 5 个里，`GoalPlanApprovalDialog.test.tsx`（58 行）· `GraduateDialog.test.tsx`（83 行）· `KnowledgeDecisionForm.test.tsx` · `ModelCardCreateDialog.test.tsx` · `RefineLaunchDialog.test.tsx` 都**有** `render(<X …)` 渲染证据。
+   > - **「原写法 5/15 的来源不可考」**：批 4 只改过其中 **1** 个测试文件（`RefineWorkbench.test.tsx`），其余 9 个 `git diff --name-only 42e88740..091d1c3d` = **0** ⇒ 差异也**不是**「批 4 触碰过」这个口径。**方向 = 低报测试面**（会让批 8 按假工作量排期）。
+   > - **本条其余部分仍成立**：`RefineLaunchDialog.vision.test.tsx` 只测视觉开关不测弹层形态 ✅ · `.e` 只钉**源码形态**、无逐点渲染级断言 ✅ · `PracticeQuestionsOverlays` / `SopRunOverlay` 在全仓测试文本里**零引用**（这两个也**不在**上面 10 个里）✅ —— 该三句**不受本次更正影响**。
 4. **`App.tsx` 无渲染级测试面**（仓内**没有** `App.test.tsx`）⇒ 顶栏/AI toast/命令面板在**真实装配**下的形态只有 T10 的 `ai-toast` 渲染级断言一条（B15 的改写产物）与真机证据（未跑）。`ChatPage` 同样没有 `ChatPage.test.tsx`。
 5. **五类迁移的观感无断言面**：五条棘轮都是**字面量计数**（处数/行数/键数），**不是**「渲染出来好不好看」的判据；`FROZEN_SURFACE_TAG_TOTAL = 14` 只证「14 个 `<Surface>` 开标签存在」，不证它们「看起来是一张卡」。
 6. **暗档（`[data-theme="dark"]`）的反相描边未接线（B9）**：`--ed-shadow-*` 的暗档值是白色反相描边，但**暗档开关在批 6 之前不存在** ⇒ 迁移后的 14 处 `<Surface>` 与 20 处 token 阴影**在暗档下无人能验**（本批只保证「值来自 token」）。
@@ -1905,6 +1930,12 @@ git commit --only -m "docs(spec): close out primitives batch four" -- docs/super
 10. **本机无 `pwsh`（只有 PS 5.1）** ⇒ 本节一切命令以 `powershell` 语义执行；`cmd /c "… & echo EXIT=%ERRORLEVEL%"` 是**错的**（`%ERRORLEVEL%` 在解析期展开，报的是**上一条命令**的退出码）—— 本节所有 exit code 均改用 `$LASTEXITCODE` 采集，**先前用该写法得到的两处 `EXIT=0` 已作废重测**。
 11. **`tmp/t4/tier-map.mjs` 已陈旧（exit 1）**：它校验的是 T4 时点的逐处快照，T5–T8 之后按定义失效（**不是**守卫退化）⇒ 本节 §一 ① 的「分档去向」只作历史记录引用。
 12. **未验证的老账（来自各单元，逐条保留）**：T7 的三个工作台**没有截图**（只有 `RefineWorkbench` 有）· 超长不可断 token 在两栏内的表现未实测 · `ConfirmDialog.tier` 的**真实消费者在批 4 结束时仍是 0**（T11 的 8 处全在顶层、不传 `tier`）· `Toast` 的 `belowNav` 档下 `--ed-toast-stack-offset` 失效（多条并发同 `top` 重叠，无判据、jsdom 也验不了）· `--ed-nav-h` 兜底 56px 与 `tokens.css:73` **无绑定判据**（两处各自漂移不会报错）· `Modal` 的滚动位置在 `overflow:hidden` 后**不恢复**（无 `position:fixed` + `scrollTop` 补偿）· `MIN_CALLS` **未与 T15 的探针表逐格对拍** · `loadingRatchet` 的 `describe` 标题仍写「冻结 18 → 第一提交 13」（历史标签，未随第二次收紧改名）· A 类 26 处的「无等价档」是**语义判断**不是机器证明 · `bundle-eager-graph` 把 `import type` 计成静态边（批 3 follow-up #2，本批未修）。
+
+   > **↳ 第 7 条的收口后更正（2026-09-12）**：该条点名的「`stripComments` 会把 `</StatusLine></div>` 误判成正则并抹掉中间标签（实测 `KnowledgeSampleView.tsx:135`）」**已被收口修复单元 `ed07d491` 的判定收紧覆盖** —— `sliceScan.stripComments` 现在对「`<` 后**紧跟** `/`」的形态**不再**判为正则起点（`<` 与 `/` 之间有空白时仍按正则处理，两侧都有夹具自证）。**限度不变**：其余假阴形态（字符串形态 `zIndex: "300"`、`zIndex:` 换行等）**未逐一构造变异**（与收口评审 §5.1 第 7 条同款限度）；`nativeButton.ratchet.test.ts` 仍带一份**旧版**私有 `stripComments`（见 `docs/versions/v0.22.md` 的「陷阱 4」第 3 条）。
+
+13. **既有负载敏感 flake 的收口处置（D-7；控制方已裁）**：`app/src/components/KnowledgeGraphView.test.tsx` 的「局部聚焦」= **既有负载敏感 flake**（批 3 在 `a7bd1899` 上复现过；本批**未改该测试文件** —— `git diff --name-only 42e88740..091d1c3d -- app/src/components/KnowledgeGraphView.test.tsx` = **0**）。收口修复单元 `cd85e4c3` 做了**最小稳定性修改** —— **18 处 `waitFor` 超时 5000 → 15000**（与 `vitest.config.ts` 的 `testTimeout: 15000` 对齐；**未放宽任何断言**、未加睡眠、未改配置、未加 `retry`）—— 但**本机两种负载各 8 次 + 无负载 6 次均未复现** ⇒ 状态记为「**已加固、未复现**」（**不声称已修好**）。**纪律**：① **变异体实验不得与全量测试并发**（负载会把 flake 变成假红）；② 今后若在**顺序执行**下再红 ⇒ 按**新 flake** 重新定位。
+14. **收口新增的五条仪器陷阱（M-7）**：`--outputFile` 相对路径按 `app/` 解析（断言器读不到 JSON 却仍 exit 0）· 本机无 `pwsh`（只有 PS 5.1）· **并入共享仪器必须显式验证**（`loadingRatchet` 原来复制的那份 `stripComments` 含同一个 `</x>` 坏点；残余风险：`nativeButton.ratchet.test.ts` 至今仍带旧版私有副本，今日对 `<button` 计数无影响）· `git commit --only` 会提交未暂存改动 · `core.autocrlf` 警告不影响行数 —— **逐条落在 `docs/versions/v0.22.md` 的「陷阱 4」**（台账侧入册 #36–#38）。
+15. **`dialogMigration.e.test.ts:218` 的 `onkeydown=` 是死分支（M-2）—— 只登记不修**：TSX 里 React 只写 `onKeyDown`，`git grep -n 'onkeydown=' -- app/src` 的 **4** 处命中**全在该族测试文件自己的注释/断言串里**（生产源码 **0**），而 `onKeyDown=` 实测 **19** 处 ⇒ 析取式右半边永不命中，「无 keydown 监听」实际只由左半边承载（今日 20/20 满足）。**不动它的理由**：该文件 **300/300 余量 0**（任何新增都必须先挪走一段）。**未来风险**：用 `onKeyDown` 在包裹 div 上自建 ESC 栈可静默通过。
 
 ### 七、follow-ups（逐条具名归属）
 （批 3 的 #2/#15/#16/#17 + 本批新增的可执行项，**每条给归属批次**）
@@ -1938,6 +1969,8 @@ git commit --only -m "docs(spec): close out primitives batch four" -- docs/super
 | B-13 | **批 8 的像素探针是观感判据**（本批 §六 列出的全部像素项） | **批 8**（用户已裁决跳过真机验证 ⇒ 本批不做、也不声称） |
 | B-14 | 其余零散项（逐条带出处）：`Toast` 的 `belowNav` 堆叠失效（多条并发同 `top`）· `--ed-nav-h` 兜底 56px 无绑定判据 · `Modal` 滚动位置不恢复 · `loadingRatchet` 的 `describe` 历史标签 · `textRatchet`/`surfaceRatchet` 的锚是「值 > 0 的具名文件」（迁移归零后需换锚）· `bundle-eager-graph` 的 `import type`（= 批 3 #2） | **批 5/6/8**（逐条已在 §六 列名） |
 
+> **↳ 收口后更正（2026-09-12 · 收口评审 I-6 + M-12；上表原文一字未改）**：**B-1** 的「弱化文本 **63 处 / 44 文件 / 7 类**」在收口修复后为 **64 处 / 44 文件 / 7 类**（`FROZEN_MUTED_GRAY_TOTAL = 64`；逐文件格 `components/NoteRowContextMenu.tsx` 1 → 2）—— 逐类真源见 §一 五类终态表的更正块（条目 `14/8/9/7/4/1/1` Σ44 · 处数 `19/11/11/14/7/1/1` Σ64）。**B-5** 的「`b1-non-migrated` **9 处**」是**回退动作数**（`tmp/t16b/revert-b1.mjs` 的 `SITES` = 9 条 / 7 文件），该类**冻结处数 = 14**（收口修复前 13）⇒ 引用时必须写明是哪一个数。其余各项（空态例外 8 + 余量 5 · 加载 8 · 错误行 114/67 · 边框 226/108 + 261/109 + 24）经本单元复算**未变**。
+
 ### 八、与计划的偏差（本节自陈）
 （实施中偏离计划处逐条列：哪一步 · 为什么 · 代价 · 谁批准）
 
@@ -1962,3 +1995,17 @@ git commit --only -m "docs(spec): close out primitives batch four" -- docs/super
 9. **本次收口的三处「不做」（逐条给理由，避免被读成遗漏）**：① **规格 §12 的 markdown 归一那行不再重复加注** —— 它在 `42e88740`（批 3 收口）已就地写明 B8 的去向（「不并入批 4 ⇒ 批 5 或批 7」），**重复加注只会制造第二处真源**；V4 的存在性核对按「已在位」通过。② **`docs/standards/line-limit-exemptions.md` 不在收口提交路径里** —— `--write` 复跑**零 diff**（sha256 前后一致），符合「只在有 diff 时改」的条件。③ **`ui-ux-system.md` 不动** —— T17-A 复核：它**没有**「四档圆角」字样（其圆角表述是 2026-08-24 旧目标态、§十一 自陈「待批 8 统一回写」）⇒ 第 5 档 `pill` 的落点是**规格 §4.2**。
 10. **一处「派发书口径错误」的更正**：控制方派发书写的「§6 的 8 条坑」（= 第 6 条）与「`tmp/t17a/slice.md` 是否被截断」的疑问 ⇒ 已逐字核对：**6 条，无截断**（陷阱 #32 的又一实例）。
 11. **本任务自身的一处仪器自纠（如实登记）**：第一次 `cmd /c "… & echo EXIT=%ERRORLEVEL%"` 采集到的两处 exit 0 **是假的**（`%ERRORLEVEL%` 解析期展开）⇒ **已全部改用 `$LASTEXITCODE` 重测**；另有一次「按 `[n, rel]` 建 Map」的比较脚本 bug ⇒ `LOST=143` **假读数**，已修正为 **LOST=0（真）**（见 §二 门禁 5-对拍）。**两处都保留了作废记录**（`tmp/t18/raw/`）。
+
+12. **批 4 收口后更正（2026-09-12 · 收口评审 I-5/I-6/I-7 + 13 条 Minor + 收口修复单元的 3 处数字变化）** —— 本节 §八 四条「基线数字漂移」逐条更正（**原文保留，只追加**），并登记收口后的溯源：
+    - **弱化灰（本节第 4 条第 1 项）**：计划的「**296 是手抄噪声**」这个**机理不成立** —— **296 是朴素剥注释口径的真值**，295 才是旧 `sliceScan` 的真值，差额恰为 `components/NoteRowContextMenu.tsx:175` 一处（⇒ 是**口径差**，不是手抄）。**独立复算（`42e88740` 导出树）**：OLD **295 行 / 105 文件** · NEW **296 行 / 105 文件** · NAIVE **296 行 / 105 文件**。**终态 = 64/44**（原写「终态 249/100」是 **T16-A `3ed9cfe9` 时点**的值，且同一时点的**修正仪器**读数是 **250/100**）—— 收口评审 **M-6 / M-10**。
+    - **`borderExact`（本节第 4 条第 4 项）**：「终态 **171 精确**」是 **T17-A（`0bc09a41`）的冻结值**；**终态 = 157 精确**（`42e88740` **180** → T17-A **171** → HEAD **157**；含复合口径 **259 → 240 → 226**）。**独立复算**口径 `border:\s*"1px solid #e5e7eb"` —— 收口评审 **M-8**。
+    - **`fontSize` 全量（本节第 4 条第 2 项）**：「终态 **1123**」是 **T16-A / T17-A 时点**的值；**终态 = 1088**（`42e88740` **1274** → `8f5bd9f1` **1172** → `3ed9cfe9` / `0bc09a41` **1123** → HEAD **1088**）。**独立复算**（同一条命令，`FONT_SIZE` 全量匹配数）—— 收口评审 **M-9**。
+    - **原生 `<button>`（§四 B4 / §五 3）**：「**394 处 / 114 文件**」是 **`f6dd012f` 时点**的值；**终态 = 393 处 / 115 文件**（`FROZEN_NATIVE_BUTTON_TOTAL = **393**`；`531eb93f` 收紧到实测；文件数 +1 来自 T13-b 拆件计入 `chat/ChatLaunchMenu.tsx`，`SPLIT_MOVES` 守恒）。**独立复算**：`f6dd012f` **394/114** · HEAD **393/115** —— 收口评审 **M-11 / M-3**。
+    - **`b1-non-migrated`（§四 B21 / §七 B-5）**：「**9 处**」是**回退动作数**（`SITES` = 9 条 / 7 文件）；**冻结处数 = 14**（修复前 13）—— 收口评审 **M-12**。
+    - **弹层测试覆盖（§六 3）**：真值 **10/10**（不是 5/15）—— 见 §六 3 的「🔻 收口评审 I-5 就地更正」。
+    - **规格 §11-2 例外表**：3 个成员错（多 `BrowserChrome`/`GroupSidebarRow`/`NoteHeaderActions`、缺 `NoteEditView`/`NoteLinkToSystem`/`RichEditorView`）—— 见规格 §11-2 的「🔻 批 4 收口后更正表」与 `ADR-033:162` 的同步加注（收口评审 **I-7**）。
+    - **弱化灰「7 类」分解（§一 五类终态表）**：自列之和 = 65 ≠ 63，且 `colorMap` 与「C 类 2」重复计数 ⇒ 见该表的「🔻 收口后更正」（收口评审 **I-6**）。
+    - **`dialogMigration.e.test.ts:218` 的 `onkeydown=` 死分支（M-2）**：**只登记不修**（该文件 **300/300 余量 0**）—— 见 §六 15。
+    - **`app/src/ui/zIndex.guard.test.ts:221` 陈旧文案（M-5）**：已改为「**3** 处应命中 3」（**只改失败文案、零断言改动**；该文件 **262 行 < 300**，`line-limits --full` 仍 exit 0 且**零新增登记**）—— 见 `docs/versions/v0.22.md`「更正块 B」M-5。
+    - **溯源（收口后）**：本节 §三 的 **closed range `4905d4d8^..091d1c3d` = 49 提交不变**；**收口评审后的修复提交 = 4 条**（**不计入那 49**）：`ed07d491`（关 **I-1**）· `8a2dd5e1`（关 **I-2 + I-3**）· `531eb93f`（关 **M-3**）· `cd85e4c3`（关 **I-4**）；另 `7d541254`（批 5 计划）**不属批 4**。
+    - **一条既有 flake 的收口处置**：见 §六 13（「**已加固、未复现**」）。

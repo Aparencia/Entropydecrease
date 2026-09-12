@@ -293,6 +293,13 @@
 >
 > **本表的读法**：上表的「现状病灶」是**批 0-D 时点的侦察数**（含 180 / 251 / 107 这类计划期估算）；**终态一律以本加注的实测口径为准**，且**任何一格都不得被读成「全量已清零」** —— 五类里只有切片内清零，余量各带去向（B11 的中间态，见 §11-3 加注）。
 
+> **🔻 批 4 收口后更正（2026-09-12 · 收口评审 **I-6** + 13 条 Minor + 收口修复单元 `ed07d491` / `531eb93f` 的 3 处数字变化；**上表两行与本节其余加注的原文一字未改**，此处只追加）**：
+> - **`Button` 行（上表第 9 行）的「终态 493 → 394 处 / 121 → 114 文件」是 `f6dd012f` 时点的读数，不是 HEAD（收口评审 M-11）**。收口修复单元 `531eb93f` 把 `nativeButtonBaseline` 收紧到实测 ⇒ **终态 = 394 → 393 处 / 121 → 115 文件**（`FROZEN_NATIVE_BUTTON_TOTAL = 393`；文件数 **+1** 来自 T13-b 拆件把 `components/chat/ChatLaunchMenu.tsx` 计入，`SPLIT_MOVES` 已登记守恒、守卫未失效）。**独立复算**（`node .superpowers/sdd/2026-09-12-frontend-redesign-batch4-primitives/tmp/docfix/measure.mjs <tree>/app/src`；域 = `app/src/**` 减 `*.test.ts(x)` 减 `ui/primitives/**` 减 `ui/icons/**`，剥注释后整段 `/<button[\s>]/g`）：`f6dd012f` 导出树 **394 处 / 114 文件** · HEAD **393 处 / 115 文件**。
+> - **`Text` 行的弱化灰例外在收口后由 63 变 64**：`FROZEN_MUTED_GRAY_TOTAL = 63` 是**旧剥注释仪器的读数**；`ed07d491` 修掉 `sliceScan.stripComments` 把 JSX 闭合标签 `</x>` 的 `/` 当正则起点的假阴后，受害行 `components/NoteRowContextMenu.tsx:175` 由「被抹掉」变「被数到」⇒ **`FROZEN_MUTED_GRAY_TOTAL = 64`**、逐文件格 `components/NoteRowContextMenu.tsx` **1 → 2**（条目数仍 **44**、文件数仍 **44**）。物理恒等式 = **250 = 迁移 186 + 例外 64**；`249 = 186 + 63` 是**旧仪器口径**下的恒等式。
+>   - **独立复算（同一探针，HEAD 工作树；三个剥注释实现并列）**：OLD（`091d1c3d` 的 `sliceScan`）**63 行 / 44 文件** · NEW（HEAD 的 `sliceScan`）**64 行 / 44 文件** · NAIVE（朴素 `/* */` + `//`，不做正则启发式）**64 行 / 44 文件**；三口径**唯一差异文件 = `components/NoteRowContextMenu.tsx`（OLD 1 / NEW 2 / NAIVE 2）**。
+> - **上表 `Text` 行的「7 类」逐类分解两种口径都不对（收口评审 I-6）**：原文写 `interactive*` 35 · `ternary-no-equivalent` 10 · `nontext` 6 · `b1-non-migrated` 9 · `tag` 1 · `colorMap` 2 · C 类 2 —— **自列之和 = 65 ≠ 63**，且 **`colorMap` 与「C 类」是同一类的重复计数**（65 − 63 = 2 正来自这里）。真源 = `textBaseline.RESIDUAL`（44 条）+ `FROZEN_MUTED_GRAY_BY_FILE`（44 键）联立；**我自测**（`node …/tmp/docfix/d2-kind.mjs`）：**条目数** `interactive` 14 · `interactive-no-equivalent` 8 · `ternary-no-equivalent` 9 · `b1-non-migrated` 7 · `nontext` 4 · `tag` 1 · `colorMap` 1（**Σ44**）· **处数** `interactive` 19 · `interactive-no-equivalent` 11 · `ternary-no-equivalent` 11 · `b1-non-migrated` **14** · `nontext` 7 · `tag` 1 · `colorMap` 1（**Σ64**）。**合并口径**：`interactive*` = **22 条目 / 30 处**（不是 35）。
+> - **计划「296 是手抄噪声」这个机理不成立（收口评审 M-6）**：**296 是朴素剥注释口径的真值**，295 才是旧 `sliceScan` 的真值 —— 差额恰为 `components/NoteRowContextMenu.tsx:175` 那一处。**独立复算（`42e88740` 导出树）**：OLD **295 行 / 105 文件** · NEW **296 行 / 105 文件** · NAIVE **296 行 / 105 文件**。⇒ 那是**口径差**，不是手抄错；解释读数差异必须点明是哪两种口径（台账 §四 #32 的追加一例已入册）。
+
 ### 5.2 Modal 契约
 
 - **尺寸三档**：S 380（确认类）· M 520（表单类）· L 720（向导/工作台）；遮罩统一 `rgba(26,26,26,.34)`，圆角 10。
@@ -612,6 +619,8 @@
 1. 4 个 >600 行文件 → **0**；>300 行 100% 在豁免表内且数值与实测一致。
 2. 手写弹层 20 → 全走 `Modal`；z-index 不同值 17 → **≤6 档**；`role="dialog"` + 焦点陷阱 **20/20**。
    > **🔻 收口评审 M-1 就地加注（2026-09-12，**上句原文保留**）—— 档名写错：`zIndex("palette")` 档不存在，实盘是 `zIndex("modal")`**：`app/src/ui/zIndex.ts` 的**六档**是 `raised / panel / popover / modal / modalNested / toast`，**没有 `palette`**（`node -e "…/palette/.test(readFileSync('app/src/ui/zIndex.ts','utf8'))"` ⇒ `false`）。实现用的是 **`zIndex("modal")`**（`app/src/shell/CommandPalette.tsx` 两处调用；被 `CommandPalette.test.tsx` ⑤ 与 `ui/zIndex.guard.test.ts` 钉住）。⇒ **本行应按此读**：`CommandPalette` 用 **`zIndex("modal")`**、AI toast 用 `zIndex("toast")`。**原文保留的理由**：本仓文档回写的一贯口径是「原文 + 加注」，且此处**没有**改判任何验收判据（口径仍是「全走六档标尺」）。**风险已消**：批 4 的层级归并**不得**按 `palette` 这个**类型系统都不接受的档名**做判断。
+   >
+   > ↳ **批 4 收口后更正（收口评审 M-13，2026-09-12）**：上句里「`CommandPalette.tsx` **两处调用**」是**批 3 时点的读数**；`bde807dc`（T9 的 palette 半程）已把层级交给 `Modal` ⇒ **HEAD（`7d541254`）实测 0 命中**：`git grep -n 'zIndex(' -- app/src/shell/CommandPalette.tsx` **空**（`bde807dc^` 上为 **2 处**）。⇒ 本行的正确读法 = **`CommandPalette` 今日不含 `zIndex("modal")` 调用，层级由 `Modal` 承担**；「`palette` 档不存在」的结论**不变**。
    > 另：读数锚里那句歧义 —— 「手写弹层 **20**」（§2 弹层行）与 §5.2 的「28 个手写弹层迁移后同样不得…」并存（28 = 弹层 + 确认框 + toast 一类手写覆盖层的合计口径）。**批 3 未涉及这组数字中的任何一个**，两者都**只登记**，消歧归批 4/批 8。
    >
    > **🔻 批 4 收口就地加注 · 三口径并列 + 例外表 + 有意值收敛（2026-09-12，**上面两句原文一字未改**；批 4 给出的消歧如下，「消歧归批 8」仍适用于**跨文档**的对账）**：
@@ -635,6 +644,29 @@
    >   | 13 | `components/ImagePreviewOverlay.tsx` | 覆盖层（B2） | 图片查看（zoom-out 遮罩 + 92vw 大图）：迁 `modal(300)` 会让大图落到对话框档之下 |
    >   | 14 | `components/ScreenSelectOverlay.tsx` | 覆盖层（B2） | 全屏十字光标屏幕点选：迁档会让采集面被任何弹层盖住（**只登记根**；其子层在根建栈内 ⇒ 已迁 `raised`） |
    >   - **这 14 条的硬守卫**：`dialogMigration.e.test.ts` ② 断言「**登记为「不迁」的文件不得 import 原语层**」+ `buttonMigration.test.ts` ④ 同向复核 ⇒ 本批有 **9 处**（`b1-non-migrated`，2.54:1）因此**回退并冻结**（B21：维持守卫、不放开；批 5/7 若要迁这 14 个文件的排版，**必须先由控制方裁决 B1/B2 的守卫范围**）。
+   >   - **🔻 批 4 收口后更正表（收口评审 I-7；**上面这张表与它的原文一字未改**）**：上表第 1–11 行自称是「`34 − 20 = 14` 里的 11 锚定菜单」，但**与机器真源 `NON_MIGRATED_14`（`dialogMigration.e.test.ts:115-122`）的非 `*Overlay` 那 11 条差 3 个成员** —— 文档多 `BrowserChrome` / `GroupSidebarRow` / `NoteHeaderActions`，文档缺 `NoteEditView` / `NoteLinkToSystem` / `RichEditorView`。表格第 12–14 行（3 个 `*Overlay`）**正确**。
+   >   **独立复算**（`node .superpowers/sdd/2026-09-12-frontend-redesign-batch4-primitives/tmp/docfix/d4-membership.mjs`，从 `.e` 的导出数组解析、不手抄）：
+   >
+   >   | 文档表行 | 文件 | 在 `NON_MIGRATED_14`？ | 在 `ADR033_28`？ | 在 `CROSS_LINE_34`？ | 真源里的类 |
+   >   |---|---|---|---|---|---|
+   >   | 1 | `components/BrowserChrome.tsx` | ❌ **不在** | ❌ 不在 | ❌ 不在 | —（文档误列；`.e` 里它只作 `TABLE4_ALIAS`，并有机器断言 `CROSS_LINE_34.includes(TABLE4_ALIAS) === false`） |
+   >   | 2 | `components/GroupRowContextMenu.tsx` | ✅ | ✅ | ✅ | 锚定菜单（B1） |
+   >   | 3 | `components/GroupSidebarRow.tsx` | ❌ **不在** | ❌ 不在 | ❌ 不在 | —（文档误列） |
+   >   | 4 | `components/NoteHeaderActions.tsx` | ❌ **不在** | ❌ 不在 | ❌ 不在 | —（文档误列） |
+   >   | 5 | `components/NoteListBatchMenu.tsx` | ✅ | ✅ | ✅ | 锚定菜单（B1） |
+   >   | 6 | `components/NoteMoveToGroupMenu.tsx` | ✅ | ✅ | ✅ | 锚定菜单（B1） |
+   >   | 7 | `components/NoteRowContextMenu.tsx` | ✅ | ✅ | ✅ | 锚定菜单（B1） |
+   >   | 8 | `components/RouteInfoPopover.tsx` | ✅ | ✅ | ✅ | 锚定菜单（B1） |
+   >   | 9 | `components/SessionRowContextMenu.tsx` | ✅ | ✅ | ✅ | 锚定菜单（B1） |
+   >   | 10 | `components/chat/ChatLaunchMenu.tsx` | ✅ | ✅ | ✅ | 锚定菜单（B1，T13-b 拆件新家） |
+   >   | 11 | `components/note-selection/SelectionActionMenu.tsx` | ✅ | ✅ | ✅ | 锚定菜单（B1） |
+   >   | **补** | `components/NoteEditView.tsx` | ✅（**文档原表缺席**） | ✅ | ✅ | 透明层（非 `*Overlay`，属那 11） |
+   >   | **补** | `components/NoteLinkToSystem.tsx` | ✅（**文档原表缺席**） | ✅ | ✅ | 透明层（非 `*Overlay`，属那 11） |
+   >   | **补** | `components/RichEditorView.tsx` | ✅（**文档原表缺席**） | ✅ | ✅ | 透明层（非 `*Overlay`，属那 11） |
+   >   | 12–14 | `CaptureOverlayPanel` · `ImagePreviewOverlay` · `ScreenSelectOverlay` | ✅ ✅ ✅ | ✅ ✅ ❌（`ImagePreviewOverlay` **不在 28**、属 `CROSS_LINE_ONLY_6`） | ✅ ✅ ✅ | 覆盖层（B2） |
+   >
+   >   ⇒ **根因**：文档把「recon 的 B1 锚定菜单清单（11 条，多为 `position:absolute` 形态）」与「`34 − 20 = 14` 的非覆盖层那 11 条（含 3 条透明层）」**当成了同一个 11**；而该表上下紧邻的两句正是「`34 − 20 = 14 = 11 锚定菜单 + 3 覆盖层`」与「**这 14 条**的硬守卫」⇒ 表与它自称分解的对象不符。`ADR-033:162` 已同步同一更正。
+   >   - **🔻 同一行的 `b1-non-migrated`「9 处」更正（收口评审 M-12）**：上行的 **9 = 回退动作数**（`tmp/t16b/revert-b1.mjs` 的 `SITES` = **9 条 / 7 文件**：`NoteEditView:373` · `NoteLinkToSystem:258` · `NoteLinkToSystem:301` · `NoteListBatchMenu:82` · `NoteMoveToGroupMenu:135` · `NoteRowContextMenu:202` · `RichEditorView:363` · `RouteInfoPopover:310` · `RouteInfoPopover:351`）；该类的**冻结处数**另算 —— `textBaseline.RESIDUAL` 里 `kind="b1-non-migrated"` 的 7 个文件在 `FROZEN_MUTED_GRAY_BY_FILE` 的计数之和 = **14**（收口修复单元 `ed07d491` **之前是 13**；差额 1 = `components/NoteRowContextMenu.tsx` 的 `</x>` 假阴被修掉，该格 1 → 2）。⇒ 引用时必须写明是**哪一个数**（回退动作 **9** / 冻结处数 **14**）。
    > - **🔴 例外只覆盖那 3 条裸值；其余 55 处按 B2 口径登记为「有意值收敛」（durable 登记，出处 `task-4-report.md:208-212`，由 T4 的 `8d84ecfe` 落地）**：`50/51/60/999/1000/1100/1150 → modal(300)` · `30–61 → popover(200)` · `900 → panel(100)`。**这不是「写法变了、观感不变」** —— 叠放值真的变了（如 `1150 → 300`），只是**相对序在设计上保持不变**；规格 §10 逐字「观感从批 4 开始变」在这里的形态就是「叠放值收敛」。与 `docs/versions/v0.22.md` 批 4 节的「诚实代价」同段。
 3. 空态 / 加载 / 错误行 / 弱化文本 / 卡片边框 五类重复 → 各自 **1 个原语**。
    > **🔻 批 4 收口就地加注 · 本条的中间态（2026-09-12，**上句原文一字未改**；控制方 **B11** 的附带硬要求：不加这条注，批 8 会引用一句**已变形的话**）**：
@@ -649,6 +681,7 @@
    > | 弱化文本 `Text` | **0**（切片内 186 处迁完） | **63 处 / 44 文件 / 7 类**（`RESIDUAL` 逐条带理由） | `FROZEN_MUTED_GRAY_TOTAL = 63`；**字号越界 558 处 / 120 文件本批只冻结不迁** |
    > | 卡片边框 `Surface` | **0**（够格 21 处里实迁 14） | 边框 **226 处 / 108 文件** · 越界圆角 **261 / 109** · 阴影 **24 处 / 24 文件** | 三族 `FROZEN_*_TOTAL` = 226 / 261 / 24；`FROZEN_SURFACE_TAG_TOTAL = 14` |
    >
+   > - **🔻 批 4 收口后更正（2026-09-12 · 收口评审 I-6 + 修复单元 `ed07d491`；**上表原文一字未改**）**：上表「弱化文本 `Text`」行的 **63 处 / 44 文件 / 7 类** 与 `FROZEN_MUTED_GRAY_TOTAL = 63` 是**旧剥注释仪器**的读数。修掉 `sliceScan.stripComments` 把 `</x>` 的 `/` 当正则起点的假阴后，**终态 = 64 处 / 44 文件 / 7 类**、`FROZEN_MUTED_GRAY_TOTAL = **64**`（逐文件格 `components/NoteRowContextMenu.tsx` **1 → 2**；条目数/文件数仍 44）。**逐类真源（我自测，`tmp/docfix/d2-kind.mjs`）**：条目数 `14 / 8 / 9 / 7 / 4 / 1 / 1`（**Σ44**）· 处数 `19 / 11 / 11 / **14** / 7 / 1 / 1`（**Σ64**）；**不得**再引用旧分解「`interactive*` 35 · `ternary-no-equivalent` 10 · `nontext` 6 · `b1-non-migrated` 9 · `tag` 1 · `colorMap` 2 · C 类 2」（自列之和 = 65，且 `colorMap` 与「C 类 2」是**同一类重复计数**）。物理恒等式 = **250 = 迁移 186 + 例外 64**。
    > - **「切片」的判据（B11，机器可算）**：① 本批其它任务已触碰的文件 ∪ ② `pages/**` 全部 ∪ ③ 该类中**有同名测试文件**的文件。
    > - **若控制方当初选 (A) 全量**：余量清单就在各类的 `*Baseline.ts` 的 `RESIDUAL` / `FROZEN_*_BY_FILE` 表里（**每一条都带非空理由**，且「僵尸豁免」判据会红），**不需要重新普查**。
    > - **⚠️ 判据的限度（诚实登记）**：`emptyStateRatchet` 的判据来源里，「① 本批已触碰」**无法在测试内复算**（需要 git 历史）⇒ 那一半只在 **gitignored 探针在场时**由 ⑥a 覆盖（净克隆里 ⑥a `skipIf` 跳过、⑥b 用「盘上可复算的第二源」顶上）。出处：`task-t13t15-fix-report.md` §六 (a) 5 · §六 (b)。
@@ -675,6 +708,7 @@
 11. `npx tsc --noEmit` 0 错 · `npx vitest run` 全绿 · `cargo test` 全绿（每批）。
     > **进度（批 3 收口，2026-09-12）**：八门禁全绿（`line-limits --full` `0/123/123` · `docs-check` exit 0 · registry **312/312/0** · `tsc` **0 错** · vitest **143 文件 / 1370 用例 / 0 失败** · `cargo test --test app_lib_tests` **2300/0/6 逐字持平** · 首屏预算 **97.16 kB < 200 kB**（exit 0，余量 102.85 kB；**CSS 不计入该判据，只报告** 52.27 kB 原始 / 12.58 kB gzip）· clippy **位置集合 20 = 基线，SET-IDENTICAL**）。⚠️ **「vitest 全绿」本轮含一条既有 flake**（`components/KnowledgeGraphView.test.tsx > 单击节点…`）：本次全量**未复现**，但在**批 3 开工基线树 `a7bd1899`** 上复现过（隔离复跑 11 passed / exit 0）⇒ **既有负载敏感 flake，非本批引入**（判据与两种读数见批 3 计划 §收口回写）。
     > **进度（批 4 收口，2026-09-12）**：八门禁**终态**在**静止干净树**上重跑（`HEAD = 199da54b` · `app/dist` mtime **2026-09-12 19:54:33** · 采集 **19:5x**）：`line-limits --full` **0 / 122 / 122**（`--write` 复跑**零 diff** ⇒ 豁免表**不在**收口提交路径里）· `docs-check` exit 0（扫描 276 / 检查 176，五项全 ✅）· registry **312/312/0** · `tsc --noEmit` **0 错** · vitest **166 文件 / 1608 用例 / 0 失败**（**逐文件**对拍批 4 开工基线 143/1370 ⇒ **LOST=0 · SHRUNK=0**；GROWN 6 条 · 新增 23 个测试文件，逐条见批 4 计划 §收口回写 §二）· `check-bundle-budget.mjs`（**真实构建**，取 `tmp/build.lock`）**exit 0 · 首屏 100.30 kB gzip**（余量 99.70 kB；**CSS 62.63 kB 原始 / 14.42 kB gzip 不计入判据，只报告**）· `bundle-eager-graph` **89 文件（源 76 + CSS 13）· npm 包 4**，TS-API 真实边口径 **65**，**Δ = 0**（机理见批 4 计划 §收口回写 §二）· **`cargo test` 未复跑** —— **本批零 Rust 改动**（`git log 42e88740..HEAD -- app/src-tauri` 实测为空），判据仍是批 3 收口的 **2300 / 0 / 6**；**不得**把「未跑」写成「已跑」。⚠️ **一条已知 flake**（`components/KnowledgeGraphView.test.tsx` 的负载敏感用例）在本批多份报告里各出现过 1 次、**孤立复跑均全绿** ⇒ 既有现象，非本批引入。
+    > ↳ **收口后处置（2026-09-12，`cd85e4c3`；控制方已裁）**：该 flake 的状态记为「**已加固、未复现**」—— 收口修复单元做了**最小稳定性修改**（`components/KnowledgeGraphView.test.tsx` 的 **18 处 `waitFor` 超时 `5000 → 15000`**，与 `vitest.config.ts` 的 `testTimeout: 15000` 对齐；**未放宽任何断言**、未加睡眠、未改配置、未加 `retry`），但**本机两种负载各 8 次 + 无负载 6 次均未复现** ⇒ **不声称「已修好」**。**纪律**：① **变异体实验不得与全量测试并发**（负载会把 flake 变成假红）；② 今后若在**顺序执行**下再红 ⇒ 按**新 flake** 重新定位。
 
 ---
 
