@@ -51,7 +51,7 @@ export class SlotErrorBoundary extends Component<{ children: ReactNode }, { fail
           data-testid="slot-error"
           style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 80, padding: 24, fontSize: 12, color: "#b91c1c" }}
         >
-          此处加载失败——可切换页面继续使用；重启应用可恢复。
+          此处加载失败——其余区域仍可使用；重启应用可恢复。
         </div>
       );
     }

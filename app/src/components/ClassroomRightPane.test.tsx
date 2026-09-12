@@ -27,6 +27,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = readFileSync(join(HERE, "ClassroomRightPane.tsx"), "utf8");
 /** 只留代码：剥块注释（含 JSX 注释）与整行 `//` 注释 —— 注释里提到宽度上限不算犯规、也不算数 */
 const CODE = SRC.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+/** 唯一有效口径 = **属性用法**（见 ③ 用例的注释：裸词口径在行尾注释/字符串字面量下会假红） */
+const CAPS = /maxWidth\s*:/g;
 
 const note: Note = { id: 1, title: "课堂笔记", content: "正文", source: "manual", tags: "[]", pin: 0, group_id: null, created_at: 0, updated_at: 0 };
 const base = {
@@ -74,7 +76,11 @@ describe("课堂右栏统一 wrapper（规格 §6.2）", () => {
 
   it("② 渲染出的上限 === 注册表 settings-main 的默认宽（数字只有一份）", () => {
     const { container } = render(<ClassroomRightPane {...base} />);
-    expect(capped(container)[0].style.maxWidth).toBe(`${columnSpec("settings-main").default}px`);
+    const wrapper = capped(container);
+    expect(wrapper[0].style.maxWidth).toBe(`${columnSpec("settings-main").default}px`);
+    // 规格 §6.2「居中 860」的另一半：上限之外还要**水平居中**。jsdom 会把 `margin: "0 auto"`
+    // 归一化成 `"0px auto"`（实测）—— 这半句此前无任何判据（T10 评审 Minor-2：去掉居中 0 红）。
+    expect(wrapper[0].style.margin, "wrapper 没居中（只钉了宽、丢了「居中」那半句）").toBe("0px auto");
   });
 
   it("① 融合卡的行为不变（wrapper 只改宽，不改事件语义）", () => {
@@ -89,8 +95,13 @@ describe("课堂右栏统一 wrapper（规格 §6.2）", () => {
     expect(onDismissFused).toHaveBeenCalledTimes(1);
   });
 
-  it("③ 剥注释后：宽度上限只出现一次（V2 口径）", () => {
-    expect([...CODE.matchAll(/maxWidth/g)]).toHaveLength(1);
+  it("③ 剥注释后：宽度上限（属性用法）只出现一次（V2 口径）", () => {
+    // 口径 = **属性用法**（`maxWidth` 后跟冒号），不是裸词：剥注释器只剥块注释与**整行** `//`，
+    // 因此**行尾** `//` 注释或字符串字面量里的裸词会假红（T10 评审 M3d/M3e）；收紧成属性用法后
+    // 两者转绿，而**真第二处上限**（`maxWidth: 700`）仍被计数 ⇒ 牙齿不降（见 ③ 仪器自检的样本表）。
+    expect([...CODE.matchAll(CAPS)], "宽度上限（属性用法）只该出现一次").toHaveLength(1);
+    // 第二仪器：原裸词口径保留（互补 —— 它不放行裸词/字符串里的同名词；两者同时绿才算干净）
+    expect([...CODE.matchAll(/maxWidth/g)], "剥注释后仍出现裸 maxWidth（第二仪器，裸词口径）").toHaveLength(1);
     // 仪器自检：剥注释确实起了作用，且剥完不是空文件（否则 ③ 是空判据）
     expect(SRC.length).toBeGreaterThan(CODE.length);
     expect(CODE).toContain("export default function ClassroomRightPane");
@@ -107,11 +118,20 @@ describe("课堂右栏统一 wrapper（规格 §6.2）", () => {
     expect(/(?<![A-Za-z0-9_])860(?![0-9])/.test(CODE), "860 又被抄了一份（应从注册表取）").toBe(false);
   });
 
-  it("③ 仪器自检：上面的计数与裸数字正则会命中已知样本（否则那几条是空判据）", () => {
-    const probe = "const a = { maxWidth: 640, width: 860 };";
-    expect([...probe.matchAll(/maxWidth/g)]).toHaveLength(1);
-    expect(/(?<![A-Za-z0-9_])640(?![0-9])/.test(probe)).toBe(true);
-    expect(/(?<![A-Za-z0-9_])860(?![0-9])/.test(probe)).toBe(true);
+  it("③ 仪器自检：两条计数口径都命中真上限，且裸词口径的两种假红形态被新口径放行", () => {
+    const real = "const a = { maxWidth: 640, width: 860 };";
+    expect([...real.matchAll(CAPS)], "新口径漏掉真上限 ⇒ 判据没牙").toHaveLength(1);
+    expect([...real.matchAll(/maxWidth/g)], "裸词口径应有 1 处").toHaveLength(1);
+    // 假红形态（剥注释器盲区）：行尾 // 注释 / 字符串字面量 —— 新口径放行、裸词口径误伤
+    const trailing = "const a = 1; // maxWidth 探针";
+    expect([...trailing.matchAll(CAPS)], "新口径误伤行尾注释").toHaveLength(0);
+    expect([...trailing.matchAll(/maxWidth/g)], "裸词口径本来就会误伤行尾注释").toHaveLength(1);
+    const inString = 'const s = "maxWidth";';
+    expect([...inString.matchAll(CAPS)], "新口径误伤字符串字面量").toHaveLength(0);
+    expect([...inString.matchAll(/maxWidth/g)], "裸词口径本来就会误伤字符串字面量").toHaveLength(1);
+    // 裸数字口径的阳性对照（否则「无裸 640/860」那条是空判据）
+    expect(/(?<![A-Za-z0-9_])640(?![0-9])/.test(real)).toBe(true);
+    expect(/(?<![A-Za-z0-9_])860(?![0-9])/.test(real)).toBe(true);
     // 阴性对照：「640」是更长数字的前缀时不算命中（防子串误判）
     expect(/(?<![A-Za-z0-9_])640(?![0-9])/.test("width: 6401")).toBe(false);
   });
