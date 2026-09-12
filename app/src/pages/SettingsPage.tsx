@@ -33,6 +33,8 @@ import AsrConfusionPanel from "../components/AsrConfusionPanel";
 import ProofreadToggle from "../components/ProofreadToggle";
 // v0.20.4（REQ-304）：web 扩展收件服务面板
 import WebInboxPanel from "../components/WebInboxPanel";
+// 批 6 T7（R3.3 / 规格 §8.5）：动效强度三档入口——没有入口则「三档正确」不可验收
+import { MotionIntensityControl } from "../components/MotionIntensityControl";
 // 批 3（规格 §6.2「设置 主列：现 720 左对齐 → 改居中（860）」）：阅读舒适宽取自注册表。
 // ⚠️ 本列**不走** useColumnLayout——注册表它的 min=max=0（不参与拖拽），
 //    clamp(860, 0, 0) 会得到 0 ⇒ 只取规格的 default 值
@@ -136,6 +138,12 @@ export default function SettingsPage({ active = true }: Props) {
           <WebInboxPanel />
         </div>
       
+        {/* 批 6 T7（R3.3 / §8.5）：外观组——今天只此一项；完整外观/主题设置页属批 7/8 */}
+        <GroupTitle>外观</GroupTitle>
+        <div style={{ ...panel, marginBottom: 4 }}>
+          <MotionIntensityControl />
+        </div>
+
         {/* ── 功能预览（默认关的新能力开关，v4 §11.3）── */}
         <GroupTitle>功能预览</GroupTitle>
         <div style={{ ...panel, marginBottom: 4 }}>
