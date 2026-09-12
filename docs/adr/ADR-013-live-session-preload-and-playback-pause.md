@@ -109,3 +109,13 @@
 **自证量与失效安全**：会话 `finalize` 时写 `{id}.wav.meta.json`（键 `version` / `aligned` / `firstTsMs` / `samplesWritten`）。`aligned` 是**自证量、禁止恒 `true`**：时间戳缺失/为负/回退/超大空档之一 ⇒ 永久置 `false` 并退回纯追加（不补静音、**样本一个不丢**、不阻断会话主链路）。**本修复之前录的 WAV 没有 sidecar ⇒ `aligned = false` —— 历史录音不对齐、无时间基准** ⇒ UI 对无基准的录音**不得假装精确**（只能近似定位或只读降级）。
 
 **AGENTS.md §10 额外审查记录（`live_session*.rs` 属隐私敏感面）**：① 本次改动**只加静音填充**、**不改采集语义**（`capture/` 零改动）；② **不新增系统调用**、不改变文件位置与权限（仍 `{data_dir}/session-audio/`）；③ **不新增依赖**；④ **不影响暂停语义**（暂停期 `write_chunk` 完全不被调用 ⇒ 补静音逻辑不执行）；⑤ 回滚 = 还原 1 个签名 + 1 个调用点 + 删 2 个新文件。真机播放/seek 本环境不可达 ⇒ **未验证**。
+
+## 批 6 收口复核（T35，2026-09-13 —— 上节原文一字未改）
+
+> **性质**：对上面「WAV 轴与会话轴的对齐」节的**最终读数复核**（不新增决策、不改上文）。出处：`.superpowers/sdd/2026-09-12-frontend-redesign-batch6-motion/task-34-report.md`。
+
+- **TODO 全部结清**：① 补静音纯函数 `audio_align.rs` + `audio_align_tests.rs`（T23 的 `375e5058`）· ② 写块接线 `audio_store.rs` 的 `write_chunk(timestamp_ms)` + `finalize` 写 sidecar（`911b6190`）· ③ 唯一调用点 `live_session_loop.rs` · ④ `audio_store_tests.rs` 的既有调用点改签名（**只改调用形态、不改期望值**）· ⑤ `audio_store.rs:3` 的 `@ai-context` 就地更正 · ⑥ 本节（T23 加注）。
+- **常量终值**：`MAX_GAP_MS` = **10 分钟（600000 ms）**（超限 ⇒ `None` + `aligned = false`，**不补**）；sidecar 键**逐字冻结** = `version` / `aligned` / `firstTsMs` / `samplesWritten`（`{id}.wav.meta.json`）。
+- **门禁读数（T34 终态）**：🔴 `cargo test --test app_lib_tests` **真跑** —— `running 2335 tests` → **`2329 passed; 0 failed; 6 ignored`**，**exit 0**；Rust 侧用例数与批 3 基线持平（**Δ 0**）；`cargo clippy --all-targets`：error **0** · lib warnings **15 = 基线**。前端 registry **313 / 313 / 0**（`session_audio_path` = 本批唯一新增 IPC）。
+- **判据落点**：`audio_align_tests.rs`（空档补静音的**构造性**正确、时间戳缺失 / 非单调 ⇒ 纯追加 + `aligned = false` 且**样本一个不丢**、批量 ≡ 增量对拍）· `audio_store_tests.rs` · `commands_audio_tests.rs`（无音频 ⇒ `None` / 非法 id ⇒ `Err` / 路径越界 ⇒ `Err`）· `types_contract_tests.rs` 的 `assert_wire!`。
+- 🔴 **未验证（诚实单列，不得读成「已验证」）**：**真实媒体播放与 seek 本环境不可达**（jsdom 无媒体栈 · headless Edge 不说 `asset:` 协议 · 真机/WebView2 用户已裁决跳过）⇒ **不得**出现「播放已可用」「seek 已验证」类表述；本节的播放头只能给**属性契约**（`<audio src>` / `preload` / `onTimeUpdate`）与**纯函数**（ms → 位置）两级判据。`aligned` 的语义**仍然是**「**不能保证**对齐」（历史录音无法判定），UI 文案**不得**说「这条录音没有对齐」。

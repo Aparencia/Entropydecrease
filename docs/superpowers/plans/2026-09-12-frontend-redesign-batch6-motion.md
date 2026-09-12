@@ -583,6 +583,8 @@ git commit --only -m "feat(motion): 建 GSAP 唯一入口与插件注册" -- app
 | **V5** | **静态 import 白名单 = 1**：全仓 `app/src/**` 里 `from "gsap"` / `from "@gsap/react"` / `from "gsap/*"` 的静态命中，剥注释后**只出现在 `motion/engine.ts`**（本任务的**自证探针**；常驻守卫在 T4） | **M5**：在 `app/src/main.tsx` 加一行 `import { gsap } from "gsap";` | **M5 后期望**：命中数 1 → 2 且文件 ≠ `engine.ts` ⇒ 红 |
 | **V6** | `cd app; npx tsc --noEmit` exit 0 · `npx vitest run` 全绿且**用例数 ≥ 1770 + 新增**（**既有用例一条不许少**） | —（门禁类） | exit 0 / exit 0 |
 
+> **🔻 批 6 收口就地加注（T35 · §三十四 #14；2026-09-13，**上面本表与本节各原文一字未改**）**：上表 **V2** 括号里的 `gsap.globalTimeline.getChildren().length === 1` **在本实现下的正确值是 2** —— `getChildren()` **默认是递归口径**（旧时间线的子 tween 也在递归层）；只有 **`getChildren(false, true, true)`**（非递归）才 `=== 1`。T11 的判据**两种都断**，`docs/standards/motion.md` 的「tween 计数」行已就地补该口径说明。
+
 **提交信息**：① `build(motion): 装上 gsap 与 @gsap/react`（subject 16 字）② `feat(motion): 建 GSAP 唯一入口与插件注册`（subject 15 字）
 
 **诚实边界**：① 🔴 **`vendor-gsap` chunk 是否真的独立生成、且不在首屏** —— 本任务的断言**证明不了**（那要真实构建；`### 表 4` 的 S2）⇒ 归 **T4** 的真实构建命令 + `## 诚实边界` 单列；② 「`@gsap/react` 在浏览器构建里不会造成双实例」是**尖刺的推断**（Vite 认 `module` 字段），**本批不实测浏览器侧** ⇒ 只登记；③ `gsap.registerPlugin` 是**全局副作用** ⇒ 一旦 `engine.ts` 被 import，插件对全进程可见；这一点**不影响**测试隔离（每个测试文件独立 worker），但**必须**写进文件头；④ 本任务**不改** `vite.config.ts` / `manualChunks.ts`（`vendor-gsap` 槽位早已存在且规则天然惰性）。
@@ -879,6 +881,8 @@ describe("★ 源序：档位块必须在 reduced-motion 块之前（规格 §8.
 
 **诚实边界**：① `power3.inOut` 的 **CSS 侧只是 `cubic-bezier` 近似**（CSS 没有 GSAP 的 ease 族）⇒ CSS 动效与 GSAP 动效在同一落点上会有**微小曲线差**；本批**接受**并在注释里写明（不引入第二套 ease 定义）；② `CustomEase` 的曲线控制点串是**手感参数**，本任务只保证「单调不减 + 端点正确」，**不保证视觉正确**；③ `data-tone` 的**落点接线不在本任务** ⇒ 本任务结束时 `data-tone` 在 `app/src` 里**仍是 0 命中**（这是预期的，不是遗漏；波 B/C 才接线）。
 
+> **🔻 批 6 收口就地加注 · 「微小曲线差」的量化事实（T35 · §三十四 #6 · R32①；2026-09-13，**上面这一行原文一字未改**）**：上面①的「**微小曲线差**」在**字面上为假**（`docs/standards/motion.md` 从无此措辞；该量化事实已由 T8b 实测并落进 `app/src/motion/tone.ts` 与 `app/scripts/gen-tokens.mjs` 的注释）⇒ **量化事实 = `maxDiff ≈ 0.409 @ x=0.40`**（CSS `cubic-bezier` 近似 vs GSAP `power3.inOut`）。🔴 **本批接受该差 ≠ 可两路横跳**：同一落点只许一条路径（CSS 或 GSAP），`bounce`/`elastic` 仍属规格 §8.7 明确不做。⚠️ 另：`docs/standards/motion.md:85` 是**规格 §8.3 的逐字表行**，**不许改**（控制方「追加 C」的前提为假 —— 出处 R37②）。
+
 ---
 
 ### Task 9: 位移上限 8px 的 JS 唯一出口 + 扩域守卫
@@ -1007,6 +1011,7 @@ describe("★ 源序：档位块必须在 reduced-motion 块之前（规格 §8.
 - [ ] **Step 1: `controls.ts`**（`@ai-context` 逐字写 R8.2 的依据 + 为什么 `interrupt` 必须 `kill` 而不是「新 tween 覆盖」）
 - [ ] **Step 2: `controls.test.ts` 的判据模板**（四条，全部用 `freezeAt` 而非 sleep）：
   1. **可中断（双断言）**：起 A（`x: 0→100`，dur 1）→ `freezeAt(tlA, 0.3)` → `interrupt()` 后起 B（`x: 0→50`）→ `freezeAt(tlB, 0.5)` ⇒ 断言 ① `gsap.globalTimeline.getChildren().length === 1`（或 `tlA.totalTime()` 冻结在 0.3）**且** ② `currentTransform(el)` 等于 B 在 0.5 处的值
+> **🔻 批 6 收口就地加注（T35 · §三十四 #14；2026-09-13，**上面这一条原文一字未改**）**：本条 ① 的 `getChildren().length === 1` **默认口径下正确值是 2**（`getChildren()` **默认递归**，旧时间线的子 tween 也在递归层）⇒ 实现取**双断**：递归口径断 **2** + `getChildren(false, true, true)` 断 **1**（T11 两种都断，`controls.test.ts` 落地）。
   2. **可反向**：paused timeline 上 `reverse()` 后 `freezeAt(tl, 0.25)` 的值 == 正向 `freezeAt(tl, 0.25)` 的值（对称性）
   3. **属性集合审计**：对模板里的真实 tween 断言 `animatedProps(el)` ⊆ `ANIMATABLE_PROPERTIES`
   4. **reduced-motion 降级**：桩 `{reduce:true}` 下 `startControllable` **直接落终态**（`freezeAt(tl, 0)` 即终值），且不创建 tween（`tweenCount(el) === 0`）
@@ -1210,6 +1215,11 @@ describe("★ 源序：档位块必须在 reduced-motion 块之前（规格 §8.
 | **G-2** | `:244-248` 的 **A5②**（两个宿主的「默认视图常驻 `display` 三元」）在批 5 的 10 条变异里**无一条以它为目标**；最接近的 `T14-M5` 的 `testFiles` **不含守卫文件** | 删掉 `components/notes/NotesReadingColumn.tsx` 的 `display: isDefault ? … : "none"` 三元（改成无条件渲染） | `components/notes/NotesReadingColumn.views.test.tsx` **+ `views/architecture.guard.test.ts`**（**这次带上守卫**） | A5② **红**（`${h} 没有常驻层的 display 三元`）+ F5 红 ⇒ **牙找到了：必须在测试面里带上守卫文件** |
 | **G-3** | `:119-127` 的 **A2③**（`views/**` 不导入 `pages/**` / `shell/**`）**无 A2③ 目标的变异**；批 5 未造过 | 在 `app/src/views/session/SessionRawView.tsx` 顶部加 `import { columnSpec } from "../../shell/columnRegistry";` | `views/architecture.guard.test.ts` | A2③ **红**（`views/** 出现了向上层目录的导入`）⇒ 该条**有牙**，只是从没被喂过 |
 | **G-4** | **F9**（`NotesReadingColumn.views.test.tsx:6-21` 的文件头 `@ai-context` 注释，**不是 `it`**）⇒ 它**不是判据**，是一条"由命令级零 diff + 冻结逐文件基线代守"的登记 | 在 `components/notes/NotesReadingColumn.tsx` 里改**一个字符**（例如把某处 `16` 改成 `17` —— 挑一个**既有用例不会行为级抓到**的排版值） | ① 该文件的既有测试面；② `tmp/t0/compare-perfile.mjs --frozen` 式**逐文件用例数对拍**（批 5 的工具，**不在库里** ⇒ 本任务用 `vitest --reporter=json` 的 `testResults[].assertionResults.length` 现场构造等价对拍） | ① **可能全绿**（若该字符不被任何用例抓到）⇒ **F9 的"牙"确实不在测试里**；② 用例数对拍**也不会红**（数量没变）。⇒ 结论：**G-4 的 F9 只由「命令级 `git diff --numstat` 零 diff」代守**；本任务**如实登记**，并**不**为它新造常驻判据（⚠️ 见「诚实边界①」：**不**做内容指纹冻结 —— 波 B/C 会合法改这些文件，冻结会在同批内立刻作废） |
+
+> **🔻 批 6 收口就地加注 · 上表四条的两处更正（T35 · §三十四 #15 / #16；2026-09-13，**上面本表与 T15 的报告内容一字未改**）**：
+> - 🔴 **#15 · G-1 的变异预测为假**（批 5 D 表 `:1772` 与本节 `:1214` 同款）：上表 G-1 的期望写「A5① **绿**（记录为『无牙』）」—— **实测不成立**：当「`SESSION_VIEWS[0].key` 与 `FROZEN_VIEW_KEYS` 的冻结文本**同改**」时 **A5① 会红（7 红）**；**「无牙」读数只能由「只改实现、不改冻结文本」的变异给出**。⇒ **代守名单更正为 `A4① + A4② + G1①③ / G2① / G4`**（出处 R36.2）。
+> - 🔴 **#16 · G-3 的变异目标路径不存在**：上表 G-3 点名 `app/src/views/session/SessionRawView.tsx`（**该文件不存在**）⇒ T15 已代以 **`SessionProofView`**；回写口径 = **本节按 `SessionProofView` 读**（出处 R36.3）。
+> - **同表的另两条收口更正**：G-4 的代守**必须在波 B/C 之后重估**（F9 今天**无测试级牙**：生产件改一个排版字符 ⇒ 11/11 全绿、用例数对拍也抓不到内容漂移）⇒ **已登记为波 D 的必做重估项**（R36⑤）；G-2 的结论「**必须在测试面里带上守卫文件**」成立（T15 实测）。⚠️ 另有两处**判据缺口**由 T15 补测：`responseSeams` 的 ① 与 I-2 两条原判据**未造专属变异体**（登记为守卫自证缺口，§三十四 #19 家族）。
 
 - [ ] **Step 1: CONTROL** —— `git -c core.autocrlf=false archive -o <tmp>/t15/control.tar 6cbe964e` ⇒ 解包 ⇒ junction `node_modules` ⇒ 跑**四个相关测试文件**（含守卫）⇒ **必须全绿**（不绿先修树）
 - [ ] **Step 2: 四棵变异树**（**每个变异新解一棵树**；不共享）

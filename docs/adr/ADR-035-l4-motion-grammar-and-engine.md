@@ -1,6 +1,7 @@
 # ADR-035：L4 动效纲领与引擎（GSAP 唯一入口 / token 真源 / 三档强度 / 双基调 / 位移上限）
 
 > 状态：已接受（2026-09-13，**批 6 波 A 落地**；决策本体 = 规格 §8 + 控制方裁决 R0–R12 + 波 A 的代码与守卫）
+> 🔻 **批 6 收口就地加注（T35，2026-09-13，**上面状态行原文一字未改**）**：批 6 的 T1–T36 已全部落地（`ac504b06^..975b3285`，**77 个提交**）⇒ 状态行的「批 6 波 A 落地」按「**批 6 波 A–D 全落**」读；本 ADR 的**判据终态见下方「合规性验证」的收口加注**与「后端契约例外」的定稿节。[`docs/adr/README.md`](./README.md) 索引的**同步措辞**见该索引的批 6 收口加注（R14.7 #4 要求把「波 A 落地」改述为**进行中**时的口径 —— 收口后以索引加注为准）。
 > 关联：[前端重设计规格](../superpowers/specs/2026-09-11-frontend-redesign-design.md)（**§3 红线 6（:127）** · §8 全节（:489–:560）· §10 批 6 行（:658）· §11-4（:740）/ §11-5（:741）/ §11-9（:760）/ §11-10（:766）· §13（:811）· §14（:836））· [动效规范](../standards/motion.md)（**本 ADR 的规范载体；判据纪律的机械输入**）· [ADR-034](./ADR-034-l2-shell-navigation-and-column-contract.md) · [ADR-033](./ADR-033-l1-primitives-and-view-layer-contract.md) · [ADR-032](./ADR-032-frontend-design-system-tokens.md) · [ADR-013](./ADR-013-live-session-preload-and-playback-pause.md) · [批 6 实施计划](../superpowers/plans/2026-09-12-frontend-redesign-batch6-motion.md)
 
 ## 背景
@@ -54,6 +55,9 @@ export { gsap, useGSAP };
 - **三条连带硬约束**：① `engine.ts` 仍是**唯一引擎装配文件**（决策 2 不变）；② **任何需要使用 `useGSAP` 的组件，其自身必须位于动态 import 链上** —— 首屏静态页（**课堂页 `pages/ClassroomPage.tsx` 是静态的**，批 2 交付形态「8 页懒 + 课堂页静态」）里的 GSAP 动画**必须**抽成 `React.lazy` 子件；③ **派生禁令**：`@gsap/react` 不得被任何首屏静态模块静态 import（它是 `vendor-gsap` 成员，一旦进闭包就等于 GSAP 进首屏）。
 - 落点 = **T4** 的 `app/src/motion/engine.guard.test.ts`：闭包交集是**无条件可跑**的硬判据；①② 是 `runIf(existsSync(dist))` 的产物用例 + **真实构建强制命令行** —— 🔴 **`dist` 不入库 ⇒ 在导出树里 ①② 不运行：未运行 ≠ 通过**，必须计入报告的「未验证」单列（R11.5）。
 
+> 🔻 **批 6 收口就地加注 · 决策 2 快照注释与决策 3 判据的**两种口径**（T1 评审 I-1；2026-09-13，**上面原文一字未改**）**：决策 2 的冻结快照首行 `// 唯一允许静态 import GSAP 家族的文件` 是**诊断读数口径**（易腐化：新文件一加就漏），**判据本体是决策 3 的闭包交集 = ∅**；`engine.ts` 的文件头已按 T3 逐字写成「这是**闭包判据**（ADR-035 决策 3）的**派生结论**，不是判据本身」⇒ **两处口径并存是有意的**，读到快照注释时不得把它当成判据。
+> 🔻 **批 6 收口就地加注 · `controls.ts` 的适用面（R41.3 经 R61 重述；2026-09-13）**：规则**不是**「`controls.ts` 只许经 `await import()` 到达」（那是一句**过宽**的绝对规则 —— 该措辞今天仍在 `app/src/motion/controls.ts` 的文件头，**属波 D 标签清扫的待改项，本批只登记不改代码**），而是「**不许从「首屏静态可达」的模块静态 import `controls.ts`**」（它内部静态 `import { gsap } from "./engine"`）⇒ **惰性视图（`React.lazy` / 注册表驱动）静态 import 它是安全的**（波 C 的 T27/T29/T31 正是这条路）。
+
 ### 4. 动效 token 真源 = `app/scripts/gen-tokens.mjs`（单一真源、绝不双写）（依据：规格 §11-4（:740）· R1.1 · R2.3）
 
 - **10 个变量逐字迁入**（值一字不改）：`DURATION_TOKENS` × 9（`micro` 120 · `overlay-in` 200 · `overlay-out` 160 · `toast-in` 180 · `toast-out` 140 · `skeleton` 1200 · `card` 220 · `reveal` 500 · `page` 150）+ `EASING_TOKENS` × 1（`--ed-ease: cubic-bezier(0.2, 0, 0, 1)`，出场比进场快）⇒ 产物 `app/src/ui/tokens.css`（`:root`）+ `tokens.gen.ts`（导出 `DURATION_TOKENS` / `EASING_TOKENS` / `MOTION_TOKENS`）。
@@ -68,6 +72,9 @@ export { gsap, useGSAP };
 - 🔴 **源序是优先级实现**：CSS 里后写覆盖 ⇒ **档位规则块必须写在 reduced-motion 块之前**；顺序写反 = 用户选的档**盖掉**系统无障碍设置，违反规格 §8.6.1（:552）第 4 条「『活』不得以无障碍为代价」。**新增守卫**断言行号关系（`app/src/ui/primitives/motion-coverage.test.ts`，归 **T6**，带变异体）。
 - **必须有可切换的 UI 入口**（否则「三档正确」不可验收）：`SettingsPage` 的「动效强度」三段控件（新组件 `app/src/components/MotionIntensityControl.tsx`，归 **T7**；**复用 `ViewSwitcher` 原语**以满足「`ed-btn` 段控件类名空间 + `aria-pressed` + 零行内 style」且不触 `nativeButton.ratchet` 的域）。
 - **不在本 ADR 管辖**：三档的具体倍数（手感参数）；**跨窗口同步**（`?float=1` / `?overlay=1` 各自独立，登记）。
+
+> 🔻 **批 6 收口就地加注 · 「源序是优先级实现」的机理更正（R18.1 的因果更正；2026-09-13，**上面原文一字未改**）**：上段的「CSS 里后写覆盖 ⇒ 档位规则块必须写在 reduced-motion 块之前」把**源序**当成了**承重机理**，**因果写反**。实测（T12 的 I-2 / I-3）：真正让系统赢的是 **reduced-motion 块的每条声明都带 `!important`**（档位块不带）—— 按 CSS Cascade，**即使把两块顺序对调，reduced 仍然赢**。⇒ 本决策的**结论不变**（`prefers-reduced-motion` 优先于档位），但**性质改为「防御性钦定」**：源序判据守的是「reduced 块带 `!important`、档位块不带」这两条前提被无意改动。🔴 **不得**给档位块加 `!important`（那会**反转**无障碍优先级，违反规格 §8.6.1 第 4 条）。两条机器判据：`app/src/ui/primitives/motion-coverage.test.ts` 的**源序 describe**（行号比对）+ `app/src/motion/responseSeams.test.ts` 的 **I-2**（逐条声明带 `!important`）/ **I-3**（两块之间零规则块）。
+> 🔻 **批 6 收口就地加注 · `motion.css` 的块序已成硬事实（R49.1①；2026-09-13）**：计划 V3 的「相位块可写在档位块之后」**被实测改判** —— **相位块必须在档位块之前**（实测行号 **191 < 210 < 260**）：① `responseSeams.test.ts` 的 **I-3** 要求档位块与 reduced 块之间**零规则块**；② `motion-coverage.test.ts` 的名单抽取口径是「**reduced 块 → EOF**」⇒ 写在 reduced 之后会被判**死条目**。⇒ **终态块序 = 相位块 → 档位块 → reduced-motion 块**（变异体 **m3 双捕获**，且 m1b 首轮注入落进 CSS 注释体被扫描器正确忽略 ⇒ 注入点自证）。
 
 ### 6. 双基调 = `data-tone` 属性 + 两个缓动 token + `CustomEase` 具名 ease，**不按类名分**（依据：规格 §8.3（:511）· R3.4）
 
@@ -95,7 +102,13 @@ export { gsap, useGSAP };
 ## 后端契约例外（规格 §3 红线 6 的第三处例外）
 
 > **依据**：R0.1 第 1 条逐字 —— 「规格 §3 红线 6『后端数据模型零改动』新增**第三处例外**，必须：① 规格 §3 就地加注（带原因/影响面/回滚）；② `ADR-035` 单列『后端契约例外』节；③ `cargo test --test app_lib_tests` 本批必须真跑」。规格 §3 的既有两处例外（E1 `MemoryEntry.tier` / E2 `tag_colors` 种子）是**先例不是授权**（规格 §12 逐字「例外须各自登记原因/影响面/回滚；新增例外需再次裁决」）。
-> 🔻 **本节状态（诚实边界）**：**授权已下、三条例外的形态已由三份探针回收裁决定稿**（PB1 `probe-audio-availability.md` · PB2 `probe-fsrs-interval.md` · `probe-audio-runtime.md`）；**波 B（T20 / T22 / T23）落地后的实测读数待回填** —— **「待回填」= 命令注册计数实测值 · sidecar 字段终名 · `aligned` 初值语义终稿 · `MAX_GAP_MS` 的授权值与理由 · `cargo test` 逐字读数**，由 **T35** 定稿本节。**本节此刻不是「已完成」状态。**
+> 🔻 **本节状态（批 6 收口定稿 · T35，2026-09-13 —— 本节自本提交起是「已完成」状态）**：授权已下、三条例外的形态由三份探针回收裁决定稿（PB1 `probe-audio-availability.md` · PB2 `probe-fsrs-interval.md` · `probe-audio-runtime.md`）；**波 B（T20 / T22 / T23）落地后的五项读数已全部回填**（本节写作时挂账的那五项，逐条如下）：
+> - **命令注册计数实测值** = **313 / 313 / 0**（`node scripts/check-command-registry.mjs`，exit 0：定义 313 / 注册 313 / 重复 0）—— `session_audio_path` 是**本批唯一新增 IPC**（312 → 313）。
+> - **sidecar 字段终名** = `{id}.wav.meta.json`，键**逐字冻结**为 `version` / `aligned` / `firstTsMs` / `samplesWritten`（T23 落 `audio_store.rs` 的 `finalize`）。**本批不改名**（改名会让读侧静默回落 `false`）；若将来确需改名 ⇒ **必须同提交改读侧**。
+> - **`aligned` 初值语义终稿** = 「**不能保证对齐**」（**不是**「一定没对齐」）：时间戳缺失 / 为负 / 回退 / 超大空档之一 ⇒ 永久置 `false` 并退回纯追加（不补静音、**样本一个不丢**、不阻断会话主链路）。**本修复之前录的 WAV 没有 sidecar ⇒ `aligned = false`** ⇒ UI 对无基准的录音**不得假装精确**；🔴 **禁止**用恒为 `true` 的字段充当该标记。
+> - **`MAX_GAP_MS` 的授权值与理由** = **10 分钟（600000 ms）**：一段 1 小时静默若按空档补静音会写 **~115 MB** 静音 ⇒ **超大空档宁可不对齐，也不写巨量静音**（超限 ⇒ `None` + `aligned = false`）。
+> - **`cargo test` 逐字读数** = `cd app/src-tauri; cargo test --test app_lib_tests` → `running 2335 tests` → **`test result: ok. 2329 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 8.90s`**，**exit 0**（R0.1 第 1 条③「本批必须真跑」由此兑现；读数出处 `task-34-report.md` §3）。
+> - **E3 的「①域（精确值）不落库」（R17.5 逐字回填）**：DB **无 interval 列**、写库只有 `db_flashcards.rs` 的 `update_card_schedule`（`UPDATE flashcards SET state_json = ?1, due_at = ?2`）⇒ **精确值只在 `review_card` 的返回体里**（当场用 `outcome.interval_days` **显式覆写** —— 该函数用 `..card` 结构体更新语法，**不覆写会漏出旧值**），之后**读库只能得整天值**（`row_to_card` 由 `dueAt − stateJson.lastReviewMs` 反推 `max(round(…),1)`）。
 > **共同约束（三条例外逐条适用）**：**只读** / **不新增表** / **不改既有字段与既有 SQL 文本的语义** / **零迁移**（`flashcards` 建表后零 `ALTER TABLE`；`CARD_COLUMNS` 不动）；**都不触碰 AGENTS.md §10 的「SQLite schema / 迁移」面**。
 
 | # | 例外 | 原因 | 影响面 | 回滚 | 依据 |
@@ -153,7 +166,11 @@ export { gsap, useGSAP };
 | 例外 E3 | 线格式含 `intervalDays` 且既有 10 键逐字仍在（只许追加）· 精确值覆写 · 派生整天粒度 | `app/src-tauri/src/types_contract_tests.rs:34`（G11）· `flashcards` 相关 Rust 单测 | ⏳ T20 |
 | 例外 E4 | 无音频 ⇒ `None` · 非法 id ⇒ `Err` · 路径越界 ⇒ `Err` · `aligned` 不得恒 true · **312 → 313** | `app/src-tauri/src/commands_audio.rs` + 单测 · `scripts/check-command-registry.mjs` | ⏳ T22 |
 | 例外 E5 | 空档补静音字节数逐字算式 · 时间戳缺失/非单调 ⇒ 纯追加 + `aligned = false` 且**样本一个不丢** · 批量 ≡ 增量对拍 | 新建 `app/src-tauri/src/audio_align_tests.rs` + `audio_store_tests.rs` | ⏳ T23 |
-| 例外三件套 | ① 规格 §3 就地加注 ② 本节 **待回填** → 定稿 ③ `cargo test --test app_lib_tests` 真跑 | 规格 §3（:127-134）· 本节 · `cargo test` 读数 | ⏳ T35（① ②）/ T20/T22/T23（③） |
+| 例外三件套 | ① 规格 §3 就地加注 ② 本节**已定稿**（五项读数回填） ③ `cargo test --test app_lib_tests` 真跑 | 规格 §3（:127-134）· 本节 · `cargo test` 读数 | ✅ 已落（① ② = T35 收口提交；③ = T20/T22/T23 落地 + **T34 真跑 `2329 / 0 / 6`，exit 0**） |
+
+> 🔻 **批 6 收口就地加注 · 上表状态列的终态（T35，2026-09-13，**上表原文（除末行的「已定稿」措辞外）一字未改**）**：上表写于波 A 进行中（`:136` 的口径逐字「`⏳ T#` = 由该任务建立，**此刻读作「已定形态、未见判据」**」）⇒ 收口时**全部判据均已落树**，逐行终态：
+> §1 规范正文 ✅（`bffed928`，T1）· §2 `engine.ts` + `engine.test.ts` ✅（T3：StrictMode 单 tween / 卸载后 `transform === ""` 且 tween 数 0 / 四插件**行为级**注册）· §3 `engine.guard.test.ts` + G8 ✅（T4 + T3；**真实构建后复跑 11/11 passed、exit 0**，产物有 `vendor-gsap-BQLVn3Z6.js` **105,584 B** 且 `firstScreen.chunks` 不含它）· §4 token 真源三行 ✅（T5）· §5 载体 / 初值 / 源序 ✅（T6）· §5 UI 入口 ✅（T7，`MotionIntensityControl` 复用 `ViewSwitcher`）· §6 双基调 ✅（T8）· §7 位移 ✅（T9）· §8 底座 / 出口 ✅（T10 `test/motionHarness.ts` + T11 `motion/controls.ts`）· §8 判据纪律的机械输入 ✅（8 个纪律串逐字在 `docs/standards/motion.md` 的「判据纪律」节并被守卫复用）· E3 / E4 / E5 ✅（T20 / T22 / T23，读数见本 ADR 的「后端契约例外」节）· 例外三件套 ✅（见末行）。
+> - 🔴 **末行的语义翻转（诚实登记，R63 / 批 6 计划 T35 的 V3）**：上表末行原写「本节 **挂账 → 定稿**」，描述的是**尚未回填**的中间态 ⇒ **收口后该措辞必然失效**，本加注**点名这条改判**并把该行的**正向判据**改为：**「后端契约例外」节含 `intervalDays` / `session_audio_path` / `aligned` 三个串 + 五列表头齐备 + 五项读数在场（313/313/0 · sidecar 键名 · `aligned` 语义 · `MAX_GAP_MS` = 10min · `cargo test` 2329/0/6）**。
 
 ## 登记（非本 ADR 管辖，供后续批次接手）
 
@@ -166,6 +183,12 @@ export { gsap, useGSAP };
 - **`docs/tech-debt/`（191,980 B / 1555 行，未入库未忽略）→ 挂起、待用户裁决**（R6.9）：本批**零动作**。
 - **只能登记（仪器不可达）**：真实 60fps · Flip 几何位移 · 真实媒体播放 · `window` 级滚动 · 真机 / WebView2 观感 · 视图密度观感 · 切视图卡顿 · 惰性挂载的运行时内存效果 · 暗档实际生效 —— 清单本体在决策 8，收口报告与 `docs/versions/v0.22.md` 的批 6 节各带一份。
 - **本 ADR 不管辖的邻近项**：相变两态（规格 §6.3）与列折叠 Flip 的**结构改造**（「先改结构、再上 Flip」，8 处 `ColumnBar` 落点）· 6 个签名动效的**逐条形态**（R5.1–R5.7，含 #2 的**字符率近似**「规格未定义语速函数」）· `usePresence` 本批**零改动**（R2.4）· 多窗口间的档位同步 · `%TEMP%` 导入会话无音频承载面 · sidecar 孤儿文件（`cleanup` 只扫 `.wav`）· 「删除会话不删音频」—— 均归批 6 的波 B/C/D 或后续批次，见[批 6 实施计划](../superpowers/plans/2026-09-12-frontend-redesign-batch6-motion.md)。
+
+> 🔻 **批 6 收口就地加注 · 登记节的本批补充（T35，2026-09-13，**上面各条原文一字未改**）**：
+> - **列折叠 Flip 的最终形态 = 控制方授权的「路径 B」**（`data-flip-id` 跨元素匹配、**零既有断言改动**）：落地 **2 / 8 处**（`components/ChatSidebar.tsx:80` · `pages/GoalsPage.tsx:42`），其余 6 处未接线；🔴 **`Flip` 会写 `width` / `height`（layout 属性）⇒ 与决策 8 第 3 条的属性集合判据天然冲突** —— 如实登记为「**属性集合判据在 Flip 上不成立**」，**不得**为了让它变绿而放宽 R8.4（批 6 计划「待裁决清单」#11 的裁决落地）。
+> - **两条硬边（后续任务必读）**：① **`app/src/App.tsx` 已到 599 / 600（余 1）** ⇒ **任何后续任务不许动 `App.tsx`**（必须动 ⇒ 先拆件）；② `views/session/SessionTriTrackView.tsx` **295 / 300** · `shell/TopBar.test.tsx` **298 / 300** · `ui/primitives/style-seams.test.ts` **299 / 300** ⇒ 追加前必须先拆（T34 §9 的「余 ≤5」清单共 22 个文件）。
+> - **本批新增登记（逐条带去向）**：`aligned` 残余 **D3–D6**（量级未实测）→ 批 7/8 · **导入会话无音频承载面** → 产品裁决 · **跨窗口档位/相位同步** → 批 7/8 · **孤儿 sidecar + 删会话不删音频** → 与导入会话一并裁决 · **`[[ts:ms]]` 的会话页那一跳**（T26 只修了 `NoteMarkdown` 那一半；`NotePreviewView` + `utils/html.ts:32` 的芯片**同样无点击**，**未修**）→ **批 7 首要候选** · **`lowConfidenceClass` 从 `structuredBlocks.ts` 析出轻模块** + **懒侧字节纳入门禁**（`katex@0.18.4` 第二份副本 = **+227,858 B 原始 / +64,497 gzip**，懒侧今天**零预算**）→ **批 7/8** · **`ink-4` / 审校模式** → 批 7/8 · **暗档 `data-theme` 接线** → 批 7/8 · **「对齐」的错位语义**（R5.1 定义，**用户可否决**）→ 产品裁决。
+> - **波 D 的标签清扫（comment-only，「标签不许说谎」）**：R40.2 点名的清单**在本批只登记、未执行**（它涉及 `app/**` 源码注释 ⇒ **属生产代码面**，T35 零生产代码 ⇒ 移交后续单元）。收口时的**在场清单**（探针读数，2026-09-13）逐条：① 已过期（事件已发生）—— `ui/primitives/Modal.css:15` · `ui/primitives/Toast.css:16-17` · `ui/primitives/StatusLine.test.tsx:239`（三处逐字「批 6 的动效 token 真源落地后删掉 `motion.css` 的变量块**即生效**」）· `ui/primitives/ViewSwitcher.css:24-25`（「批 6 的三档强度/双基调/GSAP 不在本文件」）· **`shell/kbCommands.ts:15`（「`check-command-registry.mjs` 的 **312/312**」—— 实测已是 **313/313/0**）** · **`ui/tokens.gen.ts:83-85`（「今日 **0 生产消费者**，波 C 首次消费」—— 三个时长 token 今天均有消费点）** · **`motion/tone.test.ts:23`（「今日 `app/src` 生产代码里 `data-tone` 仍 **0 命中**」—— 实测已有多处生产命中）**；② 前向引用（届时自证伪）—— `views/session/SessionProofView.tsx:56` · `views/session/SessionTriTrackView.tsx:59` · `components/session-detail/SessionRawView.tsx:42` · `ui/primitives/textBaseline.ts:9`；③ **假 warn（最要紧的一条）** —— `motion/engine.guard.test.ts:19` 与 `:222`/`:226-227` 的用例名与 `console.warn` 仍写「**今天源图未到达 GSAP ⇒ 存在性分支未运行**」，而 **T34 的真实构建证明源图已到达**（产物有 `vendor-gsap-BQLVn3Z6.js`、该件复跑 11/11）⇒ **它现在说的是假话**；④ **过宽措辞** —— `motion/controls.ts:22-27` 的「本模块**只许经 `await import()` 到达**」（正确表述见「决策 3」的收口加注）；⑤ **不算说谎** —— `ui/primitives/EmptyState.tsx:9-16`（登记面，非承诺）。**本批不做**（零生产代码），**去向 = 下一个动效/治理单元**。
 
 ## 相关决策
 
