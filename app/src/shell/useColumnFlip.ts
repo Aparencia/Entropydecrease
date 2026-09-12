@@ -95,8 +95,11 @@ export function useColumnFlip(id: string, folded: boolean, opts?: { paused?: boo
       const before = stored.current;
       stored.current = m.Flip.getState(sel); // 下一次变更的起点（本次提交后的形态）
       if (before === null || !changed) return; // 首次挂载只存基线；非折叠态变化不播
+      // 下一个输入接管（R8.2）。🔴 **两步顺序不可颠倒** —— `motion/controls.ts` 的文件头记着 T11 的实测：
+      // 反序（先 `timeline.kill()`）会把子 tween 变成**孤立体**，此后 `killTweensOf` 再也够不着它，
+      // 旧动画会继续写 DOM（「看起来已被接管」的假绿）。
+      m.gsap.killTweensOf(sel);
       handle.current?.timeline.kill();
-      m.gsap.killTweensOf(sel); // 下一个输入接管（R8.2：kill 不还原已写出的值）
       const duration = flipDurationSec(tier);
       if (duration === null || systemPrefersReducedMotion()) return; // eco / reduced ⇒ 跳终态
       handle.current = {
