@@ -10,7 +10,7 @@
 
 **Spec:** [2026-09-11-frontend-redesign-design.md](../specs/2026-09-11-frontend-redesign-design.md)（**§10 批 4 行** · §10 表后两条约束 · **§11 验收口径** · §5 / **§5.1 收敛账本** / **§5.2 Modal 契约** / §5.3 删除语义 / §5.4 拆件 · §4 的两条禁令 · §12 · §14）
 
-**控制方裁决（硬输入，不许重新论证）：** [`.superpowers/sdd/2026-09-12-frontend-redesign-batch4-primitives/rulings.md`](../../../.superpowers/sdd/2026-09-12-frontend-redesign-batch4-primitives/rulings.md) 的 **B1–B10** 与末尾**四条跨批纪律**；侦察底稿为同目录 `recon.md`（765 行）+ `tmp/callsites.{md,json}`。
+**控制方裁决（硬输入，不许重新论证）：** 批 4 侦察底稿目录（**gitignored，不入库** —— 本地路径 `.superpowers/sdd/2026-09-12-frontend-redesign-batch4-primitives/`）下的 `rulings.md` 的 **B1–B10** 与末尾**四条跨批纪律**；侦察底稿为同目录 `recon.md`（765 行）+ `tmp/callsites.{md,json}`。**该目录整体不入库**（AGENTS.md §0 的仓库口径：`.superpowers/` 只在本地工作树可见），故此处**不给出相对链接** —— 需要读裁决的读者请在本地工作树按上述路径打开。
 
 **输入材料（开工前六份，优先级即此序）**
 
