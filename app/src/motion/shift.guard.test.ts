@@ -2,7 +2,9 @@
  * @ai-context shift.guard.test.ts — 位移上限 8px 的**扩域守卫**（批 6 T9 · R11.4 · 计划 V1/V4b）。
  *
  * Why 单独成件：计划 Step 2 要「把 `style-seams.test.ts` 的位移判据域从 `primitives/*.css` 扩到全仓」，
- * 而该文件在 T5 之后已 **297 行**（余 3）⇒ 扩域要的遍历器与名单跟着挤不进 300 行。计划 Files 表因此
+ * 而该文件早已贴到硬限（🔴 T14b 更正过时读数：原文写「T5 之后已 297 行（余 3）」，**实测已漂到 299 / 300，
+ * 余 1**）⇒ 扩域要的遍历器与名单跟着挤不进 300 行。⚠️ 该数字**随 `style-seams.test.ts` 的每次改动漂移**
+ * （本行只是落地时的读数）⇒ 引用前**必须自己用 `ReadAllLines` 口径重测**，不许照抄本行。计划 Files 表因此
  * 预置了本文件（`app/src/motion/shift.guard.test.ts`）作为**拆出去的落点**；`style-seams.test.ts` 只留
  * 一条 2 行的常量对拍（防「两边各写一个 8」）。两处判据的**正则与换算逻辑逐字同源**（原样抄自
  * `style-seams.test.ts` 的 `shiftViolations`），本件的域**严格包含**那一处的域。
