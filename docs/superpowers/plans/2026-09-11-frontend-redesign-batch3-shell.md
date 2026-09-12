@@ -4,6 +4,12 @@
 
 **Goal:** 把壳层从「手写 9 Tab + 每页自建列 + 7 处硬编码尺寸」改造成「**单一导航注册表 + 单一列注册表 + 一套断点 + `--nav-h` 变量**」，使规格 §10 批 3 行的三条验收全部成立：**9 页全走注册表 · 1024 无溢出 · 7 处魔数归零**。
 
+> **🔻 T14 就地回写注（W1 / W2 / A1 · 2026-09-12 收口时加）** —— 上文**原文一律保留**。
+> **① 「7 处魔数归零」的「7」从未被定义**：规格全仓 `魔数` **仅 1 命中**（`§10:530`，从不展开）。**A1 裁决：不迁就数字** —— 判据取「**能否被单一真源吸收**」，并按判据做。
+> ⇒ **终态计数（T14 实测，不许压回「7」）**：**已吸收 8**（本计划表 2 的 **M1–M7 七处全部归零** + A1 追加的大纲列 `180`）· **有目标未吸收 1**（`KnowledgeDetailPanel` 的 `34` —— `ColumnSpec` 无「折叠窄条宽」概念，取 `.min`(260) 会把 34 px 变成 260 px）· **无目标 2**（`ColumnBar` 的 `26` · `ColumnResizer` 的 `5` —— 规格 §6.2 无对应目标）。逐处 before/after + 判据见本文件 §收口回写。
+> **② 「1024 无溢出」必须带限定词**：**常态（toast 已按 A3 移出导航行）**。计划期的推算「含 toast 1375.74 > 1024」已被 T7 的实现改变 —— **toast 移入 fixed 覆盖层后不再参与导航行宽度分配**，T7 实测 toast 两态读数**逐字相同**。⇒ 终态读数用 **T7 实测**（三档 × toast 三态 × 徽标两变体 = 48 行全 OK），**且必须包含 toast 可见态**（A3 裁决④明文禁止把 toast 剔出读数求通过）。
+> **③ 本计划表 2 的两处计数错误（W9，T14 更正）**：M1 那行写「**8 个页面**的 `calc(100vh - 56px)`」—— 实测 **7 个页面**（**8 处**，`ReviewPage` 占 2 处；合计仍是「10 处 / 9 文件」正确）；表 1 写 `useColumnLayout`「7 处 / **5 页**」—— 实测 **4 页**（规格 §2 自己写「4/9 页」也对得上）。
+
 **Architecture:** 本批**只动壳层与布局常数**：① 新增 `app/src/shell/` 目录承载四个纯数据模块（`navRegistry` / `columnRegistry` / `breakpoints` / `windowSize`）与它们的守卫测试；② `app/src/App.tsx` 的顶栏改由注册表渲染，并接 ⌘K 入口；③ `--nav-h` 走 token 生成器（`app/scripts/gen-tokens.mjs`）产出，8 个页面的 `calc(100vh - 56px)` 与 `AiConversationDock` 的 `top: 56` 全部改为消费它；④ `useColumnLayout` 保留（它是**执行器**不是契约），但它今天的 7 处调用点全部改为从 `columnRegistry` **取规格**。**不迁移原语调用点、不做视图切换、不装 GSAP、不碰 Rust。**
 
 **Tech Stack:** Tauri 2 · React 19.1 · TypeScript 5.8（`strict`，禁 `any`）· Vite 7.3.6 · Vitest 4（全局 `environment: "node"`；jsdom 30 用于组件测试）· Node 24（`scripts/*.mjs` 门禁）
@@ -43,6 +49,11 @@
   | `app/src/components/AiConversationDock.tsx` | 316（已登记） | — | 只改 `top: 56` → `top: var(--ed-nav-h)` 一行；改完 **=`--write` 刷新登记值** |
 
   > ⚠️ **`app/scripts/*.mjs` 与 `scripts/*.mjs` 不在 `line-limits` 的扫描域**（`SCAN_DIRS=['app/src','app/src-tauri/src']`、`SOURCE_EXT=/\.(ts|tsx|rs)$/`）⇒ 上表两处「300/300」**没有门禁保护**，只能靠手工量（批 2 follow-up #16 已登记，归批 8）。**本计划的所有新增脚本一律放 `app/src/shell/*.ts` 或 `app/src/**/*.test.ts`**（在扫描域内），**不新增 `scripts/*.mjs`**。
+
+> **🔻 T14 就地回写注（W28 · **计划自相矛盾第 5 例**）** —— 上表 `ChatPage.tsx` 那行的「**本批不许改 ChatPage.tsx**」**与 Task 9 的 Files / Step 2 正面冲突**（彼处逐字要求「只允许…这一处 props 传递」「这是本批唯一允许动 ChatPage 的地方」）。
+> **控制方裁定：走 Task 9 侧（主路）** —— 理由：它与既有 **6 处调用点的形态一致**（页面持 hook、把列规格传给子组件）；Global Constraints 的写法会让 `ChatSidebar` 变成唯一「组件自建 hook」的例外。
+> ⇒ **本行应按此读**：「**页面持 hook + 传 props；`ChatPage.tsx` 允许恰好一处 props 传递**」。**代价已登记**：`ChatPage.tsx` 变 **599/600（余 1 行）** ⇒ **下一个动它的任务必须先拆**；T9 的 fallback（hook 下沉进 `ChatSidebar`、页面回到 593）**未实测**，作为备选登记。
+> **另注（W27）**：本批 `line-limits` 的 pre-commit 跑**全树**、`--write` 又按**工作树**刷新登记表 ⇒ **并行实施必然产生「提交树不自洽」窗口**，本批已实证 **3 次**（`92ea5d6b` / `4f8f3d3c` / `fd83abb4` 之前同类）⇒ 建议批 8 给门禁加 `--staged` 模式（**只登记，不擅自改流程**）。
 - **改造后必须平齐的门禁基线（`dev@f5c35990` 计划者实测，八条）**
 
   | 门禁 | 基线 |
@@ -241,6 +252,11 @@ node ".superpowers\sdd\2026-09-11-frontend-redesign-batch3-shell\tmp\edge-probe\
 
 ### Task 1: 壳层基线冻结（结构 + 7 处魔数 + CDP 宽度预算 + 八门禁读数）
 
+> **🔻 T14 就地回写注（W23 / W24 / I-3 · 本节的**两条**口径缺陷，2026-09-12 收口时加）**
+> **W23 · 宽度探针的两条缺陷**：① Step 4 的全部读数出自**离线复刻页**（`nav-measure3.mjs` 手工拼 HTML，**不加载真实产物**）—— 本节只给**高度**探针写了「T14 须在真实组件复测」，**宽度探针漏了同款声明**；② 探针的 `A_TABS` 顺序（…复习,**体系,目标,AI对话**）与已提交 `navRegistry.ts`（…复习,**AI对话,体系,目标**）**已分叉** ⇒ 总宽对称（`909.99` 仍成立）但**逐项溢出次序会错**。
+> ⇒ **T14 的兑现**：① 复用**真 `TopBar` 组件**的探针（顺序由注册表 `map` 决定 ⇒ 不可能分叉）；② 另加**真实产物探针** `tmp/viewport-probe.mjs` 加载 `app/dist`。**两把仪器都跑**，读数见 §收口回写。
+> **W24 · 本节无可粘贴 argv / 无代码围栏**（Step 1–7 的命令与 `node -e` 单行散在正文里）⇒ **复现性不足**。**回写口径**：本批之后所有「判据命令」一律给**可粘贴的脚本文件路径**（或带完整参数的单行），不再写「某脚本跑一下」。**同类第 4 处判据缺陷（W29）**：计划 V 表里的 **PowerShell 单行命令在 PS 5.1 下 `SyntaxError`**（嵌套转义被吞）—— T9 实测其 V3 逐字命令**跑不起来**（改用等价 Node 脚本 PASS）。
+
 > **为什么第一个做**：规格与本批的验收里有一句「9 页全走注册表」和一句「7 处魔数归零」，**两句在今日代码里都没有机器判据，而且规格没有逐条点名是哪 7 处**。本任务把计划者的实测固化下来，让后续每个任务的「前/后」都有同一个尺子。**本任务不改任何生产代码。**
 
 **Files:**
@@ -436,6 +452,11 @@ git commit --only -m "feat(ui): add nav height design token" -- app/scripts/gen-
 
 ### Task 3: `--nav-h` 归零（10 处 `56` 全改为消费变量）
 
+> **🔻 T14 就地回写注（W5 · **第 1 处判据缺陷**，2026-09-12 收口时加）**
+> 本节的验收正则含**被转义的 `\|`**（把正则的「或」写成了字面竖线）⇒ **3 种形态只匹配 1 种**。
+> **精确后果（评审已修正控制方的初判措辞，控制方接受）**：**不是**「全未迁移也判绿」——全未迁移时**会**红（`App.tsx` 的 `height:56` 在射程内，1 命中）；真实缺口是「**10 处里只有 `App.tsx` 的 `height:56` 在射程内；其余 9 处（`top:56` + 8 处 `calc(100vh - 56px)`）未迁移时恒给 0 ⇒ 判绿**」。
+> ⇒ **T3 的结论在正确仪器下仍成立**（评审逐点列名 **10 处消费 / 9 文件**、旧写法残留 **0**），本节判据**已被 T14 的 `tmp/t14-accept/accept3-magic-numbers.mjs` 取代**（剥注释 + 阳性对照取自不可变旧版本 + 阴性对照）。
+
 > **本批「7 处魔数归零」的第 1 处**。**改之前先读 Global Constraints 的「删/改一行也必须先量冻结名单」**：`app/src/ui/zIndex.guard.test.ts:57` **逐字**钉着 `AiConversationDock.tsx` 的那一行，改完不改名单会当场变红。
 
 **Files:**
@@ -590,6 +611,16 @@ git commit --only -m "refactor(shell): consume nav height token" -- app/src/App.
 ---
 
 ### Task 4: 窗口尺寸（默认 1280×800 / 最小 1024×640）+ 全局 reset + 6px 滚动条
+
+> **🔻 T14 就地回写注（W7 · 「行为中立性」核对程序；W8 · 滚动条互斥；W25 · §10 审查）**
+> **W7 —— 本节缺的是「程序」不是「结论」**：Task 4 改了 `index.html`（全局 reset + `::‑webkit‑scrollbar`）与 `tauri.conf.json`，却**没有给出「怎么证明观感没变」的核对程序** ⇒ **补写如下（即 T4 实际做的四步，可复用）**：
+> 1. **观测面盘点**：先扫「谁会读这些文件」—— `tmp/t4/test-canary.mjs` 扫 `app/src` 全部 **126 个 `*.test.ts(x)`** ⇒ `index.html` **0 命中**、`scrollbar` **0 命中**、`lang=` **0 命中**；命中对照 `tauri.conf.json` → **2 命中**（`shell/windowSize.test.ts:2,16`）⇒ **既有测试的观测面 = 新守卫自己**，改动不可能被既有断言看见（也就**不可能**靠既有测试证明行为中立）。
+> 2. **旧值零残留（带对照）**：用 `git show HEAD:<path>` 作**阳性样本** —— 旧值正则命中 HEAD blob = **true**、新值与新键在 HEAD 上不存在 = **true**、阴性串 = **false**；同一正则在**工作树**上：旧值 **false**、新值 **true**。
+> 3. **Δ 归因**：真实构建 + `--no-build` 前后对比 —— 首屏 JS **逐字节不变**（`<style>` 进 CSS 栏，不进 JS 判据），`index.html` **+725 B**（预期）。
+> 4. **仪器自证**：`node scripts/check-bundle-budget.mjs --self-test`（14 条）；EOL 保持纯 CRLF（`tauri.conf.json` `crlf=43 / bare_lf=0`）。
+> ⇒ **回写口径**：凡「行为中立性」类声明，必须同时给 **① 观测面盘点（带命中/阴性对照）② 旧值零残留（阳性对照来自旧 blob）③ Δ 归因 ④ 仪器自证**，四步缺一即视为未验证。
+> **W8（已复核：提交在库）**：Chromium ≥121 起 `* { scrollbar-width: thin }` **压过** `::-webkit-scrollbar`（实测 **10px vs 6px**）⇒ 由 `4c89c687` 删除该行并留解释性注释；`index.html` 现在**只用** `::-webkit-scrollbar`。
+> **W25（§10 额外审查必须 durable）**：`tauri.conf.json` 的审查结论（**只含 `app.windows[0]` 的 5 个键；`security`/`bundle` 逐字节未动；无夹带；JSON 与 TS 常量由 `windowSize.test.ts` 4 用例对齐**）此前只留在**不入库**的 `task-4-report.md` ⇒ **T14 已写进 `docs/versions/v0.22.md` 的「批 3 · 壳层落地」节**（durable）。
 
 > **本批「7 处魔数归零」的第 7 处（M7）**，同时兑现规格 §1 决策 17 的三件事：窗口默认/最小值、`html,body,#root` reset、滚动条 6px。审计 J1-1（960×720 无 min 尺寸）与 J1-2（无 reset、UA 8px margin、6px 滚动条规格空转）都在这一条里结清。
 
@@ -925,6 +956,11 @@ git commit --only -m "feat(shell): add single source of breakpoints" -- app/src/
 
 ### Task 6: 导航注册表 `shell/navRegistry.ts` + 9 页接线 + 可达性探针
 
+> **🔻 T14 就地回写注（W6 · **第 2 处判据缺陷**；W26 · 计划文本落后于实现）**
+> **W6 —— 本节 V4 的「47 文件」把 `import type` 算成了静态边**：`bundle-eager-graph.mjs` 用正则 `from "…"` 抽边，**不区分 `import type`**（编译期被完全擦除）。⇒ **判据重定为「三件套」且永不使用裸绝对数**：① 工具原始读数（**注明口径**：把 `import type` 也算）② **Δ（相对开工提交点）** ③ **机理核查**（`pages/**` 新增 0 · npm 包新增 0 · 新进首屏 = []）。**为什么必须这样**：同一个「真实静态可达」被三方测出 **38 / 39 / 49**（T8 评审自测 38/39、T1–T6 评审给 49、工具口径 47→48→57）⇒ **绝对数不可复现**。最干净的第二口径 = **用 TS 编译器 API 剔掉纯类型边**（T10 评审首创，工具 `tmp/review-t10/eager-ts.mjs`）；**修工具会改历史读数 ⇒ 必须新旧口径并列**。
+> **T14 终态实测**：工具口径 **47 → 67** · 真实边口径 **36 → 56** ⇒ **两口径 Δ 都是 +20**（新增集合完全相同：`shell/*` 10 + `ui/icons/*` 6 + `ui/tokens{,.gen}` + `ui/zIndex` + `utils/kbHits`），**`pages/**` 新增 0 · npm 包 4 → 4**。
+> **W26 —— 本节（与 Verification V1/V4）写的是「`Component` 字段」，实现改成了 `PAGE_COMPONENTS` + `navComponent`**（`task-6-report.md:53/:210` 已披露，控制方**批准**）：**严格更强** —— 保精确 props（联合类型会抹掉各页 props）、**无 `any`**、多两条判据（`App.tsx` 不直连页面模块 · 9 个标识符都取自 `navComponent(key)`）。⇒ 本节文本按实现读。
+
 > **「9 页全走注册表」验收的主体**。今天 9 个页面是**双重硬编码**：`App.tsx:23-42` 的 import + `:385-492` 的 9 段 `<PageSlot>` JSX + `:72-87` 的 `NAV_ITEMS` + `:70` 的 `type Page`。本任务建一个**单一真源**并把 `type Page` 从它派生。**本任务不改顶栏外观**（那是 T7）。
 
 **Files:**
@@ -1176,6 +1212,13 @@ git commit --only -m "feat(shell): add navigation registry for nine pages" -- ap
 ---
 
 ### Task 7: A′ 顶栏重构（图标 + 溢出两档 + 齿轮 + 常态宽度验收）
+
+> **🔻 T14 就地回写注（W19 · **第 3 处判据缺陷**；W11/A6；W3；W18；W31）**
+> **W19 —— 本节 Step 5 的预期值被实测推翻**：计划写 `a-tabs@1280 ≈ 909.99`（余量 ≈370），**实测 1281.8（−16.8）** —— 那个估数**只数了 8 个 Tab**，漏掉 brand 135.53 + 右侧簇 389.44 + padding/gaps 40 ⇒ **在默认窗宽 1280 上的可见回归，而「1024 无溢出」这条验收反而判绿**。**教训（写进本计划）**：**判据没覆盖的地方，绿灯不是证据**。A7 裁决 **R2** 返工后三档全绿（1024 **+317.89** / 1180 **+137.06** / 1280 **+237.06**，最坏徽标下 +245.89 / +65.06 / +165.06）。
+> **W11 / A6 —— 本节 Step 3 第②层「只断言 `title`」的口径不足**：T7 按授权**删除了 `legacyLabel` 列**（计划三处要求删、而成既有测试 `navRegistry.test.ts:41/:50-59` 冻结着该列 ⇒ 计划**自相矛盾第 3 例**；控制方裁定：**删列 + 同提交机械改写冻结镜像**）。删列后**注册表 `label` 成为规范态文字的唯一真源** ⇒ 追加两条判据：① 可见文字 `textContent` 逐字 === `e.label`；② **A2 的 emoji 负判据**（渲染文案与注册表都不含 `\p{Extended_Pictographic}`）；配 **4 个变异体**（改 label / 换序 / 可见文字写错 / label 塞 emoji）。**落地**：`TopBar.test.tsx` + `TopBar.persistent.test.tsx`（后者用**渲染级**判据证明「两个常驻状态件仍在顶栏里」—— 旧的文本匹配在「挪走 `dock-toggle`」时**全绿**）。
+> **W3 —— 「课堂助手 → 课堂」是用户可见改名**（不是纯样式）：A2 裁决顺带产生。**产品口径需确认/登记**（已登记为 follow-up）。**另**：本任务**顶栏三处配色确实变了**（边框 → `#EAE7E0`、未选中文字 → `#3A3A36`、选中青绿 → `#1F5FBF`），**T7 报告未登记**（评审点名）⇒ 与本条一并登记为**可感知的观感变化**。
+> **W18 / A7 落点（走 R2）**：本节「≥1180 图标+文字」**只适用 8 个域 Tab**；**右侧簇（⌘K / 对话面板 / 齿轮）在 `<1400px` 只有图标 + `title`** —— 这是规格未写明的形态，阈值住在 `BREAKPOINTS.navActionsFull = 1400`（**由 T8 的提交拥有**，跨任务锁序）。**为何 R2 不是偏离规格**：规格 §6.1 的「约 1070px」只有在「右侧簇不带文字」前提下才成立（R2 预测 1073.94，实测 1027.94）。
+> **W31 —— `metaKey` 未实现**（Windows 目标 + 顶栏文案已定 `Ctrl+K`），且**「Ctrl+K 真开面板」没有运行期判据**（仓内无测试 import `App`，App 接线只有源码文本判据；真机按 W16 跳过）⇒ **这是未验证项，不许写成已验证**。
 
 > 规格 §6.1 + §1 决策 12/14。**本任务是本批观感变化最大的一步**，也是「1024 无溢出」的第一半（A2 裁决影响本任务）。
 
@@ -1451,6 +1494,11 @@ git commit --only -m "feat(shell): rebuild top bar with icon tabs" -- app/src/sh
 
 ### Task 8: 列注册表 `shell/columnRegistry.ts`（13 行规格）+ 阈值改判 + 大纲列接线 + 34px 窄条
 
+> **🔻 T14 就地回写注（W22 · **第 4 处判据缺陷**；W21；A1 分类口径）**
+> **W22 —— 本节 Step 4 的字面指令有歧义**：计划逐字写「`onToggleOutline` **改为 `outlineCol.expand()`**」—— **字面照做会把 ✕「收起大纲」也变成 `expand()`**，凭空制造一个新缺陷（评审用变异体实测：照计划字面写 ⇒ 判据当场红）。**实现取 `folded ? expand() : setManualFolded(true)`**（窄条 → 展开、✕ → 手动折叠），**两个控件各自语义正确**，且未折叠态与旧实现逐字一致 ⇒ **控制方认可**。本节文本按此读。
+> **W21 —— 规格 §6.2 的 `ColumnSpec` 只写 6 个字段，实现是 7 个**（多 `page: PageKey`，用于 `columnsOf(page)` 与「列不许挂在已删页上」的 ③ 守卫）⇒ 收口时已回写规格 §6.2。
+> **A1 的最终分类（本节产生的两处 + 我新发现的一处）**：**已吸收** = 大纲列 `180`（注册表 `notes-outline.default`）+ **M2 断点**（本节完成收口）；**有目标但未吸收** = `KnowledgeDetailPanel:132` 的 **`34`**（Step 5 自带逃生门「允许跳过本步…不许为了做它引入新的 magic number」）⇒ **登记批 4**；**无目标** = `ColumnBar:20` 的 **`26`**（§6.2 通篇不提）与 **新发现** `ColumnResizer:74` 的 **`5`**（既有共享常数，本任务只是把手柄带进大纲列、**未写任何新字面量**）⇒ 登记不碰。**T14 出的最终计数是 8 / 1 / 2，不许压回「7」。**
+
 > 规格 §6.2 的**列契约表逐行落地**：`ColumnSpec = { key, default, min, max, autoFoldBelow, pinnable }`，「由单一注册表汇总，页面不再自建 hook」（**执行器归属见 §待裁决 A5**）。
 
 **Files:**
@@ -1699,6 +1747,11 @@ git commit --only -m "feat(shell): add column spec registry" -- app/src/shell/co
 
 ### Task 9: 未接入三处接入列基础设施（`ChatSidebar` / `GoalsPage` / `SettingsPage`）
 
+> **🔻 T14 就地回写注（W29 · **第 4 处判据缺陷**；W28 的兑现；I-1 的落点）**
+> **W29 —— 本节 V3 的逐字命令在 PS 5.1 下 `SyntaxError`（嵌套转义被吞）**：实施者实测**跑不起来**，改用等价 Node 脚本（`legacy380=false / columnSpec(goals-left)=true` PASS）。⇒ **回写口径**：计划里所有「`node -e` / PowerShell 单行 + 嵌套引号」的判据都应改成**可粘贴的脚本文件**（同 W24）。
+> **W28 的兑现**：本节 Step 2「`ChatPage` 只加两行」= 主路（页面持 hook + 传 props）⇒ **`ChatPage.tsx` 599/600（余 1 行）**；T9 评审 I-1 之后（裁决 **(e)**）`ChatSidebar` 的 props **收敛为一个 `col?: ColumnLayout` 整对象**、手柄落在**折叠三元之外**，`ChatPage.tsx` **净增 0 行**（599 → 599）。
+> **判据现状（已知两处「注释不实」，见 §收口回写 follow-ups）**：`shell/columnConsumption.test.ts:50` 注释自称「旧字面量**只在这一个数组里写一次**，① 与 ② 共用」，实则 ①/② 体内**内联重复**了三条正则（`:60` / `:76` / `:86`），`LEGACY` 数组只被后面的扫描与仪器自检用到 ⇒ **注释不实（评审 M-2）**，**T14 不改测试代码**，登记为 follow-up。
+
 > 规格 §6.2 的三个「本次改动」格：AI 对话侧栏「**接入列基础设施**（现硬编码 240）」· 目标左列「**接入列基础设施**；默认 380 → **320**」· 设置「现 720 **左对齐** → 改居中」（居中 860）。
 
 **Files:**
@@ -1934,6 +1987,13 @@ git commit --only -m "fix(classroom): unify right pane width wrapper" -- app/src
 
 ### Task 11: 溢出策略终局（toast 归宿 + ⌘K 命令面板）
 
+> **🔻 T14 就地回写注（W30 · **计划自相矛盾第 6 例**；W31；A3 的落地口径）**
+> **W30 —— 本节 Interfaces 与 Step 4 互相排斥**：Interfaces 逐字要 `onPick: (cmd: Command) => void`，而 Step 4 逐字要 `onPick { kind:"page",key }` / `{kind:"dock"}`。**T11 取可执行的 Step 4**（回调按 `kind` 分支），`Command` 类型仍按计划导出 ⇒ T12 的交接面不变。⇒ **本节 Interfaces 那行按 Step 4 读**。
+> **Step 1 = 核对不重做**（T7 已按 A3 走法甲落地：fixed 覆盖层 + `role="status"` + `top: calc(var(--ed-nav-h) + 8px)`；`TopBar.test.tsx` 已把该形态钉住）⇒ 重做会撞红既有断言。**本节 Step 1 的代码示例应按「核对并登记」读。**
+> **`dock-toggle` 保留在顶栏**（T11-b 裁决）：命令面板里的 dock 命令是**增量**，不得移除顶栏那条已提交的守卫。
+> **V5 换口径**：本节 V5 的「≤ **92.79** + 12 kB」里，`92.79` 是**批 2 收口值**、批 3 已在其上加了 T2–T6 ⇒ 判据改为「**收口当次实测 + ≤12 kB 增量**」（T11 实测：当次 **95.89 kB** + 同树 A/B 净增 **+0.76 kB**）。
+> **W31 —— `metaKey` 未实现**（见 Task 7 的同款注）；**V2 的 `bareZ` 只扫 `CommandPalette.tsx`** ✓（`App.tsx` 里对话面板的裸 `900` 是**既有**冻结项，**不许顺手改**，已登记批 4）。
+
 > **本任务是「1024 无溢出」的第二半**，也是**唯一需要 A3 裁决才能定形**的任务。规格 §6.1「⌘K 命令入口用来替代现在手写的 9 个 `focus*` 参数跳转，数据源接 `kb_search`」；§6.1 的顶栏清单**没有 toast**。
 
 **Files:**
@@ -2133,6 +2193,12 @@ cd "D:\Program own\aicode\work space\Entropydecrease"
 - 结果与页面跳转命令**合并展示**（页面命令恒在最前）；
 - **失败时静默降级**为「只有页面跳转命令」并显示一行灰色提示（**不许空 catch**，`console.warn` 带上下文）。
 
+> **🔻 T14 就地回写注（T12 评审 I-1/I-2 的**精确语义**，2026-09-12 收口时加）**
+> 上面那句「**页面命令恒在最前**」**已被实现改写为第三种语义**（控制方裁决 **B**，落地于 `2b426236`）：
+> **`filterCommands(…, hits.length ? "" : query)`** —— **有检索命中时页面命令恒在（9 条全在）**；**零命中时页面命令按查询词过滤并显示空态**。
+> **为什么不是字面照做**：T12 评审实测「去掉过滤」与 **T11 已提交、禁止修改的 3 条断言**正面冲突；而「永远列出 9 条页面命令」会让「没有匹配的命令」变成**假陈述**。⇒ **本节按 B 的语义读**，并且 `CommandPalette.tsx` 的头注释已如实改写（**含「此前那句属不实承诺」**）。
+> **另两条同任务的口径更正**：① **`Limit` 上界不是自引用的** —— `kbCommands.test.ts` 曾用模块自己导出的 `KB_SEARCH_MAX_LIMIT` 作右值（**永真断言**），现已锚死字面量 `50` / `10`（实核 Rust `kb_search.rs:23-24`）；② **「Rust 侧 clamp 同口径」注释原为不实** —— Rust **命令层只夹上界**、**引擎层 `kb_search.rs:107` 有 `.clamp(1,50)`** ⇒ 有效区间同为 `[1,50]`，只是不在同一处 clamp。
+
 - [ ] **Step 5: `focus*` 跳转收敛（**只做「入口收敛」，不删状态机**）**
 
 规格 §6.1 要「替代现在手写的 9 个 `focus*` 参数跳转」。**今日的 `focus*` 有 9 个字段**（`App.tsx:164-202`：`focusSessionId` / `focusNoteId` / `focusNoteSearch` / `focusSystemId` / `createSystemSignal` / `focusGroupId` / `focusReviewGroupId` / `focusRefineTaskId` / `focusChatTaskId` / `focusChatId`）。
@@ -2251,6 +2317,16 @@ git commit --only -m "feat(shell): add slot error boundary and loading" -- app/s
 ---
 
 ### Task 14: 验收测量 + 收口（三条验收的机器判据 + 八门禁 + 规格 §10 回写 + 台账 + follow-ups）
+
+> **🔻 T14 执行时就地回写注（2026-09-12）—— 本节的三处口径更正，实测所得**
+> **① Step 2 的探针路径走不通（**第 7 处判据缺陷**）**：本节逐字让 `viewport-probe.mjs` 用 CDP 打开 `file:///…/app/dist/index.html` —— **实测 `#root` 子节点 = 0**（页面一片空白）。根因：vite 产物 `index.html` 用**绝对路径** `/assets/index-*.js` + `crossorigin`（Tauri 的 `WebviewUrl::App("index.html")` 从应用协议根提供，**绝对路径是对的**）⇒ `file://` 下解析成 `file:///assets/…`（不存在）。
+> ⇒ **正解 = 把 `app/dist` 用本地只读静态服务器提供**（探针 `--mode http`，绑 `127.0.0.1`、结束即关）。**`--mode file` 的失败读数保留在 `tmp/acceptance.md` 用于复现，不得用作结论。**
+> **② Step 8 写「A1–A5 五处裁决」，实为 A1–A7（T14-b）**：**A6** = 删 `legacyLabel` 列的授权（+ 同提交机械改写冻结镜像）；**A7** = 顶栏 ≥1180 回归与 **R2 返工**。⇒ §收口回写按 **A1–A7 七处**给「裁决 → 实际做法 → 证据」。
+> **③ V6 期望「12–15 个原子提交」，实数 22（T14-d）**：**报实数并说明构成，不为落进区间而合并提交**（与「每个提交都绿」冲突时后者优先）。构成：1 计划 + 13 实现任务（T2–T13，其中 T8 与 T4 各两次）+ 1 微单元 + 3 评审修复单元 + 1 收口 = **22**（`85d51d83^..` 至收口提交，含左端点）。
+> **④ 本节 Step 5/6 引用的首屏基线「92.79 kB」= 批 2 收口值**（T14-c）：终值必须是**收口当次真实构建**的读数并写明 `dist` 出处 —— 本批沿途出现过 **3 个不同时刻的 `dist`**（12:37:56 / 12:56:20 / 13:15:48），不写出处就会把别人更早的构建误当自己的 Δ。**T14 实测终值：97.16 kB（`dist` mtime 2026-09-12 14:06:11，由本次真实构建产出）**。
+> **⑤ Step 4 的 vitest 判据「≥1256」已被评审 I-1 证伪**（1256 是 T6 之后读数，真基线 **125 文件 / 1233 用例**）⇒ 改为**两条**：① **既有 1233 条逐文件一条不许少** ② 新增只增不减。**T14 实测**：125 个既有文件用例数**一模一样**、0 消失、0 减少；+18 新文件 / +137 用例 ⇒ 143 文件 / 1370 用例。
+> **⑥ Step 4 的 `cargo` 若撞上负载敏感用例**（`ffmpeg::tests::run_captured_handles_large_output`）⇒ **两种读数都报**（含重跑）；T14 本次未撞（9.26s 一次过）。
+> **⑦ V1 的壳层守卫清单已扩充**：除本节列的 11 个文件外，另有 `CommandPalette.{test,kb.test,followups.test}.tsx` · `kbCommands.test.ts` · `useKbPaletteSearch.test.tsx` · `TopBar.persistent.test.tsx` · `navHeight.consumption.test.ts` · `columnConsumption.test.ts` · `ShellFallback.test.tsx` · `columnRegistry.test.ts`（T8 补强）· `GoalsPage.test.tsx` · `ChatSidebar.test.tsx` · `ClassroomRightPane.test.tsx` · `NotesReadingColumn.outline.test.tsx`。
 
 > 规格 §10 批 3 行的验收是三条：**「9 页全走注册表；1024 无溢出；7 处魔数归零」**。本任务给每条一个**点名仪器的机器判据**，并完成规格 §10 的进度回写、`docs/versions/v0.22.md` 的台账与 follow-ups。**本任务不再改生产代码**（只改文档；若测量发现缺陷，**回退到对应任务修**，不在本任务里夹带）。
 
@@ -2399,7 +2475,161 @@ git commit --only -m "docs(spec): close out shell batch three" -- docs/superpowe
 
 ---
 
-## 收口回写（Task 14，<YYYY-MM-DD> —— 批 3 终态 · 验收读数 · 给批 4+ 的输入）
+## 收口回写（Task 14，2026-09-12 —— 批 3 终态 · 验收读数 · 给批 4+ 的输入）
 
 > 本节由**收口单元**在 Task 14 追加。上文一律**保留不改**，本节只做**终态读数**与**归账**。
 > **批 4 的计划者：你需要的迁移点清单就是本节 §批 4 的迁移点。**
+> **读数出处（本批硬纪律，因为沿途出现过 3 个不同时刻的 `dist`：12:37:56 / 12:56:20 / 13:15:48）**：
+> `HEAD = d9d0dfc0de75e914248de7bb35b8a754da7067aa` · **干净树**（`git status --porcelain` 仅 `?? docs/tech-debt/`）· `app/dist` **mtime 2026-09-12 14:06:11**，入口 chunk `index-Cf249NJv.js`（99,860 B），**由本节的真实构建产出**（`node scripts/check-bundle-budget.mjs`，非 `--no-build`）· 全部读数采集于 **2026-09-12 14:06–14:12**。
+
+### 一、三条验收的判据与读数
+
+| # | 验收（规格 §10 批 3 行逐字） | 机器判据（命令） | 读数 | 判定 |
+|---|---|---|---|---|
+| ① | **9 页全走注册表** | `cd app; npx vitest run src/shell/navRegistry.test.ts`（**12 用例**）+ `node tmp/t14-accept/accept1-key-wiring.mjs`（**非同源反向证据**） | 12/12 绿 · 探针 **PASS（exit 0）**：9 个 key 全部 `page === "<key>"` + `navComponent("<key>")`；`App.tsx` 的 `page ===` 字面量集合与注册表键集**双向相等**（两向差集均为空） | ✅ |
+| ① 仪器自检 | 阴性样本 | 同一条判据对 `"not-a-page"` | **MISS** ✅（且探针自带抽取器阳性/阴性合成样本对照） | ✅ |
+| ② | **1024 无溢出**（限定：**常态；toast 已不在导航行**） | `node tmp/t7-acceptance/nav-width-t7.mjs --widths 1024,1180,1280`（**48 行** = 2 树 × 3 档 × **3 toast 态** × 2 徽标）+ 加跑 `--widths …,1440`（**64 行**，覆盖 `navActionsFull=1400`） | **AFTER_OVERFLOWS = 0 · SELFTEST_PROBLEMS = 0 · BEFORE_OVERFLOWS = 21**（1440 版：0 / 0 / 26）⇒ **红得起来**。逐档余量（after，含徽标）：**1024 +317.89**（最坏徽标 **+245.89**）· **1180 +137.06**（最坏 **+65.06**）· **1280 +237.06**（最坏 **+165.06**）· **1440 +237.2**（最坏 +165.2） | ✅ |
+| ② | 同上（**真实产物**） | `node tmp/viewport-probe.mjs --width {1024,1180,1280} --entry app/dist/index.html --mode http` | 三档 **problems = 0**：判据②顶栏自然宽 ≤ 可用宽 **true**（1024 **613.53/1024** 余 410.47 · 1180/1280 **950.36**，余 229.64 / 329.64）· 判据③无 Tab 越界 **true** · 判据①整页无横向滚动 **true（参考项）** · 仪器自检：视口/dpr/固定块 500/哨兵 90/阳性对照 1 全过 | ✅ |
+| ② | **A4 的硬要求**（T7 未记录，**T14 补测**） | 同上探针的纵向读数 | 1024/1180/1280 三档一致：**顶栏高 56 · clientHeight 55 · 最高子项 38 · 上下 padding 0 · 纵向溢出 false** ⇒ **余量 17 px，`--nav-h = 56` 够用**（与简报的推算一致，现在是**实测**） | ✅ |
+| ③ | **「7 处魔数归零」** | `node tmp/t14-accept/accept3-magic-numbers.mjs`（剥注释口径 + **阳性对照取自不可变提交 `a7bd1899`** + 阴性对照） | **PASS（exit 0）**：**已吸收 8** · **有目标未吸收 1** · **无目标 2**（表见下） | ✅（**按判据，不按「7」**） |
+
+### 二、八门禁终态表（逐条命令 + exit code + 读数）
+
+| # | 命令 | exit | 读数 |
+|---|---|---|---|
+| 1 | `node scripts/line-limits.mjs --full` | **0** | `>600` **0** · 301–600 档 **123** · 登记条目 **123**；`--write` 复跑 **零 diff**（豁免表**不在**本次提交路径里） |
+| 2 | `node scripts/docs-check.mjs` | **0** | 扫描 274 个 Markdown（检查 174），5 项全 ✅ |
+| 3 | `node scripts/check-command-registry.mjs` | **0** | 定义 **312** / 注册 **312** / 重复 **0** |
+| 4 | `cd app; npx tsc --noEmit` | **0** | **0 错**（输出文件 0 字节）。⚠️ **必须单独跑**:vitest 不暴露 TS6133/TS2873 |
+| 5 | `cd app; npx vitest run` | **0** | **143 文件 / 1370 用例 / 0 失败**（40.32s）· **既有 1233 条：125 个文件逐文件用例数一模一样、0 消失、0 减少**；+18 新文件 / +137 用例 |
+| 6 | `cd app/src-tauri; cargo test --test app_lib_tests` | **0** | **2300 passed / 0 failed / 6 ignored**（9.26s）—— **逐字持平**，本批零 Rust 改动；未撞负载敏感用例（两种读数无需并列） |
+| 7 | `node scripts/check-bundle-budget.mjs`（**真实构建**） | **0** | 首屏 **97.16 kB**（原始 309,524 B / gzip 97,155 B）· 预算 200 kB · **余量 102.85 kB**；懒 21 个 574.71 kB 不计入；**CSS 3 个 52.27 kB 原始 / 12.58 kB gzip **不计入判据**，只报告**；766 modules；无 `Circular chunk` |
+| 8 | `cd app/src-tauri; cargo clippy --all-targets` + `clippy-set.mjs` | **0** | **唯一位置集合 20 = 基线，`SET-IDENTICAL`**（`onlyInBaseline=0 / onlyInFinal=0`）。**两种口径都记**：汇总行 = lib 15 / lib test 19（15 重复）/ app_lib_tests 19（19 重复）；批 2 台账的「19」是**汇总行口径** |
+
+**首屏账（批 3 起点 = 批 2 收口值）**：**92,789 → 97,155 B = 92.79 → 97.16 kB（Δ+4,366 B = +4.37 kB，+4.7%）**；入口 chunk **87,573 → 99,860 B**；`index.html` **655 → 1,558 B**；懒 chunk **22 → 21 个**。
+
+**首屏静态可达图（三件套，**永不使用裸绝对数**）**：工具口径（把 `import type` 也算边）**47 → 67 文件 / 4 → 4 包**；**真实边口径**（TS 编译器 API 剔纯类型）**36 → 56 文件**；**Δ 两口径都是 +20，新增集合完全相同** ⇒ 机理：新增 20 个全是批 3 的壳层/ui 模块，**`pages/**` 新增 0 · npm 包 4 → 4 ⇒ 没有任何页面被静态拉回首屏**。
+
+**逐任务 vitest 读数轨迹（T14-a 的「既有 1233 一条不许少」用逐文件比，不用总数）**：`a7bd1899` **125/1233**（真基线）→ T2 125/1233 → T3 **125/1236** → T4 127/1240 → T5 **128/1244** → T6 **129/1256** → T7 **132/1289** → T8 **131/1272→1330**（两次提交）→ T9 **135/1303** → T10 **136/1312** → T11 **138/1338** → T12 **140/1359** → T13 **141/1364** → T12-followups **143/1370** → **终态 143/1370**。（沿途数字取自各任务报告；**判据本身是终态与基线树的逐文件比对**，见 `tmp/acceptance.md`。）
+
+### 三、魔数 before/after 表（`node tmp/t14-accept/accept3-magic-numbers.mjs`，剥注释口径）
+
+| # | 魔数 | 今日落点 | before → after（剥注释） | 分类 | 判据 |
+|---|---|---|---|---|---|
+| M1 | 导航高 `56` | `App.tsx` + `AiConversationDock` + 8 个页面（**10 处 / 9 文件**） | **10 → 0** | ✅ **已吸收**（T2 token + T3 消费） | `shell/navHeight.consumption.test.ts`（3 用例，逐文件判 token 消费）+ `ui/zIndex.guard.test.ts` 冻结镜像同提交改写 |
+| M2 | 断点阈值 | 4 页面 + hook（**6 处**） | **6 → 0** | ✅ **已吸收**（T5 单一真源 + T8 注册表） | `shell/breakpoints.test.ts`（5 用例，含 `navActionsFull` 逐字 1400）+ `columnRegistry.test.ts` ④ 行↔档位映射 |
+| M3 | `ChatSidebar` 240 | `components/ChatSidebar.tsx` | **1 → 0** | ✅ **已吸收**（T9 → 注册表 260） | `shell/columnConsumption.test.ts` ①（剥注释判据 + 原始文本第二仪器） |
+| M4 | `GoalsPage` 380 | `pages/GoalsPage.tsx` | **1 → 0** | ✅ **已吸收**（T9 → 注册表 320） | `columnConsumption.test.ts` ② + `pages/GoalsPage.test.tsx` |
+| M5 | `SettingsPage` 720 | `pages/SettingsPage.tsx` | **1 → 0** | ✅ **已吸收**（T9 → 860 + 居中） | `columnConsumption.test.ts` ③ + ④ 反向判据 |
+| M6 | 课堂右栏 `640` | `components/ClassroomRightPane.tsx` | **3 → 0** | ✅ **已吸收**（T10 统一 wrapper） | `components/ClassroomRightPane.test.tsx`（9 用例，值必须来自 `PANE_BODY_MAX`／注册表） |
+| M7 | 窗口 `960×720` | `app/src-tauri/tauri.conf.json` | 旧值 0 残留（新 4 键就位） | ✅ **已吸收**（T4 → 1280×800 / 最小 1024×640） | `shell/windowSize.test.ts`（4 用例，JSON 与常量逐字一致） |
+| A1-a | 大纲列 `180`（写死） | `components/NoteReadingView.tsx` | **1 → 0** | ✅ **已吸收**（T8 → 注册表 `notes-outline.default`） | `NotesReadingColumn.outline.test.tsx`（6 用例） |
+| A1-b | 详情列折叠窄条 `34` | `components/KnowledgeDetailPanel.tsx` | **1 → 1** | ⛔ **有目标未吸收**（登记 **批 4**） | 无 —— `ColumnSpec` 无「折叠窄条宽」概念；取 `.min`(260) 会把 34 px 变 260 px（可见回归） |
+| A1-c | 折叠窄条约 `26` | `components/ColumnBar.tsx` | **1 → 1** | ⛔ **无目标**（登记不碰） | 无 —— 规格 §6.2 通篇不提 `ColumnBar`（唯一出处是审计 J1-9/P3） |
+| A1-d | 拖拽手柄宽 `5` | `components/ColumnResizer.tsx` | **1 → 1** | ⛔ **无目标**（既有共享常数，登记不碰） | 无 —— §6.2 无此数目标；T8 只是把手柄带进大纲列，**未写任何新字面量** |
+
+> **合计：已吸收 8 · 有目标未吸收 1 · 无目标 2 = 11 个语义位点**。**「7」是一个从未被定义的数**（A1），**本节不压回 7**。
+> 仪器：**剥注释**（块注释 + 整行 `//`；行尾 `//` 与字符串字面量**不剥** —— T10-M-1 的已知边界）；**阳性对照来自不可变提交 `a7bd1899` 的 git 对象**（不是同一个已改好的文件）；阴性对照 = 无意义模式 0 命中。
+
+### 四、A1–A7 七处裁决的实际结果（**T14-b 更正：计划 Step 8 写「A1–A5」，实为七处**）
+
+| 裁决 | 内容 | 实际做法 | 证据 |
+|---|---|---|---|
+| **A1** | 「7 处魔数」的点名口径 —— **不迁就数字，定义判据** | 判据取「能否被单一真源吸收」；M1–M7 **全做**；`180` 一并吸收；`34`/`26`/`5` 登记 | 本节 §三 + 规格 §10 批 3 行 |
+| **A2** | ≥1180 档文字形态 = **线性图标 + 纯文字（emoji 出局）** | `TopBar` 渲染 **2 元素**；9 个目的地全部有自绘图标；emoji **计数 9 → 0** | `TopBar.test.tsx`（渲染文案 + 注册表双口径 emoji 负判据，带阳性对照）+ 变异体 m4（塞 emoji ⇒ 3 红） |
+| **A3** | AI toast 归宿 —— **移入 fixed 覆盖层**，与 T11 合并为一次提交，**只能自足实现**，**验收必须含 toast 可见态** | toast 落在 `MainShell` 最外层（`</main>` 之后、**nav 之外**），`position: fixed` + `calc(var(--ed-nav-h) + 8px)` + `zIndex("toast")`；**T7 与 T11 未产生「两个常驻状态同时消失」的中间提交**；48 行读数**含 toast 三态** | `TopBar.test.tsx` 四条声明 + 两条负判据；探针 `TOAST_PRESENT`/`TOAST_PRESENT_TEXTUAL`/`TOAST_IS_NAV_CHILD`/`TOAST_COVER`/`ROOT_SCROLL_W` 全接进 `problems` |
+| **A4** | 1024 下 `--nav-h` 的值 —— **只搬变量、值保持 56，并要求 T7 实测内容高** | 只把 `56` 搬进 token 生成器；**T7 未记录内容高 ⇒ T14 补测**：三档 **顶栏高 56 / clientH 55 / 最高子项 38 / 纵向溢出 false（余 17 px）** | 本节 §一 的 A4 行（真实产物探针） |
+| **A5** | 列契约执行器归属 —— **(a) 注册表委派给 `useColumnLayout`**，不取代 | 注册表持**规格**、hook 仍**执行**（`useColumnLayout.ts` **零改动**）；选项 (b) 登记为日后合并方向，**且不得声称能力对等** | `columnRegistry.ts` + 7 处旧调用点/4 处新接入全部 `columnSpec(<key>)`；规格 §10 `↳ 批 3 的收口` 行 |
+| **A6** | T7 撞上「计划 Files 删列 vs 既有测试读列」⇒ **批准删 `legacyLabel` + 同提交机械改写冻结镜像** | **删列**（计划本意）；`navRegistry.test.ts` 同提交改写（`FROZEN_TOP_BAR` 换纯文字）；**追加两条牙齿**：可见文字 `textContent` 逐字 === `e.label`、**A2 的 emoji 负判据**；**4 个变异体**全红 | `fd83abb4` 的 6 路径；变异体 m3（可见文字写 key ⇒ 红）、m4（emoji ⇒ 3 红） |
+| **A7** | A′ 顶栏在 ≥1180 放不下、**在默认窗宽 1280 上回归** ⇒ **打回 T7 走 R2** | 走 **R2**：Tab padding `8/16 → 8/12`、tabs gap `4→2`、right gap `8→4`、**右簇 `<1400` 只显示图标 + `title`**（**独立修饰类**，不与域 Tab 共用隐藏规则）；**R1 未启用** | 三档 × 两态 × 徽标两变体 **12 行全 OK**（改前 9/12 溢出）；`BREAKPOINTS.navActionsFull = 1400`；`TopBar.test.tsx` ③ 静态判据 + 变异体 m5（两类混用类名 ⇒ 红） |
+
+### 五、W 表逐条落地清单（§七 W1–W31；**未复核的三条已先复核再回写**）
+
+| # | 落到哪里 |
+|---|---|
+| W1 | **规格 §10 批 3 行**（验收词改为判据 + 实测计数）+ **本计划 Goal 注①** + 本节 §三 |
+| W2 | **规格 §10 批 3 行**（加限定词「常态」）+ 本计划 **Goal 注②** |
+| W3 | 本计划 **Task 7 注**（用户可见改名 + 三处配色变化登记）+ **v0.22 诚实代价** + follow-up #12 |
+| W4 | 本计划 **Task 7 注 / A4** + 本节 §四 A4 行（**T14 补测**） |
+| W5 | 本计划 **Task 3 注**（措辞按评审修正版） |
+| W6 | 本计划 **Task 6 注** + 本节 §二 eager 三件套 |
+| W7 | 本计划 **Task 4 注**（补**四步核对程序**） |
+| W8 | 本计划 **Task 4 注**（滚动条互斥，提交 `4c89c687` 在库） |
+| W9 | 本计划 **Goal 注③**（两处计数错误） |
+| W10 | **规格 §2 回写块**（D1/D2/D4/D5/D7）+ **§6.1 / §6.2 回写块**（D3/D6） |
+| W11 | 本计划 **Task 7 注**（A6 的两条追加牙齿 + 4 变异体） |
+| W12 | **`$env:TEMP` profile 纪律已写进** `.superpowers/sdd/DISPATCH-TEMPLATE.md` §二（**该文件 gitignored，不入库**）+ T14 **实删 26 个 profile 目录 / 6,715 文件 / 322.2 MB**（见 follow-up #13） |
+| W13 | 已在 `DISPATCH-TEMPLATE.md` §二（本轮复核：**在位**） |
+| W14 | **已复核并修正**：`app/README.md` 由脚手架标题改为本仓说明（**未复核项先复核再回写**的兑现）—— 该文件**进了本次提交路径** |
+| W15 | **已复核并统一**：`92.80` 是 **T3 引入的漂移值**（T3 报告 §6-D2：+11 B gzip），**不是**批 3 基线；**批 3 起点以 `check-bundle-budget.mjs` 实测的批 2 收口值 92.79 kB 为准**，终值 97.16 kB。本节 §二 首屏账 |
+| W16 | 本节 **§六 未验证** 第 1 条（真机/WebView2 跳过；**全文无「已在真机确认」类表述**） |
+| W17 | 本计划 **Task 8 注** + 规格 §10 `↳ 批 3 的收口` 行（登记，**不声称能力对等**） |
+| W18 | **规格 §6.1 回写块 ②** + 本计划 **Task 7 注**（R2 落点） |
+| W19 | 本计划 **Task 7 注**（第 3 处判据缺陷 + 「判据没覆盖的地方绿灯不是证据」） |
+| W20 | **规格 §6.1 回写块 ①**（两个估数各自的前提与实测） |
+| W21 | **规格 §6.2 回写块 ①**（7 字段）+ 本计划 Task 8 注 |
+| W22 | **规格 §6.2 回写块 ③** + 本计划 **Task 8 注** |
+| W23 | 本计划 **Task 1 注** + 本节 §一 验收②（两把仪器都跑、真 `TopBar` 顺序） |
+| W24 | 本计划 **Task 1 注**（判据命令一律给可粘贴脚本）+ **Task 9 注（W29 同源）** |
+| W25 | **`docs/versions/v0.22.md` 的「批 3 · 壳层落地」节**（durable §10 审查记录）+ 本计划 Task 4 注 |
+| W26 | 本计划 **Task 6 注**（`PAGE_COMPONENTS` + `navComponent` 取代 `Component`） |
+| W27 | 本计划 **Global Constraints 注** + follow-up #1（归批 8） |
+| W28 | 本计划 **Global Constraints 注** + **Task 9 注** |
+| W29 | 本计划 **Task 1 注 / Task 9 注**（PS 5.1 单行 `SyntaxError`） |
+| W30 | 本计划 **Task 11 注** |
+| W31 | 本计划 **Task 7 / Task 11 注** + 本节 §六 未验证 第 3 条 |
+
+> **另落两处计划没登记、T14 复核出来的**：**W3 附带**「顶栏三处配色确实变了」（评审点名 T7 未登记）· **ADR-034 未写**（规格 §14 的「顺延至批 3」未兑现，已就地登记并给出建议归属）。
+
+### 六、未验证（诚实单列，**不许含糊**）
+
+1. **真机 / Tauri WebView2**：`tauri.conf.json` 的 1280×800 与最小 1024×640 在**真实窗口**里的表现**一次未跑**；顶栏像素证据来自 **headless Edge（Chromium）**，**不是 WebView2**（字体回退与窗口装饰可能不同）。**用户已裁决本批跳过真机冒烟 ⇒ 不得出现「已在真机确认」类表述**（登记批 8）。
+2. **`file://` / `http://127.0.0.1` 下无 `window.__TAURI__`** ⇒ 各页 IPC 全失败、渲染成错误态 ⇒ 真实产物探针的**判据①（整页无横向滚动）只是参考项**；**判据②③（顶栏自身，零 IPC）才是本验收的判据**。
+3. **`Ctrl+K` 真开面板没有运行期判据**（仓内无测试 import `App`；App 接线只有源码文本判据；真机跳过）· **`metaKey`（⌘K）未实现**（Windows 目标 + 文案已定，属明示取舍）。
+4. **`ClassroomPage` 零自动化覆盖**（T10 自陈）⇒ `ClassroomRightPane` 的「整栏 vs ≤860」在**采集态**的差异只有源码级证据；像素归探针（已做），真机归批 8。
+5. **`SettingsPage` 的 15 个重面板无渲染级测试**（T9 自陈）。
+6. **`App.tsx`（574 行）无渲染级测试面**（T13 自陈）⇒ 四处错误边界接线的证据是**源码结构尺 + 叶级行为复刻**，不是 `App` 真渲染。
+7. **两个测试文件超计划预算**（D-1，控制方已裁定接受并回写预算）：`ShellFallback.test.tsx` **163**（≤120）· `ClassroomRightPane.test.tsx` **138**（≤120）；同类另有 `TopBar.css` **142**、`columnConsumption.test.ts` **126**。**四者均 ≤300 硬限、无需豁免登记、`--write` 零变化**。
+8. **`KnowledgeGraphView.test.tsx` 的 flake 仍在**（既有，非本批引入；两种读数已记）。
+9. **首屏可达的绝对数不可复现**（38/39/49/47/67 五种读数）⇒ 本节只用 **Δ + 机理**三件套。
+10. **`bundle-eager-graph.mjs` 的 `import type` 缺陷未修**（修它会改历史读数 ⇒ 必须新旧口径并列）⇒ 登记 follow-up #2。
+11. **`ChatPage.tsx` 599/600（余 1 行）· `NotesPage.tsx` 300/300（余 0）** ⇒ 下一个动它们的任务**必须先拆件**。
+12. **本批的七处控制方裁决（A1–A7）散在 gitignored 的批次台账里**，`ADR-034` 未写 ⇒ 决策缺 durable 载体（见 §七 #17）。
+
+### 七、follow-ups（逐条具名归属）
+
+| # | 项 | 归属 |
+|---|---|---|
+| 1 | **W27**：`.husky/pre-commit` 跑**全树** `line-limits --full`、`--write` 按**工作树**刷新 ⇒ 并行提交**必然**产生「提交树不自洽」窗口（批 3 实证 **3 次**）⇒ 建议加 **`--staged`** 模式（或规定登记表刷新只由批次最后一个提交做） | **批 8** |
+| 2 | **`bundle-eager-graph.mjs` 把 `import type` 计成静态边**（11 个假阳性文件）⇒ 修工具；**改它会改历史读数 ⇒ 必须新旧口径并列** | **批 4 或独立小单元** |
+| 3 | **`T5` 无变异体证明**（阈值正确性已由评审独立复核 ⇒ 不返工） | **批 4 计划模板强制「新判据必带变异体」** |
+| 4 | `docs/tech-debt/`（1555 行审查文档）**仍未跟踪**（`docs-check` 已用「故意不写链接」规避断链） | **待用户裁决** |
+| 5 | **`KnowledgeGraphView.test.tsx` 的既有负载 flake** | **批 8 或测试治理单元** |
+| 6 | `app/src/shell/columnRegistry.ts:44` 的注释「（**T10 消费**）」**已过时**（T10 按 T10-b 裁定**没有**消费 `classroom-right`，它用的是 `settings-main` 的 `.default`）⇒ **标签不许说谎** | **微单元**（T14 **不改生产代码**） |
+| 7 | `app/src/shell/columnConsumption.test.ts:43-55` 的注释**不实**（自称「旧字面量只在一个数组里写一次，① 与 ② 共用」，实则 ①/② 体内内联重复三条正则） | **微单元** |
+| 8 | **真机 1024×640 / WebView2 验收**（人工） | **批 8** |
+| 9 | **命令面板迁移到 `Modal` 原语**（本批自带遮罩/Esc/焦点实现）· **`ShellFallback` → `Loading`/`StatusLine`** · **AI toast → `Toast`** · **`App.tsx` 对话面板裸 `zIndex: 900`** | **批 4** |
+| 10 | **`focus*` 状态机的收敛**（本批只做入口收敛，10 个字段一个未删） | **批 5** |
+| 11 | **列折叠的连续运动（Flip）** · **相变两态（§6.3）** · **`pinnable` 定值** | **批 6** |
+| 12 | **产品口径**：「课堂助手 → 课堂」是**用户可见改名**（需确认/登记）；顶栏三处配色变化（`#EAE7E0` / `#3A3A36` / `#1F5FBF`）需一并登记 | **产品文档 pass（批 8）** |
+| 13 | **Edge profile 清理**：T14 已删 **26 个**（`tmp/edge-probe/profile-*` 25 个 + `tmp/t7/gen/profile-*` 1 个）= **6,715 文件 / 322.2 MB**；**另有 8 个同类目录在 `tmp/t4/profile-layout-*`（4,314 文件 / 241.8 MB）不在派发书点名的两类里，按要求未动** ⇒ 建议一并清理 | **控制方点名后清理** |
+| 14 | **`ecc36a8d` 的 subject = 53 字符**（超 `≤50` 约定，`commitlint` 沿用 100 未拦）⇒ 建议 `header-max-length: [2,'always',50]` | **批 8** |
+| 15 | 规格 §6.2「本次改动」列里的 **`会话·详情头改粘性`** 与 **`笔记·工具栏三层合并为单行`** 批 3 **未做** | **需裁决（批 4/批 5）** |
+| 16 | **3 套 markdown 渲染器归一**（批 4 裁决 B8：不并入批 4） | **批 5 或批 7** |
+| 17 | **`ADR-034`（壳层）未写** —— 规格 §14 的「顺延至批 3」未兑现；A1–A7 七处裁决只有 gitignored 台账 | **批 4 开工前 或 批 8（需裁决）** |
+| 18 | **`scripts/**/*.mjs` 与 `app/vite.config.ts` 不在 `line-limits` 扫描域** · `check-bundle-budget.mjs` 未接 CI/pre-commit | **批 8** |
+| 19 | **汇总行 / 集合两种 clippy 口径**已写进本节 §二（判据 = 集合 20） | 承批 2，已结清 |
+
+### 八、批 4 的迁移点（本节承诺的清单）
+
+`app/src/shell/CommandPalette.tsx`（遮罩 / Esc / 焦点 → `Modal`）· `app/src/shell/ShellFallback.tsx`（→ `Loading` / `StatusLine`）· `App.tsx` 的 **AI toast**（→ `Toast` + 位置槽）· `App.tsx` 对话面板的**裸 `zIndex: 900`**（→ `panel` 档）· `KnowledgeDetailPanel` 的 **34px 折叠窄条**（与统一列头 / `ColumnBar` 收敛一起做）· `ColumnBar` 的 `26` 与 `ColumnResizer` 的 `5`（同批收进注册表）· `ChatPage.tsx`（**599/600，先拆件再迁移**）· `NotesPage.tsx`（**300/300，先拆件**）。
+
+### 九、与计划的偏差（本节自陈）
+
+1. **第一节的两处命令未能按计划逐字执行**：Step 2 的 `file://` 探针路径**走不通**（实测 `#root` = 0）⇒ 改用本地静态服务器（`--mode http`）；失败读数保留复现。**这是本批第 7 处判据缺陷**（见 v0.22 的批 3 节）。
+2. **提交数 22 ≠ 计划的「12–15」**（**不为落进区间而合并提交**；构成见 v0.22 的提交清单）。
+3. **两把仪器都跑**（计划只要求一把）⇒ 合成页探针（能切 toast 三态）+ 真实产物探针（真 CSS / 真 App 外壳）。
+4. **加跑 1440 档**（计划只有 3 档）⇒ 覆盖 `navActionsFull = 1400` 的第二级阈值。
+5. **A4 的内容高由 T14 补测**（计划把它派给 T7，T7 未记录）。
+6. **`--write` 零变化** ⇒ 豁免表**不在**本次提交路径里（与计划 Step 9 的条件分支一致）。
+7. **改了两个计划外的文件**：`app/README.md`（W14 的兑现）· `.superpowers/sdd/DISPATCH-TEMPLATE.md`（W12 的兑现，**gitignored、不入库**）。
