@@ -37,8 +37,15 @@ function bodyOf(css: string, sel: string): string {
   return at < 0 ? "" : css.slice(at, css.indexOf("}", at));
 }
 
-/** W8b（R11.6 追加段）的扫描口径：一段 CSS 里的 `transition` 声明（`;` 切声明、锚属性名） */
-const transitionDecls = (css: string): string[] => css.split(";").filter((d) => /(?:^|[;\s])transition\s*:/.test(d));
+/**
+ * W8b（R11.6 追加段）的扫描口径：一段 CSS 里的 `transition` 声明（`;` 切声明、锚属性名）。
+ * 🔴 T14c 加固（Minor M-8 + R1.2，**只加强**）：长写（`-duration` / `-timing-function` / `-delay`）与
+ *   厂商前缀 / 大写属性名此前都逃出锚点 ⇒ 裸 `transition-duration: 300ms` 曾是**绿**（漏判）。
+ *   ⚠️ 有意**不纳入** `-property`：它不带时长/缓动值，纳入会让合法的 `transition-property: opacity`
+ *   假红，而 R36④ 的裁决是「判据错杀比漏判更坏」。
+ */
+const transitionDecls = (css: string): string[] =>
+  css.split(";").filter((d) => /(?:^|[;\s])(?:-(?:webkit|moz|ms|o)-)?transition(?:-duration|-timing-function|-delay)?\s*:/i.test(d));
 /** 其中**没走 token** 的那些（空数组 = 都走 token） */
 const untokenedTransitions = (css: string): string[] => transitionDecls(css).filter((d) => !/var\(--ed-(?:dur|ease)/.test(d));
 
@@ -247,5 +254,10 @@ describe("W8 响应层接缝（§8.6.1 第 3 条）：`--ed-dur-micro` 120ms + �
       "transition: background 120ms",
     ]);
     expect(untokenedTransitions("transition: background var(--ed-dur-micro, 120ms);"), "token 正例被判成犯规 ⇒ 上面会假红").toEqual([]);
+    // T14c 加固的自证（M-8）：裸**长写** / 厂商前缀 / 大写都必须恰 1 条 —— 旧锚点只认 shorthand，三者都静默通过
+    for (const bad of ["transition-duration: 300ms;", "-webkit-transition: background 120ms;", "TRANSITION: background 120ms;"]) {
+      expect(untokenedTransitions(bad), `长写 / 前缀 / 大写写法漏判：${bad}`).toEqual([bad.slice(0, -1)]);
+    }
+    expect(untokenedTransitions("transition-duration: var(--ed-dur-micro, 120ms);"), "合法 token 长写被判成犯规 ⇒ 会假红").toEqual([]);
   });
 });

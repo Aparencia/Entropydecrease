@@ -4,7 +4,8 @@
  * Why 需要这个文件（现网 App.tsx 的顶栏是内联 style）：两档溢出是**媒体查询**的活，内联 style
  *   表达不了。动效（墨渍 hover / 按下微陷 / 焦点环落纸）批 3 时**属批 6**；批 6 T14 起按 R1.2 的
  *   到期改判**解禁为条件式** —— 本文件**可以**写 transition / animation，但三个条件必须同时成立：
- *   ① 时长与缓动只许 `var(--ed-dur-*)` / `var(--ed-ease*)`（裸 ms/s 与裸曲线一律红）；
+ *   ① 时长与缓动只许 `var(--ed-dur-*)` / `var(--ed-ease*)`（裸 ms/s、裸曲线与裸缓动关键字
+ *      `linear`/`ease`/`steps()` 一律红；属性名认**厂商前缀 / 大写**写法 —— T14c 按 R1.2 补齐）；
  *   ② 落点必须落在 `motion.css` 的**元素级回执**覆盖面内（顶栏交互元素全是裸 `<button>` ⇒ 由
  *      `button:not(.ed-btn)` 承担）⇒ 本文件**不自写**第二条 = 不造第二个真源（R1.1）；
  *   ③ **仍不得**出现 `@keyframes`（§8.2 桶边界：keyframes 只留 Loading/Skeleton/Probe），也**不得**

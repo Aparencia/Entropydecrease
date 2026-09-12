@@ -77,12 +77,15 @@ const PICTO = /\p{Extended_Pictographic}/u;
  * `withoutTokenVars` 必须先剥掉 `var(--ed-x, <同值兜底>)` 整段：本仓的 token 习惯写法**带同值兜底**
  * （`--ed-dur-micro, 120ms`）⇒ 不剥的话「不得写裸 ms/s」会把合法 token 用法判成犯规（**假红**，
  * 逼实施者绕开守卫 —— 计划 Task 14 的 G1 新断言原文就有这个洞，T14 实施时实测并修正）。
+ * 🔴 R1.2（改判不得弱于原判据）：属性名还认**厂商前缀 / 大写**（同 `motion-coverage.test.ts:91` 的孪生守卫）—— 旧 G1 是子串匹配，`-webkit-transition:` 在它下面是**红**，新口径漏掉前缀支就是强度回退（T14c 专属变异体实测）。
  */
 const motionDecls = (css: string): string[] =>
-  css.split(";").filter((d) => /(?:^|[;\s])(?:transition|animation)(?:-duration|-name)?\s*:/.test(d));
+  css.split(";").filter((d) => /(?:^|[;\s])(?:-(?:webkit|moz|ms|o)-)?(?:transition|animation)(?:-duration|-name)?\s*:/i.test(d));
 const withoutTokenVars = (decl: string): string => decl.replace(/var\(--ed-[a-z0-9-]+,[^)]*\)/g, "");
 const rawTimes = (decls: string[]): string[] => decls.filter((d) => /\d+(?:\.\d+)?\s*(?:ms|s)\b/.test(withoutTokenVars(d)));
-const rawEases = (decls: string[]): string[] => decls.filter((d) => /cubic-bezier|ease-(?:in|out|in-out)\b/.test(withoutTokenVars(d)));
+/** 裸缓动的第三类：**裸关键字** `linear`/`ease`/`steps()`（Important ②）。边界用 `(?<![\w-])…(?![\w-])` 而非 `\b`：后者会把无兜底的合法 token `var(--ed-ease)` 与 `linear-gradient` 误判成犯规。 */
+const rawEases = (decls: string[]): string[] =>
+  decls.filter((d) => /cubic-bezier|ease-(?:in|out|in-out)\b|(?<![\w-])(?:linear|ease|steps)(?![\w-])/i.test(withoutTokenVars(d)));
 
 afterEach(cleanup);
 
@@ -179,6 +182,12 @@ describe("TopBar（规格 §6.1）", () => {
     const good = motionDecls(".a { transition: color var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)); }");
     expect([rawTimes(bad), rawEases(bad)], "扫描器抓不到裸值动效 ⇒ 上面两条是空真").toEqual([bad, bad]);
     expect([rawTimes(good), rawEases(good)], "token + 同值兜底的正例被判成犯规 ⇒ 上面两条会假红").toEqual([[], []]);
+    // 前缀 / 大写属性名（R1.2）：旧口径的子串匹配挡得住，新口径漏掉前缀支 = 强度回退 ⇒ 两者都必须判红
+    const pre = motionDecls(".a { -webkit-transition: color 120ms ease-out; }"), up = motionDecls(".a { ANIMATION: ed-x 1s infinite; }");
+    expect([pre.length, up.length, rawTimes([pre[0]]), rawEases([pre[0]]), rawTimes([up[0]])], "前缀 / 大写属性名逃出扫描器，或裸值未被判红").toEqual([1, 1, [pre[0]], [pre[0]], [up[0]]]);
+    // 裸缓动关键字（Important ②）：三者同样是绕过 token 的写法；末项 = 反向对照（无兜底的合法 token 必须绿）
+    const bare = [".a { transition: opacity linear 200ms; }", ".a { transition: opacity ease 200ms; }", ".a { transition: opacity steps(4); }"].map((s) => motionDecls(s)[0]);
+    expect([bare.map((d) => rawEases([d])), rawEases(motionDecls(".a { transition: color var(--ed-dur-micro) var(--ed-ease); }"))], "裸关键字漏判 / 合法无兜底 token 被误判").toEqual([bare.map((d) => [d]), []]);
     // ③a 覆盖面（类序**逐序数组相等**：带 `ed-btn` 会掉出那条回执，少一个 = 覆盖面缩水）
     render(<TopBar {...base} />);
     const classes = [...screen.getByTestId("topbar").querySelectorAll("button")].map((b) => b.className);

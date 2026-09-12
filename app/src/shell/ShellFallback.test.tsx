@@ -37,9 +37,15 @@ const APP = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "Ap
 const MOTION_CSS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "ui", "primitives", "motion.css"), "utf8")
   .replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "");
 const MOTION_REDUCED = MOTION_CSS.slice(MOTION_CSS.indexOf("@media (prefers-reduced-motion"));
-/** G2 改判的扫描口径：一条行内 `style` 里**没走 token** 的 `transition|animation` 声明（空数组 = 都走 token） */
+/** G2 改判的扫描口径（T14c 加固，Minor M-7）：旧口径是**包含式** —— 一条混写（`opacity var(--ed-dur-toast-in, 180ms) 5s`）含任一 token 即放行，与 G1 的排除式强度不等。新口径 = 「有 token **且** 剥掉 token 后无裸值」；`!hasMotionToken` 那一支保留旧口径的强度（无 token 的声明照旧判红）。 */
+const hasMotionToken = (d: string): boolean => /var\(--ed-(?:dur|ease)/.test(d);
+/** 剥掉 `var(--ed-x, <同值兜底>)` 后剩下的**裸**时长/缓动（含裸关键字 `linear`/`ease`/`steps()`；边界用 `(?<![\w-])…(?![\w-])` 以免误判无兜底的 `var(--ed-ease)`） */
+const rawTiming = (d: string): boolean => {
+  const rest = d.replace(/var\(--ed-[a-z0-9-]+,[^)]*\)/g, "");
+  return /\d+(?:\.\d+)?\s*(?:ms|s)\b|cubic-bezier|ease-(?:in|out|in-out)\b|(?<![\w-])(?:linear|ease|steps)(?![\w-])/i.test(rest);
+};
 const inlineMotionViolations = (style: string): string[] =>
-  style.split(";").filter((d) => /(?:transition|animation)/.test(d) && !/var\(--ed-(?:dur|ease)/.test(d));
+  style.split(";").filter((d) => /(?:transition|animation)/.test(d) && (!hasMotionToken(d) || rawTiming(d)));
 /** 模拟懒 chunk 加载失败（渲染期抛错 ⇒ React 落到最近的上层边界）；抛错时 React 仍会 console.error ⇒ 抑制后还原 */
 function Boom(): never { throw new Error("模拟懒 chunk 加载失败"); }
 /**
@@ -88,6 +94,13 @@ describe("首访加载态 ShellFallback（批 2 未做 #6）", () => {
       "transition: opacity 150ms",
     ]);
     expect(inlineMotionViolations("transition: opacity var(--ed-dur-toast-in, 180ms)"), "token 正例被判成犯规 ⇒ 上面会假红").toEqual([]);
+    // T14c 加固的自证（M-7）：**混写**（含 token + 裸值）必须恰 1 条 —— 旧包含式口径在这里会放行
+    expect(inlineMotionViolations("transition: opacity var(--ed-dur-toast-in, 180ms) 5s"), "混写被包含式口径放行 ⇒ M-7 的洞还在").toEqual([
+      "transition: opacity var(--ed-dur-toast-in, 180ms) 5s",
+    ]);
+    expect(inlineMotionViolations("transition: opacity var(--ed-dur-toast-in, 180ms) linear"), "token 后的裸缓动关键字未被剥离式判据抓到").toEqual([
+      "transition: opacity var(--ed-dur-toast-in, 180ms) linear",
+    ]);
     // ② 无条件的那一半：动效载体是类，且基类在唯一的 reduced-motion 名单里
     const bases = [...new Set((el.className || "").split(/\s+/).filter(Boolean).map((c) => c.split("--")[0]))];
     expect(bases.length, "加载态根元素一个类都没有 ⇒ 下面的名单判据是空真").toBeGreaterThan(0);
