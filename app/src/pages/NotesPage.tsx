@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note } from "../types";
-import { resolveNoteColor } from "../utils/colorPalette";
+import { buildNoteColorMap, visibleNotesOf } from "../utils/colorPalette";
 // 批 8（REQ-317）：模型卡对话框槽（拆件）与选区行动类编排（hook 收敛）
 import { useNoteSelectionActions } from "../hooks/useNoteSelectionActions";
 import NotesGroupsColumn from "../components/notes/NotesGroupsColumn";
@@ -173,24 +173,9 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
     setEditing(false);
   };
 
-  // v0.11.0：组过滤在客户端生效（列表已全量加载；组切换零请求）
-  // v0.20.3（REQ-301）+2026-09-06 审查（TD-E）：SE 封存默认不可见——#树洞
-  // tag 精确匹配（防“树洞XX”子串误滤）；除显式显隐开关外任何视图态均排除
-  const visibleNotes = useMemo(() => {
-    const filtered = groupFilter === null ? list.notes : list.notes.filter((n) => n.group_id === groupFilter);
-    return filterSealed(filtered);
-  }, [list.notes, groupFilter, filterSealed]);
-
-  // v0.14 B：组映射（noteId → 组，resolveNoteColor 组继承档用）
-  const groupMap = useMemo(() => new Map(list.groups.map((g) => [g.id, g])), [list.groups]);
-  // v0.14 B：笔记色板 id 映射（四档优先级解析——笔记显式 > 组继承 > 标签 > 默认灰）
-  const noteColors = useMemo(() => {
-    const m: Record<number, string | null> = {};
-    for (const n of visibleNotes) {
-      m[n.id] = resolveNoteColor(n, n.group_id != null ? groupMap.get(n.group_id) : null, list.tagColors);
-    }
-    return m;
-  }, [visibleNotes, groupMap, list.tagColors]);
+  // 批 5 T4：可见笔记（组过滤 + SE 封存）与色板映射的派生搬进 utils/colorPalette
+  const visibleNotes = useMemo(() => visibleNotesOf(list.notes, groupFilter, filterSealed), [list.notes, groupFilter, filterSealed]);
+  const noteColors = useMemo(() => buildNoteColorMap(visibleNotes, list.groups, list.tagColors), [visibleNotes, list.groups, list.tagColors]);
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - var(--ed-nav-h))", minHeight: 0 }}>

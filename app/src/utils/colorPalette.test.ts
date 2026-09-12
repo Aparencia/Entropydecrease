@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   COLOR_IDS,
   COLOR_PALETTE,
+  buildNoteColorMap,
   contrastRatio,
   isColorId,
   isThemeSafe,
@@ -15,7 +16,9 @@ import {
   paletteHex,
   parseNoteProperties,
   resolveNoteColor,
+  visibleNotesOf,
 } from "./colorPalette";
+import type { Note, NoteGroup } from "../types";
 
 describe("colorPalette 对比度基础", () => {
   it("黑白对比度为 21:1", () => {
@@ -116,5 +119,45 @@ describe("resolveNoteColor 四档优先级", () => {
   it("未知色板 id 仍透传（由 paletteHex 兜底）", () => {
     const note = { properties: '{"color":"neon"}' };
     expect(resolveNoteColor(note, null, {})).toBe("neon");
+  });
+});
+
+// ── 批 5 T4：自 NotesPage 搬入的两个派生（判据随搬入新增；既有用例未改）──
+const mkNote = (id: number, group_id: number | null, tags = "[]", properties: string | null = null): Note =>
+  ({ id, title: `n${id}`, content: "", source: "manual", tags, properties, pin: 0, group_id, created_at: 1, updated_at: 2 });
+
+const mkGroup = (id: number, color: string | null): NoteGroup =>
+  ({ id, name: `g${id}`, terrain: "container", kind: "topic", domainTag: null, source: "manual",
+    seriesKey: null, routeReason: null, routeOverridden: 0, color, noteCount: 1, createdAt: 1, updatedAt: 2 });
+
+describe("visibleNotesOf 组过滤 + 封存过滤（批 5 T4 搬入）", () => {
+  it("① groupFilter 生效：只留该组；null = 全量（含未归组）", () => {
+    const notes = [mkNote(1, 7), mkNote(2, 8), mkNote(3, null)];
+    const keep = (n: Note[]) => n;
+    expect(visibleNotesOf(notes, 7, keep).map((n) => n.id)).toEqual([1]);
+    expect(visibleNotesOf(notes, null, keep).map((n) => n.id)).toEqual([1, 2, 3]);
+  });
+
+  it("② filterSealed 生效：恒真桩原样透传（同一引用，不复制）/ 恒假桩滤空", () => {
+    const notes = [mkNote(1, 7)];
+    const keep = (n: Note[]) => n;
+    const drop = (): Note[] => [];
+    expect(visibleNotesOf(notes, null, keep)).toBe(notes);
+    expect(visibleNotesOf(notes, null, drop)).toEqual([]);
+  });
+});
+
+describe("buildNoteColorMap 色板优先级（批 5 T4 搬入）", () => {
+  it("③ 笔记显式 > 组继承 > 标签 > 默认灰；未归组/组不存在都不查组表", () => {
+    const groups = [mkGroup(7, "green")];
+    const tagColors = { 编程: "blue" };
+    const notes = [
+      mkNote(1, 7, '["编程"]', '{"color":"purple"}'), // 显式优先
+      mkNote(2, 7, '["编程"]'),                        // 组继承次之
+      mkNote(3, null, '["编程"]'),                     // 未归组 → 标签档
+      mkNote(4, 9, "[]"),                              // 组不存在 → 默认灰
+      mkNote(5, null, "[]"),                           // 全无量 → 默认灰
+    ];
+    expect(buildNoteColorMap(notes, groups, tagColors)).toEqual({ 1: "purple", 2: "green", 3: "blue", 4: null, 5: null });
   });
 });
