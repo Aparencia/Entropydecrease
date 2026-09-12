@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
-import { Button } from "../ui/primitives";
+import { Button, Loading, Skeleton } from "../ui/primitives";
 
 /** WebPage 响应结构（db_web::WebPage 为 serde camelCase——字段须 camel 读取） */
 interface WebPageView {
@@ -75,7 +75,18 @@ export default function WebArticleView({ sessionId, onToNote, onRemove }: Props)
   }, [sessionId]);
 
   if (err) return <p style={{ fontSize: 12, color: "#dc2626" }}>{err}</p>;
-  if (!page) return <p style={{ fontSize: 12, color: "#9ca3af" }}>文章加载中…</p>;
+  if (!page) {
+    // 批 4 T14：文章结构已知（来源行 + 段落块）⇒ 骨架占位；可读语义由 `Loading` 给
+    // （骨架整组 `aria-hidden`：只留骨架等于把"在等什么"从无障碍树里删掉）。
+    return (
+      <div>
+        <Loading label="文章加载中…" />
+        <div style={{ marginTop: 8 }}>
+          <Skeleton lines={4} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

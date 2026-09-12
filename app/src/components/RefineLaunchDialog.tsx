@@ -14,7 +14,7 @@
  *              的 `kind` 分支）⇒ `open` 恒为 `true`，本组件每次由父层条件挂载。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, Modal } from "../ui/primitives";
+import { Button, Loading, Modal, Skeleton } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiSettingsView, BalanceView, RefineEstimateView, RefineStrategyMeta } from "../types";
 import {
@@ -286,7 +286,13 @@ export default function RefineLaunchDialog({
           </label>
         </div>
       )}
-      {!est && <div style={{ marginTop: 8, fontSize: 11, color: "#9ca3af" }}>成本预估加载中…（无预估则无法启动，请重试）</div>}
+      {!est && (
+        <div style={{ marginTop: 8 }}>
+          {/* 批 4 T14：文案含可操作提示（无预估则无法启动）⇒ 逐字进 label；形状（金额 + 上限）已知 ⇒ 骨架 */}
+          <Loading label="成本预估加载中…（无预估则无法启动，请重试）" />
+          <Skeleton lines={2} />
+        </div>
+      )}
       {msg && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 6 }}>{msg}</div>}
     </Modal>
   );

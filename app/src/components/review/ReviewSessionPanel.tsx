@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Flashcard } from "../../types/notes";
 import PromoteCardButton from "../PromoteCardButton";
+import { Loading, Skeleton } from "../../ui/primitives";
 
 /** 四档评分按钮（文案=回忆质量自评） */
 const RATINGS: { value: string; label: string; color: string }[] = [
@@ -118,7 +119,15 @@ export default function ReviewSessionPanel({ groupId, groupName, active = true, 
 
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 24 }}>
         <div style={{ maxWidth: 640, margin: "0 auto" }}>
-          {!loaded && <p style={{ fontSize: 13, color: "#9ca3af" }}>加载中…</p>}
+          {!loaded && (
+            <div>
+              {/* 批 4 T14：可读语义（role="status" + 逐字文案）由 `Loading` 给，骨架只承载形状 */}
+              <Loading />
+              <div style={{ marginTop: 10 }}>
+                <Skeleton lines={3} />
+              </div>
+            </div>
+          )}
 
           {finished && (
             <div data-testid="session-finished" style={{ textAlign: "center", padding: "48px 0" }}>

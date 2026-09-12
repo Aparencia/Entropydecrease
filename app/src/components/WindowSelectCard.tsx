@@ -8,6 +8,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { zIndex } from "../ui/zIndex";
+import { Button } from "../ui/primitives";
 import type { WindowInfo } from "../types";
 
 interface Props {
@@ -177,9 +178,11 @@ export function WindowSelectCard({ windows, selected, onSelect, onRefresh, loadi
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 4px 6px" }}>
             <span style={{ fontSize: 11, color: "#6b7280" }}>推荐窗口</span>
-                          <button onClick={() => onRefresh()} disabled={loading} style={{ fontSize: 11, color: "#0d9488", cursor: "pointer" }}>
+            {/* 批 4 T14：原生按钮内的忙碌文案 ⇒ 按加载态三角的第 3 档落 `Button busy`
+                （不是 `Loading`）：`busy` 保留焦点与 Tab 序、由原语给探针与 aria-busy。 */}
+            <Button variant="ghost" size="sm" busy={loading} onClick={() => onRefresh()}>
               {loading ? "加载中…" : "⟳ 刷新"}
-            </button>
+            </Button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 260, overflowY: "auto" }}>
             {windows.length === 0 && !loading && (

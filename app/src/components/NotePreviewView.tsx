@@ -15,7 +15,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import type { Note, NoteFilterResult, TextFilterDecision, TextFilterReview, TextFilterStatus } from "../types";
 import { escapeHtml, renderTimestampAnchors } from "../utils/html";
 import AiRefineCard from "./AiRefineCard";
-import { ConfirmDialog } from "../ui/primitives";
+import { ConfirmDialog, Loading } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 
@@ -197,7 +197,13 @@ export default function NotePreviewView({
   };
 
   if (!preview) {
-    return <p style={{ fontSize: 12, color: "#9ca3af", padding: 16 }}>{status || "加载预览中…"}</p>;
+    // 批 4 T14：加载态改由 L1 原语承载（`role="status"` + 探针 + 逐字文案）。`status` 是
+    // 可读信息（可能是"载入失败"之类的说明），故仍作 label；排版权威留在原语的 `Text` 里。
+    return (
+      <div style={{ padding: 16 }}>
+        <Loading label={status || "加载预览中…"} />
+      </div>
+    );
   }
 
   const stats = preview.stats;

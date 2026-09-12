@@ -23,7 +23,7 @@ import {
   matchIntent,
   type StrategyDraft,
 } from "../utils/refineStrategy";
-import { Button } from "../ui/primitives";
+import { Button, Loading } from "../ui/primitives";
 
 const optBtn = (active: boolean): React.CSSProperties => ({
   padding: "2px 8px", cursor: "pointer", fontSize: 11, borderRadius: 6,
@@ -173,7 +173,7 @@ export default function RefineStrategyPicker({
             </div>
           </div>
         ))}
-        {!meta && <div style={{ fontSize: 11, color: "#9ca3af" }}>策略声明加载中…</div>}
+        {!meta && <Loading label="策略声明加载中…" />}
       </div>
     </div>
   );
