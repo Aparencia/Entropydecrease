@@ -233,16 +233,14 @@ describe("跨文件判据（role=dialog 的唯一来源 + B2 例外登记完备�
     const exceptionFiles = zIndexAccountFiles().map((rel) => rel.split("/").join(sep));
     // 仪器自证：白名单读空 ⇒ 下一条 `unexpected` 会把所有命中的非原语文件都报出来（形同没有白名单）
     expect(exceptionFiles.length, "例外集读不到（白名单形同虚设）").toBeGreaterThan(0);
-    // `shell/CommandPalette.tsx` 是 T9 的迁移面，本任务**刻意不碰**（并行纪律）⇒ 显式登记为
-    // 已知在飞项，而不是让它悄悄混进"非原语文件"的违规集合里。
-    const pendingMigration = [`shell${sep}CommandPalette.tsx`];
-    const unexpected = offenders.filter((o) => !exceptionFiles.includes(o) && !pendingMigration.includes(o));
+    // T9 已落地：`shell/CommandPalette.tsx` 不再自建 `role="dialog"` ⇒ 原先那三行「在飞项」豁免按本文件
+    // 原有的批注（「该行应随 T9 删除」）删除，判据恢复**严格形态**（白名单必须恰好吸收例外集）。
+    const unexpected = offenders.filter((o) => !exceptionFiles.includes(o));
     expect(unexpected, `以下非原语文件自建了 role="dialog"：\n${unexpected.join("\n")}`).toEqual([]);
     // 白名单 ↔ 违规判据的对账：白名单必须**恰好**吸收掉 role 命中集里的例外文件
     // （少吸收一个 ⇒ 上一条会误红；多吸收一个 ⇒ 白名单在掩盖一次真实的越权）
     const roleInExceptions = exceptionFiles.filter((o) => offenders.includes(o));
-    expect(offenders.length - roleInExceptions.length - 1, "白名单与 role 命中集对不上账（-1 = T9 在飞项）").toBe(0);
-    expect(offenders.filter((o) => pendingMigration.includes(o)).length, "T9 的迁移面已不在源码里（该行应随 T9 删除）").toBe(1);
+    expect(offenders.length - roleInExceptions.length, "白名单与 role 命中集对不上账").toBe(0);
   });
 
   it("B2 例外集逐条从盘上再证（白名单不许掩盖「文件其实已不在 / 已改名」）", () => {

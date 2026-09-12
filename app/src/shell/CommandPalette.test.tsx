@@ -2,32 +2,41 @@
 /**
  * @ai-context ⌘K 命令面板的契约守卫（规格 §6.1；批 3 Task 11）。
  *
- * 判据分五层，每层都能**独立变红**（每条判据的变异体实测见 `task-11-report.md` §5）：
- *   ① 契约：`role="dialog"` + `aria-modal` + 输入框自动聚焦（**与 `Modal` 对齐的五条契约之三**，
- *      另两条 = ESC 关 / 点遮罩关，在 ② 层）；
- *   ② 关闭路径：Esc 关（window 冒泡相）· 点遮罩关（`mousedown`，与 `Modal` 同款）· 面板内点击**不**关；
+ * 判据分五层，每层都能**独立变红**（每条判据的变异体实测见 `task-11-report.md` §5；
+ *   **批 4 T9 的改写与各自的新变异体见 `task-9-report.md` §6.2**）：
+ *   ① 契约：`role="dialog"` + `aria-modal` + 无障碍名整条链（`aria-labelledby` → 可见标题）+
+ *      输入框自动聚焦（**与 `Modal` 对齐的五条契约之三**，另两条 = ESC 关 / 点遮罩关，在 ② 层）；
+ *   ② 关闭路径：Esc 关（`Modal` 的 `document` 冒泡相 + 栈顶）· 点遮罩关（`mousedown`，与 `Modal` 同款）·
+ *      面板内点击**不**关 · 遮罩的层级落在六档标尺上；
  *   ③ 键盘导航：↑↓ 改选中项（`aria-selected`）· Enter 执行并关闭 · 过滤后选中位回到首项；
  *   ④ IME：**组合中按 Enter 不提交**（中文输入法不能误触）—— 判据自带**阳性对照**（同一条命令
  *      在不带 `isComposing` 的 Enter 下必须提交），否则「没提交」可能只是「Enter 从来没生效」；
- *   ⑤ 静态纪律：9 个页面跳转命令来自注册表（不硬编码 label）· 不 import 原语层 · 层级走 `zIndex()`
- *      且无裸数字 · CSS 无 transition/animation（动效属批 6）。
+ *   ⑤ 静态纪律：9 个页面跳转命令来自注册表（不硬编码 label）· **只经 barrel 导入原语**（T9 起；
+ *      批 3 的「不许 import 原语层」是非目标 2 的临时守卫，前提已被批 4 解除）· **不留第二套
+ *      遮罩/ESC/焦点**（ADR-033 §7）· 层级无裸数字 · 自带 CSS 整份删除且无 `.ed-cmdk*` 残类。
+ *  ⚠️ 判据前**先剥注释**（`CODE`）：文件头逐字点到 `createPortal` / `aria-modal` / `.ed-cmdk*`
+ *  这些形态，注释不算犯规（与 `TopBar.test.tsx:34` 同一口径）。
  *
  * ⚠️ 本仓测试底座（照抄勿改）：`vitest.config.ts` 全局 `environment: "node"` ⇒ 首行必须
  *   `// @vitest-environment jsdom`；**未装** `jest-dom` 与 `user-event` ⇒ 断言用原生 DOM API、
  *   交互用 `fireEvent`；**没有** `globals` ⇒ RTL 的 auto-cleanup 不生效，必须显式 `afterEach(cleanup)`。
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommandPalette } from "./CommandPalette";
 import { ALL_ENTRIES } from "./navRegistry";
+import { zIndex } from "../ui/zIndex";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TSX = readFileSync(join(HERE, "CommandPalette.tsx"), "utf8");
-/** 判据前先剥注释（与 `TopBar.test.tsx:34` 同一口径）：文件头解释「不得出现 transition」时点到了那个词 */
-const CSS = readFileSync(join(HERE, "CommandPalette.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+/** 迁移面的**只留代码**版本（剥块注释 + 整行 `//`）—— 与 `TopBar.test.tsx:34` 同一口径：
+ *  文件头解释「不许再自带 CSS / 不许留 `.ed-cmdk*` 残类」时会点到那些字面量，注释不算犯规。 */
+const CODE = TSX.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+/** T9：`CommandPalette.css` 已整份删除（计划 V1）⇒ 原「CSS 里没有动效声明」判据改建为
+ *  「CSS 层只剩原语那一份」（同一 `it`，用例数不减；判据强度不降，见该用例的说明）。 */
 /** `App.tsx` 的**只留代码**版本（剥块注释 + 整行 `//`）—— 与 `TopBar.test.tsx:43` 同一口径 */
 const APP_CODE = readFileSync(join(HERE, "..", "App.tsx"), "utf8")
   .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -43,7 +52,11 @@ describe("CommandPalette 契约（规格 §6.1）", () => {
     const dialog = screen.getByTestId("command-palette");
     expect(dialog.getAttribute("role")).toBe("dialog");
     expect(dialog.getAttribute("aria-modal")).toBe("true");
-    expect(dialog.getAttribute("aria-label")).toBe("命令面板");
+    // T9：无障碍名从 `aria-label` 搬到 `aria-labelledby` → 可见标题（`Modal` 契约）。**强度不降**：
+    // 旧判据只验一个属性字面量；新判据验「属性 → 标题节点 → 文本」**整条链**（任一处断链即红）。
+    const labelledBy = dialog.getAttribute("aria-labelledby");
+    expect(labelledBy, "面板没有无障碍名（aria-labelledby）").toBeTruthy();
+    expect(document.getElementById(labelledBy ?? "")?.textContent, "无障碍名不指向可见标题").toBe("命令面板");
     // 焦点：面板打开即落在输入框（键盘用户不必先按 Tab 找入口）
     expect(document.activeElement).toBe(screen.getByTestId("command-palette-input"));
   });
@@ -56,10 +69,10 @@ describe("CommandPalette 契约（规格 §6.1）", () => {
   it("② Esc 关闭；关闭后 Esc 不再触发（监听随 open 解绑，避免常驻 window 监听）", () => {
     const onClose = vi.fn();
     const { unmount } = render(<CommandPalette {...base} onClose={onClose} />);
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(document, { key: "Escape" }); // T9：ESC 归 `Modal`（document 冒泡相 + 栈顶）
     expect(onClose).toHaveBeenCalledTimes(1);
     unmount();
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(document, { key: "Escape" }); // T9：ESC 归 `Modal`（document 冒泡相 + 栈顶）
     expect(onClose, "卸载后 Esc 仍触发 ⇒ window 监听没解绑").toHaveBeenCalledTimes(1);
   });
 
@@ -73,6 +86,9 @@ describe("CommandPalette 契约（规格 §6.1）", () => {
     expect(overlay.contains(panel), "面板不在遮罩里 ⇒ 点遮罩判据测的不是本组件").toBe(true);
     fireEvent.mouseDown(overlay);
     expect(onClose).toHaveBeenCalledTimes(1);
+    // T9：层级判据从「源码里出现 `zIndex(`」搬到**渲染出的遮罩**（强于源码文本判据：它验的是
+    // 「层级真的落在六档标尺上」，而不是「本文件写没写那五个字符」；判据对象随迁移搬到原语层）。
+    expect(overlay.style.zIndex, "遮罩的层级不在六档标尺上").toBe(String(zIndex("modal")));
   });
 
   it("③ ↑↓ 改选中项（aria-selected 单一真源），Enter 执行并关闭", () => {
@@ -130,24 +146,40 @@ describe("CommandPalette 契约（规格 §6.1）", () => {
     expect(ALL_ENTRIES, "注册表条目数变了 ⇒ 本判据的锚点失效").toHaveLength(9);
     for (const e of ALL_ENTRIES) {
       const item = screen.getByTestId(`command-page:${e.key}`);
-      expect(item.querySelector(".ed-cmdk__label")?.textContent, e.key).toBe(e.label);
+      // T9（选项 (b)）：行内容改由 `Text` 原语表达、`.ed-cmdk*` 残类全部删除 ⇒ 判据从「类选择器」
+      // 改成**结构 + 文本**：选项的**首个元素子节点**恰是标签文本（原判据只锁类名与文本，
+      // 新判据连「标签在行首、hint 在其后」这层结构一起锁 ⇒ 强度不降）。
+      expect(item.firstElementChild?.textContent, e.key).toBe(e.label);
     }
     expect(screen.queryByTestId("command-page:not-a-page")).toBeNull(); // 阴性样本
   });
 
-  it("⑤ 静态纪律：不 import 原语层 · 层级走 zIndex() 标尺且无裸数字", () => {
-    expect(/ui\/primitives/.test(TSX), "面板 import 了原语层（会把整层 CSS 拉进首屏）").toBe(false);
+  it("⑤ 静态纪律：只经 barrel 导入原语 · 不留第二套遮罩/ESC/焦点（ADR-033 §7）· 无裸层级", () => {
+    // 批 3 的「不 import `ui/primitives`」是**非目标 2 的临时守卫**（那条禁令的前提已被批 4 解除：
+    // 迁移原语正是本批目标）⇒ 它按新架构换成**更强**的形态：入口唯一（barrel）+ 单实现（不留第二套
+    // 弹层机制）+ 自带 CSS 层清零。四条原断言里「无内联 svg」与「无裸数字」两条逐字保留。
+    // ⚠️ 本文件不得出现那个标签的**字面量**（连注释也不行）：`ui/icons/no-inline-svg.test.ts` 是
+    // **全文扫描**的棘轮，注释里出现即被判为「新增内联 svg 的文件」（`EmptyState.tsx` 边界③ 同坑）。
+    expect(/from\s+"\.\.\/ui\/primitives"/.test(CODE), "面板没走 barrel（ADR-033 §1）").toBe(true);
+    expect(CODE.match(/from\s+"\.\.\/ui\/primitives\/[A-Za-z]+"/), "面板深导入原语（深导入不带 motion.css）").toBeNull();
     expect(TSX.includes("<" + "svg"), "面板里出现内联 svg（图标一律走 ui/icons）").toBe(false);
-    expect(/zIndex\(/.test(TSX), "层级没有走六档标尺").toBe(true);
-    expect(/zIndex:\s*\d/.test(TSX), "层级写了裸数字").toBe(false);
+    expect(/zIndex:\s*\d/.test(CODE), "层级写了裸数字").toBe(false);
+    // 单实现（ADR-033 §7）：portal / 事件监听 / 弹层语义 / 遮罩 / 焦点陷阱都只有 `Modal` 一份
+    expect(CODE.match(/createPortal/), "面板自建 portal").toBeNull();
+    expect(CODE.match(/addEventListener/), "面板自建事件监听（ESC 与焦点都归 `Modal`）").toBeNull();
+    expect(CODE.match(/aria-modal/), "面板自建 `aria-modal`（第二套弹层语义）").toBeNull();
+    expect(CODE.match(/position\s*:\s*["']fixed["']/), "面板自建遮罩（position: fixed）").toBeNull();
+    expect(CODE.match(/inset\s*:\s*0/), "面板自建遮罩（inset: 0）").toBeNull();
+    expect(CODE.match(/useFocusTrap|FOCUSABLE_SELECTOR/), "面板自建焦点陷阱").toBeNull();
   });
 
-  it("⑤ CSS 里没有动效声明（transition/animation/@keyframes 属批 6）", () => {
-    const banned = [/transition\s*:/, /animation\s*:/, /@keyframes/];
-    // 仪器自检：同一组正则对一段**确定含动效**的 CSS 必须命中（否则下面的「0 命中」是假绿）
-    expect(banned.some((re) => re.test(".x { transition: opacity 200ms; }"))).toBe(true);
-    const hits = banned.filter((re) => re.test(CSS)).map(String);
-    expect(hits, `批 3 的面板 CSS 不得含动效（属批 6）：${hits.join(" / ")}`).toEqual([]);
+  it("⑤ 自带 CSS 整份删除（计划 V1）：文件不在盘上，迁移面也不 import 任何 CSS / 不留残类", () => {
+    // 判据对象随迁移**搬走**（原判据扫的是那个文件的文本；文件按 V1 删除 ⇒ 判据升级为「它必须不在」）。
+    expect(existsSync(join(HERE, "CommandPalette.css")), "CommandPalette.css 又回来了").toBe(false);
+    expect(CODE.match(/\bimport\s+["'][^"']+\.css["']/), "迁移面又 import 了 CSS").toBeNull();
+    expect(CODE.match(/ed-cmdk/), "`.ed-cmdk*` 残类（样式已无落点）").toBeNull();
+    // 仪器自证：同一条「存在性」读法对**确定存在**的文件必须为 true（否则上面那条 false 可能只是路径写错）
+    expect(existsSync(join(HERE, "CommandPalette.tsx")), "文件存在性读法失效").toBe(true);
   });
 });
 

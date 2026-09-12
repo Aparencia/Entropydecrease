@@ -68,7 +68,9 @@ describe("① 防抖取样（180ms —— 本批唯一允许的计时器）", ()
     expect(invokeMock, "输入即查（防抖没生效）").not.toHaveBeenCalled();
     await afterDebounce();
     expect(invokeMock).toHaveBeenCalledWith("kb_search", { query: "眼影", limit: 10 });
-    expect(screen.getByTestId("command-hit:7").querySelector(".ed-cmdk__label")?.textContent).toBe("📄 眼影入门 · 晕染手法");
+    // T9（选项 (b)）：行内容改由 `Text` 原语表达、`.ed-cmdk*` 残类已删除 ⇒ 判据从「类选择器」改成
+    // **结构 + 文本**（选项的首个元素子节点恰是标签；强度不降：原判据只锁类名与文本，新判据另锁结构）。
+    expect(screen.getByTestId("command-hit:7").firstElementChild?.textContent).toBe("📄 眼影入门 · 晕染手法");
   });
 
   it("连打三次只查一次（没有防抖的实现会查三次 ⇒ 本判据变红）", async () => {
@@ -137,7 +139,9 @@ describe("④ 与页面命令合并展示（页面命令恒在最前）", () => 
     render(<CommandPalette open onClose={onClose} onPick={onPick} />);
     fireEvent.change(screen.getByTestId("command-palette-input"), { target: { value: "笔" } });
     await afterDebounce();
-    const ids = Array.from(screen.getByTestId("command-palette-list").querySelectorAll("li")).map((li) => li.getAttribute("data-testid"));
+    // T9（选项 (b)）：行元素由 `li` 改成 `div[role="option"]`（本文件不许自带 CSS，`list-style` 无处安放）
+    // ⇒ 选择器改走**语义角色**（强度不降：原判据只认标签名，新判据认的是列表项的角色）。
+    const ids = Array.from(screen.getByTestId("command-palette-list").querySelectorAll('[role="option"]')).map((li) => li.getAttribute("data-testid"));
     expect(ids.indexOf("command-hit:7"), "结果命令不在列表里").toBeGreaterThan(-1);
     expect(ids.indexOf("command-hit:7"), "结果命令排到了页面命令前面").toBeGreaterThan(ids.indexOf("command-page:notes"));
     fireEvent.click(screen.getByTestId("command-hit:7"));

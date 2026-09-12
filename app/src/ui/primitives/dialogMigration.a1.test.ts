@@ -138,8 +138,10 @@ describe("A 组 1 弹层迁移（批 4 T5）", () => {
     expect(hits).toEqual([]);
 
     const modal = stripComments(read("ui/primitives/Modal.tsx"));
-    const palette = stripComments(read("shell/CommandPalette.tsx"));
     expect(DIALOG_ATTR.test(modal), "正则对 Modal.tsx 报 0 —— 仪器坏了").toBe(true);
-    expect(DIALOG_ATTR.test(palette), "正则对 CommandPalette.tsx 报 0 —— 仪器坏了").toBe(true);
+    // T9 就地改写：阳性样本原为 `shell/CommandPalette.tsx`（批 4 的迁移面）。T9 把它交给 `Modal` 之后，
+    // **全仓非原语文件都不再有** `role="dialog"` ⇒ 阳性样本改为合成串，并**补一条阴性对照**（强度不降）。
+    expect(DIALOG_ATTR.test('const x = <div role="dialog" />;'), "正则对合成样本报 0 —— 仪器坏了").toBe(true);
+    expect(DIALOG_ATTR.test('const x = <div role="alert" />;'), "正则对非 dialog 的 role 误报").toBe(false);
   });
 });
