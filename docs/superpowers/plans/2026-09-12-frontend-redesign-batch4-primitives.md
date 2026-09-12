@@ -1693,23 +1693,272 @@ git commit --only -m "docs(spec): close out primitives batch four" -- docs/super
 ### 一、三条验收的判据与读数
 （① `z-index ≤6` 的裸值 58 → N + 例外集 ② `role="dialog"` 20/20 + 20 清单 + 28/34 并列 ③ 五类的中间态：切片内 → 0 / 切片外余量 / 棘轮冻结数）
 
+> **读数出处**：`HEAD = 199da54b` · 干净树（`git status --porcelain` = 仅 `?? docs/tech-debt/`）· `app/dist` mtime **2026-09-12 19:54:33**（**本节真实构建产出**，`node scripts/check-bundle-budget.mjs`，非 `--no-build`）· 采集时刻 **2026-09-12 19:52–19:56**。
+
+| # | 验收（规格 §10 批 4 行逐字） | 机器判据（命令 + exit） | 读数 | 判定 |
+|---|---|---|---|---|
+| ① | **`z-index ≤6`** | `node tmp/t4/count-bare-zindex.mjs`（exit 0） | **裸数字 z-index = 3 处 / 3 文件 / 3 个不同值**（原 **58 处 / 43 文件 / 17 值**）；逐值分布 = `10` · `999` · `1000`（**升序，各 1 处**）；逐处 = `components/CaptureOverlayPanel.tsx:144`(10) · `components/ImagePreviewOverlay.tsx:32`(1000) · `components/ScreenSelectOverlay.tsx:149`(999) | ✅ **N=3 ⊆ 例外集**（3 条 = 例外全集） |
+| ① | 例外集逐条（B2，带理由） | `cd app; npx vitest run src/ui/zIndex.guard.test.ts`（exit 0，**7 用例**） | `ZINDEX_ACCOUNTS` 恰 **3** 条，且每条 `why` >20 字（判据 ④ 双向：注册表 ↔ 冻结名单一一对应 + 逐行对拍）：① `CaptureOverlayPanel` 采集覆盖层**子操作条**（嵌在全屏采集面内部，迁档会踢出「覆盖层内部层」语义）② `ImagePreviewOverlay` 系统交互面（迁 `modal(300)` 会让 92vw 大图落到对话框档之下）③ `ScreenSelectOverlay` 全屏十字光标屏幕点选（迁档会让采集面被任何弹层盖住） | ✅ 3/3 带理由 |
+| ① | **六档标尺 6 个值（逐字）** | `app/src/ui/zIndex.ts` 的 `Z_TIER` | `raised 10` · `panel 100` · `popover 200` · `modal 300` · `modalNested 400` · `toast 500`（**恰 6 档**） | ✅ ≤6 档 |
+| ① | **冻结名单 58 → N** | `zIndex.guard.test.ts` ①（只许减）+ ②（无过期项） | `FROZEN_NUMERIC_ZINDEX` **58 → 3 条**（T4 收到 5 = 例外 3 + B7 委托 2；**T13-b 已把 2 条委托收口** —— `ChatPage:504/505` 随「发起菜单」拆进 `components/chat/ChatLaunchMenu.tsx` 并改用 `zIndex("popover")`，注册表里的 `delegated` 档**整体结清**） | ✅ 名单 = 例外集 |
+| ① | 分档去向（T4 的中间态，供审计） | `node …/tmp/t4/tier-map.mjs`（**⚠️ 见下方「仪器陈旧」说明**） | T4 当时：**53 处落档 / 40 文件**，分档 `{"panel":2,"raised":3,"popover":26,"modal":22}` + 例外 3 + 委托 2 | ⚠️ 见注 |
+| ② | **`role="dialog"` 20/20** | `cd app; npx vitest run src/ui/primitives/dialogMigration.{a1,a2,b,e}.test.ts src/ui/zIndex.guard.test.ts`（exit 0） | **5 文件 / 77 用例全绿**（a1=6 · a2=31 · b=18 · e=15 · zIndex.guard=7）；`.e` 的三条清单判据：① `DIALOG_20` 20 个文件**全部只经原语**（barrel 含 `Modal` ∧ 无深导入 ∧ 无自建遮罩 ∧ 无 `keydown` ∧ 无裸 z-index）；② `20/20` 的 `role="dialog"` **由原语唯一持有**（20 个文件 **0 命中** · `Modal.tsx` **恰 1 命中**）；③ `34 − 20 == 14` 且 14 = 11 锚定菜单 + 3 覆盖层（**盘上对拍**） | ✅ 20/20 |
+| ② | **20 清单（逐文件 + `size` + `testId`）** | `node tmp/t18/dialog20.mjs`（exit 0；`DIALOG_20` **从 `.e` 的导出数组解析**，不手抄） | 1 `ChatSaveNoteDialog` s/`chat-note-dialog` · 2 `GoalPlanApprovalDialog` l/`plan-approval` · 3 `GraduateDialog` m/`graduate-dialog` · 4 `GroupCreateDialog` s/`group-create-dialog` · 5 `GroupDeleteConfirm` s/`group-delete-confirm` · 6 `InterviewDialog` m/`interview-dialog` · 7 `KnowledgeConceptDialog` **（未声明 ⇒ 默认 m）**/（未声明）· 8 `KnowledgeDecisionForm` m/`decision-form` · 9 `KnowledgeModelDialog` m/`model-dialog` · 10 `KnowledgeSystemWizard` l/`knowledge-wizard` · 11 `ModelCardCreateDialog` s/`model-card-dialog` · 12 `ModelCardFromNoteDialog` m/`model-card-from-note` · 13 `NoteAiDialog` m/`note-ai-dialog` · 14 `PracticeQuestionsOverlays` l/**（未声明）** · 15 `ProofreadPanel` l/`proofread-panel` · 16 `RefineLaunchDialog` l/`refine-launch-dialog` · 17 `RefineWorkbench` l/`refine-workbench` · 18 `SecondPassPanel` l/`second-pass-panel` · 19 `SopRunOverlay` l/`sop-run-overlay` · 20 `TaskLaunchDialog` s/`task-launch-dialog`。**`size` 分布 = s 5 · m 6 + 默认 1 · l 8**；**无 `<Modal>` 的文件 = 0** | ✅ 20/20 |
+| ② | **ADR-033 的 28 与跨行 34 并列** | `.e` 的 ③ + 常量自检（长度/排序/去重/盘上存在） | **20**（验收口径）· **28**（ADR-033 同行口径，`ADR033_28`）· **34**（跨行容忍口径，`CROSS_LINE_34`）· **6**（`CROSS_LINE_ONLY_6` = 34−28）；**等式双向**：`28 ⊆ 34 ∧ \|28\| = 28 ∧ 28 == 34 − 6` ∧ `34 − 20 == 14`。28/34 由 `tmp/t8/overlay-lists.mjs` 在 `42e88740` 上**独立复现**（非抄计划） | ✅ 三口径并列 |
+| ③ | **五类的中间态**（R2 的裁决落地 = B11「切片 + 棘轮」） | 五条棘轮各自的测试 + 基线常量（见下表） | 见下方**五类终态表** | ✅ **切片内清零 · 切片外余量带去向** |
+
+**① 的仪器陈旧说明（必须读，否则会误判）**：`node tmp/t4/tier-map.mjs` **今日 exit 1（30 项问题）** —— 它校验的是 `tmp/t4/zindex-map.md` 里那份 **T4 时点（`8d84ecfe`）的逐处快照**（`file:line → tier` 三元组），而 T5–T8 把那 53 处迁移点**整段换成了 `<Modal>`**（那一行上已经不存在 `zIndex("…")` 字面量）⇒ 快照按定义失效，**不是**判据/守卫退化（守卫 `zIndex.guard.test.ts` 7/7 绿）。**存活读数 = `count-bare-zindex.mjs` 的 3 处 + 守卫的 3 条例外注册表**；本行的「分档去向」只作 **T4 当时的中间态记录**引用。
+
+**五类终态表（每类：切片内 → 0 / 切片外余量 / 棘轮冻结数）**
+
+| 类 | 目标原语 | 切片（B11 判据） | 切片内 | 切片外余量 | 棘轮冻结数（终态） | 证据 |
+|---|---|---|---|---|---|---|
+| 空态 | `EmptyState` | **28 文件**（①∪②∪③，`SLICE` 长度硬断言 28） | **0**（② 非例外命中 0） | **例外 8** 条 + **余量 5 文件**（`FROZEN_REST`，冻结值**恰等于实测值**） | 全仓命中 **≤44**（域内 44 行 / 33 文件） | `emptyStateRatchet.test.ts`（7 用例，含 ⑥a 探针双向对拍 / ⑥b 盘上可复算第二源） |
+| 加载 | `Loading`/`Skeleton` | **14 文件** | **0**（迁移面 10 文件 0 命中 ∧ 含 `<Loading`） | **8** = 4 backlog 文件 + 3 `button-busy` + 1 例外 | `FROZEN_LOADING_TEXT_TOTAL = 8 == RESIDUAL.length`；冻结表 **18 键**被「迁移面(0) ∪ 残留面(1)」逐格钉死 | `loadingRatchet.test.ts`（8 用例；原 18 行/18 文件） |
+| 错误行 | `StatusLine` | **49 文件**（`MIGRATED` 长度硬断言） | **0**（① 逐文件处数 ≥ `MIN_CALLS` 下界，8 个 >1 的键） | 三红字面量 **114 处 / 67 文件**（**剥注释口径**；未剥 116） | `FROZEN_RED_TOTAL = 114`；逐值 `#dc2626`×82 · `#b91c1c`×30 · `#ef4444`×2 | `statusLineRatchet.test.ts`（4 用例）+ `statusLineBaseline.ts` |
+| 弱化文本 | `Text` | **100 文件**（行口径） | **0**（迁移 186 处） | **63 处 / 44 文件 / 7 类**（`interactive*` 35 · `ternary-no-equivalent` 10 · `nontext` 6 · `b1-non-migrated` 9 · `tag` 1 · `colorMap` 2 · C 类 2），逐条非空理由 | `FROZEN_MUTED_GRAY_TOTAL = 63`；**字号越界 558 处 / 120 文件只冻结不迁** | `textRatchet.test.ts`（16 用例，双棘轮各 6 牙 + 4 附则） |
+| 卡片边框 | `Surface` | **111 文件**（边框族） | **0**（够格 21 处里实迁 14） | 边框 **226 处 / 108 文件** · 越界圆角 **261 / 109** · 阴影 **24 / 24** | `FROZEN_BORDER_TOTAL = 226` · `FROZEN_RADIUS_OUTLIER_TOTAL = 261` · `FROZEN_SHADOW_TOTAL = 24` · `FROZEN_SURFACE_TAG_TOTAL = 14` | `surfaceRatchet.test.ts`（25 用例，三族 × 6 + ⑦×2 + ⑧×2 + ⑨×1 + ⑩×2） |
+
+> **四张表的读数工具（可复跑）**：`node tmp/t18/census2.mjs`（括号配对扫描，逐表项数 + 与 `ANCHOR.entries` / `FROZEN_*_TOTAL` 交叉核对）· `node tmp/t18/compare-perfile.mjs`（vitest 逐文件对拍）· `node tmp/t18/dialog20.mjs` · `node tmp/t18/ratchet-census.mjs`（v1，**已知会误算**：被注释里的 `}` 提前截断 ⇒ 保留作反例）。
+> **③ 的「若控制方选 (A) 全量」余量清单在此**：五类的余量**逐条**写在各自的 `*Baseline.ts` 里（`RESIDUAL` 每条带非空理由，且「僵尸豁免」判据会红）—— 例：`textBaseline.RESIDUAL` **44 条**、`surfaceBaseline.SHADOW_RESIDUAL` **24 条**、`surfaceResidual.ts` 的边框/圆角残留 **31 + 13 条**、`emptyStateRatchet.EXCEPTIONS` **8 条**、`loadingBaseline.RESIDUAL` **8 条**、`statusLineBaseline.MIN_CALLS`（8 键）。**不必重新普查。**
+
 ### 二、八门禁终态表
 （逐条命令 + exit code + 读数；vitest 必须给**既有 1370 逐文件一条不少**的比对结论）
+
+> 全部在**静止干净树**上跑（`HEAD = 199da54b` · `git status --porcelain` 仅 `?? docs/tech-debt/`）· 采集时刻 **2026-09-12 19:52–19:56** · `app/dist` mtime **2026-09-12 19:54:33**（**真实构建**产出）。
+
+| # | 命令 | exit | 读数 |
+|---|---|---|---|
+| 1 | `node scripts/line-limits.mjs --full` | **0** | `✅ line-limits（--full · 数值一致）：>600 硬限 0（棘轮内）· 301–600 档 122 · 登记条目 122`（两侧相等；`--write` 复跑**零 diff**：文件 sha256 前后一致 ⇒ **豁免表不在收口提交路径里**） |
+| 2 | `node scripts/docs-check.mjs` | **0** | 扫描 **276** 个 Markdown（检查 **176**）· ✅ 相对链接全部有效 · ✅ `file://` 引用目标均存在 · ✅ 文件名规范 · ✅ 索引覆盖完整 · ✅ 模板源与实例一致 |
+| 3 | `node scripts/check-command-registry.mjs` | **0** | `✅ 命令注册一致：定义 312 / 注册 312 / 重复 0` |
+| 4 | `cd app; npx tsc --noEmit` | **0** | **0 错**（输出只有 npm 的 env 警告） |
+| 5 | `cd app; npx vitest run`（json reporter：`--reporter=json --outputFile=…/tmp/t18/raw/vitest-full.json`） | **0** | **166 文件 / 1608 用例 / 0 失败 / 0 skip**（`numTotalTests 1608 · numPassedTests 1608 · numFailedTests 0 · success true`） |
+| 5-对拍 | `node tmp/t18/compare-perfile.mjs <json> tmp/t1/vitest-perfile.txt` | **0** | 基线（批 4 开工，`tmp/t1/vitest-perfile.txt`）= **143 文件 / 1370 用例** ⇒ **LOST = 0 · SHRUNK = 0**；`GROWN = 6` · `ADDED = 23`（逐条见下） |
+| 6 | `node scripts/check-bundle-budget.mjs`（**真实构建**；取锁 `tmp/t18/build.lock` **第 1 次即取到**；`cmd /c npm run build`） | **0**（build 0 / budget 0） | `index-4qKuUwYr.js` 108,099 B → gzip 35,374 B（35.37 kB）· `vendor-react-lr0dg1MX.js` 192,536 B → 60,375 B · `vendor-tauri-UIF4jgRy.js` 17,143 B → 4,548 B · **首屏 JS 合计 原始 317,778 B · gzip 100,297 B = 100.30 kB** ⇒ **✅ 达标：余量 99.70 kB**（预算 200 kB）· 懒加载 **22 个 575,163 B = 575.16 kB**（不计入）· **CSS 3 个 62,625 B = 62.63 kB · gzip 14.42 kB**（**不计入判据，只报告**）· `index.html` 1,558 B · 字体 20/20/19 个（.ttf/.woff/.woff2，亦不计入） |
+| 7 | `node scripts/bundle-eager-graph.mjs` | **0** | 入口 `app/src/main.tsx`：**89 文件 / 4 包**（`--json` 拆分 = `.ts`/`.tsx` **76** + `.css` **13**）· 包 = `@tauri-apps/api` · `@tauri-apps/plugin-dialog` · `react` · `react-dom` |
+| 7-真实边 | `node tmp/t1/eager-graph-tsapi.mjs`（TS 编译器 API 剔 `import type`） | **0** | **65 应用源文件 / 4 包**（工具 89 − TS-API 65 = 24 = 13 份 CSS + 11 条 type-only 假阳性） |
+| 8 | Rust（`cargo test --test app_lib_tests` / `cargo clippy`） | **未复跑** | **本批零 Rust 改动**：`git log 42e88740..HEAD -- app/src-tauri` = **空**（全批一条都没有）⇒ 判据仍是批 3 收口的 **2300 / 0 / 6**。⚠️ **不得**把本行读成「已跑且绿」。 |
+
+**门禁 5 的逐文件对拍明细（V2 的硬要求：不是只看总数）**
+
+- **消失文件 = 0（真 LOST）**。原始输出里有 1 条 `LOST: scripts/gen-tokens.test.mjs` —— **这是路径规范化产物，不是真丢**：该文件在 `app/scripts/` 下（不在 `app/src/`），基线与本次产物都把它记成**绝对路径**，两侧键形不同 ⇒ 逐字见 `tmp/t18/raw/vitest-compare.json` 的 `LOST` / `ADDED[0]`（同一路径，23 用例）。**与 T17-B、T13–T15 评审的结论逐字一致。**
+- **SHRUNK（既有文件用例变少）= 0**。
+- **GROWN（既有文件用例增加）逐条点名列全 —— 6 条**：`components/FeedFragmentList.test.tsx: 4 → 5`（T11，窗口确认→`ConfirmDialog` 后把「桩从未被调用」变成新断言）· `components/RefineWorkbench.test.tsx: 7 → 8`（修复单元：假绿换成结构判据 + 1 条 h3 路径）· `ui/primitives/Surface.test.tsx: 17 → 18`（T17-A，加 `pill` 档）· `ui/primitives/Text.test.tsx: 12 → 16`（T16-A，两槽正反两向）· `ui/primitives/style-seams.test.ts: 17 → 18`（T3，`SURFACE_CLASSES` 加类名）· `ui/zIndex.guard.test.ts: 4 → 7`（T4，新增 3 条判据）
+- **ADDED（新增测试文件）共 23 个 / 227 用例**：**`ui/primitives/` 16 个（158 用例）** = `dialogMigration.{a1=6,a2=31,b=18,e=15}` · `buttonMigration=9` · `nativeButton.ratchet=6` · `Modal.scroll-lock=6` · `ConfirmDialog.tier=7` · `Toast.placement=6` · `EmptyState.align=8` · `loadingMigration=3` · `loadingRatchet=8` · `emptyStateRatchet=7` · `statusLineRatchet=4` · `textRatchet=16` · `surfaceRatchet=25`；**`components/` 3 个（30 用例）** = `confirmMigration=10` · `toastMigration=15` · `chat/ChatLaunchMenu.test=5`；**`shell/` 4 个（22 用例）** = `shellReset=5` · `columnKeys.freeze=3` · `shellPrimitives=8` · `commandPalette.modal=6`。**增量等式**：`1608 − 1370 = 238 = 227（23 个新文件的用例）+ 11（6 个既有文件的增长之和：1+1+1+4+1+3）` ✅（原始逐条见 `tmp/t18/raw/vitest-compare.json` 与 `added.txt`）
+
+**门禁 6 的首屏 Δ 与机理（对本批计划基线 97.16 kB）**
+
+- **基线 = 计划表 1 的 `97.16 kB` = 97,155 B gzip / 309,524 B 原始**（出处：批 4 开工时点 `HEAD=357ab117` 的真实构建，`dist` mtime 2026-09-12 14:39:21，入口 `index-Cf249NJv.js` 99,860 B）。
+- **终态 = 100.30 kB（100,297 B gzip / 317,778 B 原始）⇒ Δ = +3,142 B gzip = +3.14 kB**（原始 +8,254 B；入口 chunk 99,860 → 108,099 B = **+8,239 B 原始**）。
+- **机理（逐项有独立 A/B 证据，未做逐提交二分定位）**：
+  - **T9 的 barrel + 原语层进首屏 = +2,159 B（ShellFallback 半程）+ 189 B（palette 半程）= +2,348 B**（四棵同源真构建：97,210 → 99,369 → 99,742 → 99,934 B）；真实边 **52 → 65（+13）= `ui/primitives/**` 全层**（barrel 1 条 + 12 个模块）· 工具 **67 → 90（+23）**（多 10 份原语 CSS）· `pages/**` **+0** · **npm 包 4 → 4**。**这是 B5 诚实代价的实测形态，且低于 B5 给出的上界 +3.41 kB。**
+  - **T10 的 toast 首屏接入 = +373 B**（`b5c464af → 4a804a58` 同源真构建；barrel 已在首屏 ⇒ 本任务不新增 barrel 字节）。
+  - **T16-B 的 `Text` 迁移 = −112 B（−0.11 kB）**；**T17-B 的 `Surface` 首次真进首屏 = +101 B（+0.10 kB）**（产物字符串实证：`ed-surface--bordered` 在迁前 `dist` 的 js 里 **0 命中** ⇒ 组件被 tree-shake；迁后 **1 命中** —— 「首次真用它」的代价）；**T16-A 的两槽 = +17 B**；**T17-A 结构性 0**。
+  - **剩余 ≈ +357 B 未逐提交归因**（区间 `bde807dc` 的 99,934 B → `a9c7e300` 的 100,196 B 之间，属 T11/T12/T13/T14/T15 的调用点接入）。**本节明确声明：未做逐提交二分定位**（T16-A 报告 §8 第 4 条同样自陈未做）。⚠️ 纪律：**< ~2 kB 的 Δ 必须用同源真构建对比**，不能拿不同时点的仓内 `dist` 相减（T7–T12 评审实测：同源 HEAD 与 `bde807dc` 差 9 B，其中 `index.html` 18 B 纯 CRLF、两树 CSS 排序后 156 段完全相同 ⇒ 差异来自 rollup 的 CSS 拼接顺序，**非确定性**）。
+- **CSS 不计入判据**（本节只报告）：**62.63 kB 原始 / 14.42 kB gzip**（3 个文件）。
+
+**门禁 7 的 Δ 与机理（eager 静态可达图，三件套）**
+
+| 口径 | 批 4 开工（`357ab117`/`42e88740` 口径） | 终态（`199da54b`） | Δ |
+|---|---|---|---|
+| 工具口径（含 `.css`、含 `import type`） | **67**（= 63 源 + 4 CSS） | **89**（= **76 源 + 13 CSS**） | **+22** |
+| 真实边口径（TS 编译器 API 剔 `import type`，只数 `app/src` 源文件） | **52** | **65** | **+13** |
+| npm 包 | **4** | **4** | **0** |
+
+- **机理**：**+13 全部是 `ui/primitives/**` 全层**（T9 的 ShellFallback 半程把 barrel + 12 个原语模块静态拉进首屏）；工具口径多出的 9 = 原语层新增的 **9 份 CSS**（10 → 13？逐条见 T9 报告：工具 67 → 90 是多 13 + 10 份 CSS；CommandPalette 半程删 `CommandPalette.css` 后工具 90 → 89）。**`pages/**` 新增 0 · npm 包新增 0** ⇒ **没有任何页面被静态拉回首屏**。
+- **终态 Δ（对 T17-B 的 89/65）= 0**：T17-B 与 T13–T15 修单元只改调用点与测试文件，未新增首屏可达模块。
 
 ### 三、逐任务提交轨迹
 （`Task → commit sha → subject → 文件数`；**提交数用 `A^..B` 含左端点口径**并写明起止）
 
+**口径（先写清，再报实数）**：`docs/versions/v0.22.md` 既定规矩 = **批次行一律「含左端点」**（`git rev-list --count A^..B`，`A` = 该批**第一个**提交）。批 4 的**第一个提交 = `4905d4d8`**（`docs(plan): 批 4 原语迁移实施计划（19 任务）`，其父 = 批 3 收口提交 `42e88740`，已实测 `git rev-parse 4905d4d8^ == 42e88740`）。**同口径校验**：批 3 的 `85d51d83^..42e88740` 实测 = **22**，与 v0.22 批 3 行的「22 个提交」逐字相符 ⇒ 口径无误。
+
+| 命令 | 读数 | 说明 |
+|---|---|---|
+| `git rev-list --count 4905d4d8^..HEAD`（本批 **含左端点**，`HEAD = 199da54b`） | **48** | = `4905d4d8` 起至 `199da54b` 的全部提交（**48 = 48 个实施/评审/修复提交**，其中第 1 个是计划本身） |
+| `git rev-list --count 4905d4d8^..<收口提交>` | **49** | **本收口提交自己算第 49 个**（sha 无法写进它自己的内容里 —— 自引用；批 3 先例同款） |
+| `git rev-list --count 42e88740..HEAD` / `git log --oneline 42e88740..HEAD \| Measure-Object -Line` | **48** / **48** | 派发书点名的那两条命令；**不含左端点**（左端点 `42e88740` 是批 3 的收口提交） |
+| `git rev-list --count 42e88740^..HEAD`（派发书点名） | **49** | 含左端点的字面读数 —— **它把批 3 的收口提交 `42e88740` 也算进来了** ⇒ **批 4 自己的提交数按 v0.22 口径读 `4905d4d8^..` 那一行**（48 / 收口后 49）。两个数都报，**不合并、不择优**。 |
+
+**逐条轨迹（48 个；`文件数` = `git show --name-only --format="" <sha>` 的非空行数）**：
+
+| # | sha | subject | 归属 | 文件数 |
+|---|---|---|---|---|
+| 1 | `4905d4d8` | `docs(plan): 批 4 原语迁移实施计划（19 任务）` | 计划（**+ ADR-034 补写**，同提交 2 路径） | 2 |
+| 2 | `e4901247` | `docs(shell): 修批 3 收口评审 I-1 与 7 Minor` | **批 3 收口评审修复单元**（落在批 4 区间内，非批 4 交付） | 5 |
+| 3 | `357ab117` | `test(primitives): freeze native button ratchet` | T1 基线冻结 + 按钮棘轮 | 2 |
+| 4 | `783a62ae` | `test(shell): 补 index.html 与列键名守卫并加注 ADR-034` | 前置守卫单元（T0 的 G3/G5） | 3 |
+| 5 | `6effbda5` | `test(shell): 列键名冻结的阴性样本改取自冻结点单` | 前置守卫单元（自纠） | 1 |
+| 6 | `a9c63c0a` | `feat(primitives): lock body scroll in modal` | T2（`Modal` 滚动锁 + `ConfirmDialog.tier`） | 4 |
+| 7 | `54b9b938` | `feat(primitives): add placement and align slots` | T3（**并携带 T2 的 ADR-033 加注** —— 索引串味，已登记） | 10 |
+| 8 | `8d84ecfe` | `refactor(ui): migrate bare z-index to tier scale` | T4（58 处 / 43 文件 / 17 值 → 六档） | 42 |
+| 9 | `f3b2b6ce` | `test(shell): 守卫B判据②改认字面量形态并收窄注释` | 前置守卫评审 follow-up | 1 |
+| 10 | `a25ed2c6` | `docs(adr): ADR-034 加注钉单源并回写 B15 授权` | 前置守卫评审 follow-up | 1 |
+| 11 | `0228a013` | `docs(plan): 修批 4 计划的 gitignored 链接` | T5 的**授权前置**（导出树 `docs-check` 必红的既存缺陷） | 1 |
+| 12 | `57a78c7d` | `refactor(dialogs): migrate seven overlays to modal` | T5（A1 桶 7 弹层） | 8 |
+| 13 | `09c49941` | `refactor(dialogs): migrate seven form overlays` | T6（A2 桶 7 弹层） | 8 |
+| 14 | `cc6cdadd` | `refactor(panels): migrate 4 workbenches to modal` | T7（B 桶 4 工作台 + B12 的 720 实测） | 6 |
+| 15 | `4c52cdd8` | `style(dialogs): drop decorative title emoji` | 回填单元（I-1 选 (a)：**11 处 / 13 串**） | 11 |
+| 16 | `854c0af9` | `fix(refine): keep diff badge inside heading node` | 修复单元（T7 发现的真缺陷 + 假绿判据换掉） | 3 |
+| 17 | `45ce9292` | `test(refine): pin right pane before negative assert` | 修复单元（判据防空真） | 1 |
+| 18 | `0148b5ed` | `test(primitives): pin the twenty dialog set` | T8（E 桶 2 弹层 + **20 清单钉死**） | 3 |
+| 19 | `b5c464af` | `refactor(shell): use primitives in shell fallback` | T9 半程 A（`ShellFallback`，**barrel 首次进首屏**） | 2 |
+| 20 | `4a804a58` | `refactor(ui): unify four toast implementations` | T10（四套 toast → 3 + 1 例外；**B13/B15 四条断言改写**） | 7 |
+| 21 | `bde807dc` | `refactor(shell): use modal in command palette` | T9 半程 B（`CommandPalette` → `Modal`；删 `CommandPalette.css`） | 7 |
+| 22 | `0e17e666` | `refactor(ui): migrate button style constants` | T12-1（`*Btn*` 常量族 99 处 / 35 文件） | 35 |
+| 23 | `5d485ff8` | `test(ui): pin button migration and ratchet down` | T12-2（判据 + 棘轮收紧） | 4 |
+| 24 | `1a7762bd` | `refactor(ui): replace window confirm with dialog` | T11（8 处 `window.confirm` → `ConfirmDialog`） | 9 |
+| 25 | `f6dd012f` | `refactor(ui): migrate provider settings buttons` | T12-3（补做，T11 让路后的 5 文件） | 5 |
+| 26 | `ebac9d73` | `test(ui): pin exact confirm copy and baseline sum` | T7–T12 评审修复单元（I-1 第一版 + M-1） | 2 |
+| 27 | `cbc15837` | `refactor(chat): extract launch menu from chat page` | T13-b 拆件（`ChatPage` 599 → 578 + 新件 77） | 6 |
+| 28 | `37c068aa` | `refactor(ui): migrate empty state call sites` | T13 空态切片（28 文件） | 27 |
+| 29 | `271a281c` | `refactor(ui): migrate loading placeholders` | T14-1（7 个非交集文件） | 9 |
+| 30 | `9c2a00a4` | `test(ui): read confirm copy segments in DOM order` | 评审修复单元（I-1 第二版：按 DOM 序逐段恰等） | 1 |
+| 31 | `8f5bd9f1` | `refactor(ui): migrate remaining loading placeholders` | T14-2（6 路径）+ **T13 的 2 个文件** —— 该提交**被 T13 误 `--amend`**（内容无缺失；归属与信息不实 ⇒ 登记，见 §八） | 8 |
+| 32 | `c635c0bb` | `test(ui): strengthen empty state ratchet checks` | T13（棘轮收紧：区间 → 恰等） | 1 |
+| 33 | `7457c7f1` | `refactor(ui): migrate error lines to status line` | T15 接管收口（**49 迁移 + 3 回退 + 4 判据/基线 + 1 文档 = 57 路径**） | 57 |
+| 34 | `3ed9cfe9` | `feat(ui): add title and testid slots to text` | T16-A-1（`Text` 两槽，B16） | 2 |
+| 35 | `93763ae7` | `test(ui): freeze muted text literal counts` | T16-A-2（`textBaseline` + `textRatchet`） | 2 |
+| 36 | `2360c3d9` | `feat(ui): add pill radius tier to surface` | T17-A-1（**第 5 档 `pill`**，B17/B18） | 5 |
+| 37 | `0bc09a41` | `test(ui): freeze surface literal counts` | T17-A-2（三条棘轮 240/270/24） | 2 |
+| 38 | `f2a91eb6` | `test(ui): pin loading ratchet residue counts` | T13–T15 评审收口修单元 F1 | 1 |
+| 39 | `5825fae3` | `test(ui): strip comments in status red ratchet` | F2（三红 116 → **114**）+ M-7（`MIN_CALLS`） | 2 |
+| 40 | `451db3fb` | `test(ui): make empty state ratchet probe-free` | F3（⑥a/⑥b，净克隆零红） | 1 |
+| 41 | `0b27540c` | `test(ui): tighten empty state align samples` | F4（反例样本经 `bodyOf` 取段器） | 1 |
+| 42 | `9532b189` | `refactor(ui): migrate muted text in components` | T16-B-1（24 文件） | 24 |
+| 43 | `be925809` | `refactor(ui): migrate muted text in pages` | T16-B-2（59 文件） | 59 |
+| 44 | `a9c7e300` | `test(ui): tighten muted text baseline` | T16-B-3（249 → **63**，收紧） | 3 |
+| 45 | `1ac129ae` | `refactor(ui): use shadow tokens at call sites` | T17-B-1（20 处阴影 → token） | 20 |
+| 46 | `69489f9f` | `refactor(ui): migrate card borders to surface` | T17-B-2（14 处 → `<Surface>`） | 9 |
+| 47 | `18d56cbc` | `refactor(ui): align card radii to panel tier` | T17-B-3（`6 → 8` 3 处） | 3 |
+| 48 | `199da54b` | `test(ui): tighten surface baseline` | T17-B-4（三族收紧 + `FROZEN_SURFACE_TAG_TOTAL 0 → 14`） | 3 |
+| 49 | *（本收口提交）* | `docs(spec): close out primitives batch four` | **T18** | 见 §八/V8 |
+
+- **与各任务报告提交号逐一核对**：上表 48 条的 sha 全部取自 `git log --reverse 42e88740..HEAD`（原始输出见 `tmp/t18/raw/commits.tsv`），并与各 `task-*-report.md` 自陈的提交号逐条对上：T1 `357ab117` ✓ · T2 `a9c63c0a` ✓ · T3 `54b9b938` ✓ · T4 `8d84ecfe` ✓ · T5 `0228a013`+`57a78c7d` ✓ · T6 `09c49941` ✓ · T7 `cc6cdadd` ✓ · T8 `0148b5ed` ✓ · T9 `b5c464af`+`bde807dc` ✓ · T10 `4a804a58` ✓ · T11 `1a7762bd` ✓ · T12 `0e17e666`/`5d485ff8`/`f6dd012f` ✓ · T13 `cbc15837`/`37c068aa`/`c635c0bb` ✓ · T14 `271a281c`/`8f5bd9f1` ✓（**报告写的第二提交 sha 是 `0f9dbcc9`，那已被 amend ⇒ 现存 `8f5bd9f1`**）· T15 `7457c7f1` ✓ · T16-A `3ed9cfe9`/`93763ae7` ✓ · T16-B `9532b189`/`be925809`/`a9c7e300` ✓ · T17-A `2360c3d9`/`0bc09a41` ✓ · T17-B `1ac129ae`/`69489f9f`/`18d56cbc`/`199da54b` ✓ · 前置守卫 `783a62ae`/`6effbda5`/`f3b2b6ce`/`a25ed2c6` ✓ · 回填/修复 `4c52cdd8`/`854c0af9`/`45ce9292` ✓ · 评审修复 `ebac9d73`/`9c2a00a4` ✓ · T13–T15 收口修单元 `f2a91eb6`/`5825fae3`/`451db3fb`/`0b27540c` ✓。
+- **两个不属于批 4 交付但落在区间内的提交（如实列出）**：`e4901247`（批 3 收口评审的 I-1/7 Minor 修复，并行单元在批 4 计划落库之后提交）· 以及 `4905d4d8` 本身（计划 + ADR-034）。**不为落进某个区间而合并/剔除提交**。
+- **一处历史改写（如实登记，不重写历史）**：`8f5bd9f1` 是 `git commit --amend` 的产物（T13 误 amend 到 T14 的第二提交上，原 sha `0f9dbcc9`）。评审已实证：**内容无缺失 · 无第三方在飞改动丢失 · 历史线性未重写**（`git reflog` 无 `rebase`/`reset`/强推条目）。**处置 = 登记，不 reword、不 rebase。**
+- **一处索引串味**：`54b9b938`（T3）携带了 **T2 的 ADR-033 加注**（T2 写了但未 `git add`，被并行写者带进共享索引）。**内容正确** ⇒ 登记，归因改写为「ADR-033 的 T2 加注由 `54b9b938` 落库」。
+
 ### 四、B1–B10 的实际结果
 （逐条：裁决 → 实际做法 → 证据（文件/守卫/读数））
+
+> **本节标题保留计划原样（`B1–B10`），实际覆盖 `B1–B22`**：本计划落笔时控制方只裁到 **B10**，B11–B22 是**其后陆续新增的 12 条裁决**（B11 五类切片 · B12 `RefineWorkbench` · B13/B15 守卫授权改写 · B14 `pinnable` · B16 `Text` 两槽 · B17 药丸/三棘轮 · B18 拆单元 · B19 `Text` 49 处处置 · B20 `Surface` 迁移面 · B21 守卫优先 · B22 两条口径冲突）。**标题不改的理由** = 本仓文档回写的一贯口径「原文保留 + 就地加注」，且改标题会让本节与计划上文的自审记录对不上号。
+
+| # | 裁决（摘要） | 实际做法 | 证据（文件 / 守卫 / 读数） |
+|---|---|---|---|
+| **B1** | 11 锚定菜单不迁、只落 `popover` | **不迁 `Modal`；53 处落档里 26 处落 `popover(200)`**；11 个菜单逐条登记在案 | 规格 §11-2 加注的例外表（11 行 · 逐条理由）· `ADR-033 §7` 加注「适用对象 = 对话框类」· `ui/zIndex.guard.test.ts` 的 `FROZEN_NUMERIC_ZINDEX`（11 处菜单**已无裸值** ⇒ 不在名单）· `tmp/t4/zindex-map.md` §2 表 A · `dialogMigration.e.test.ts` ②（`NON_MIGRATED_14` 不得 import 原语） |
+| **B2** | 3 覆盖层不迁、例外登记 | **3 条裸值保留**（`10` / `999` / `1000`）+ 逐条 `why` >20 字；`ScreenSelectOverlay` **只保留根**（子层迁 `raised`） | 规格 §11-2 例外表第 12–14 行 · `ZINDEX_ACCOUNTS`（唯一注册表）· 守卫 ④/⑤（注册表 ↔ 名单一一对应 + 逐行对拍）· `.e` ② 的 `34 − 20 == 14` |
+| **B3** | 验收按 20；28 并列登记 | **20 = 验收**；**28 / 34 / 6 并列**；20 的构成 `A14+B4+E2` **钉在常量里** | `.e` 的 `DIALOG_20`/`ADR033_28`/`CROSS_LINE_34`/`CROSS_LINE_ONLY_6`/`NON_MIGRATED_14` 五数组 + 常量自检 + 三条集合判据 · 规格 §10 批 4 ↳ 行与 §11-2 加注 · `docs/versions/v0.22.md` 批 4 节（消歧归批 8 的**跨文档**对账仍留） |
+| **B4** | `Button` 范围 + 棘轮 | **口径变化写明**：107/63 **不可考**（`btnStyle` 全仓 0 命中）⇒ 三口径并列（510/121 · 80/55 · 103/37）；迁 `*Btn*` 常量族 + 新代码 + **原生按钮棘轮**；**余量 ≈407 处登记批 5/7** | 规格 §5.1 的 Button 行加注 · `nativeButtonBaseline.ts`（`FROZEN_NATIVE_BUTTON_TOTAL 510 → 394` · 114 键）· `nativeButton.ratchet.test.ts`（6 用例，5 判据 5/5 有牙）· `buttonMigration.test.ts` ④（`FROZEN == sum(entries)` + `≤ PRE_T12`）· T12 的逐文件 Δ 之和 = −99 == 形状表总数 |
+| **B5** | barrel 导入（+3.41 kB gzip 为诚实代价） | **走 barrel**；实测代价 **+2,348 B（T9 两半）**，**低于上界**；CSS 不计入判据（只报告 62.63 kB / 14.42 kB gzip） | 本节 §二 门禁 6/7 的 Δ 与机理 · `ADR-033 §1` 的引用（唯一公共入口）· `ui/primitives/index.ts` 未破 |
+| **B6** | 缺口逐判（≥3 ⇒ 改原语；否则特殊条款） | **四个缺口逐条落地**：① `Modal` body 滚动锁（20 共用 ⇒ **改原语**）② `ConfirmDialog.tier`（**走特殊条款**，≥3 主判据实测不成立）③ `Toast.placement`（1 消费者 ⇒ 特殊条款，只加**一个具名 prop**）④ `EmptyState.align`（44 处 ⇒ 只开**一个受控排版档位**，**不放开裸 `className`**） | `Modal.scroll-lock.test.tsx`(6) · `ConfirmDialog.tier.test.tsx`(7) · `Toast.placement.test.tsx`(6) · `EmptyState.align.test.tsx`(8) · **ADR-033 后果④/⑤ 的加注**（含 T11 对「依据」的更正：真实依据 = 特殊条款）· **阈值判据已写进 ADR-033 后果⑤**：同一缺口 ≥3 调用点共用 ⇒ 改原语；「结构上无法表达」是唯一例外通道 |
+| **B7** | `ChatPage` 先拆后迁 | **两个原子提交**：`cbc15837` 拆件（599 → **578** + 新件 `ChatLaunchMenu.tsx` **77** + 其测试 **79/5 用例**）→ `37c068aa` 再迁移；`ChatPage:504/505` 的 2 条裸 z-index **委托账已收口** | 守卫的第 7 个 `it`「`ChatPage` 的委托面已由 T13-b 收口（裸值消失 ∧ 新家改走六档）」· `SPLIT_MOVES` 守恒实测 3+2 == 5 · 报告 §0/§2.2（含 M-3 的行数更正） |
+| **B8** | markdown 归一不并入（登记批 5/7） | **全批零触碰**；规格 §12 的行**已在 `42e88740`（批 3 收口）就地加注**并写明去向 | 规格 §12 该行加注（⚖️ 已裁定：不并入批 4 ⇒ 批 5 或批 7）—— **本次不重复加注**（V4 的存在性核对通过；见 §八 偏差 ⑨） |
+| **B9** | 接受「迁移即上线动效」 | **逐字声明「只有接缝、没有纲领；三档强度 / 双基调 / GSAP 在批 6」**；未压制任何原语动效、未装 GSAP | 本计划本节 §五 · `docs/versions/v0.22.md` 批 4 节「诚实代价」· T2/T3/T4/T7/T8/T10/T13/T16-A/T17-A/T17-B 各自报告的 B9 段 |
+| **B10** | 零新增依赖 | **全批 `app/package.json` / `package-lock.json` 零 diff**（零新增依赖）；`any` 0 | `git diff 4905d4d8^..HEAD -- app/package.json app/package-lock.json` = **空** · 各单元报告自陈 · `tsc --noEmit` 0 错 + 禁 `any` 纪律 |
+| **B11** | 五类走切片 + 棘轮（**+ §11-3 必须加注中间态**） | **五条棘轮全部落地并按实测收紧**；**规格 §11-3 已就地加注中间态**（含「若选 (A) 全量的余量清单在此」+ 判据限度） | 规格 §11-3 加注 · 本节 §一 的五类终态表 · `emptyStateRatchet` / `loadingRatchet` / `statusLineRatchet` / `textRatchet` / `surfaceRatchet` 五个文件（含各自的防真空阳性对照 + 逐文件下界/牙齿 + 防僵尸豁免） |
+| **B12** | `RefineWorkbench` 走 (a) 迁 `Modal --l`，**不可读则 STOP** | **走 (a)、未 STOP**：headless Chrome 真探针实测「720 下两栏 328×2 · 横向溢出 0 · 栏内 `clientH 451 / scrollH 680·800`」⇒ **全文可达 + 栏内独立滚动**；**观感变化逐条登记** | T7 报告 §3.2/§3.3 · 观感登记（面板 1137.59 → 720 = **−36.7%** · 两栏 553 → 328 = **−40.7%** · 每行 46 → 28 字 · 顺带修掉 720 下 32px 水平溢出）· `dialogMigration.b.test.ts`（18 用例）· `PANE_MAX_H = calc(85vh − 200px)`（有/无对照实测：无它则同步滚动静默失效） |
+| **B13** | 批 3 三条 `TopBar.test.tsx` 断言授权改写 | **改写为原语层 / 渲染级断言**（**等价或更强**、各带变异体）；`TopBar.persistent.test.tsx` **一字未动** | T10 报告 §2 · 四条真身 = **`bde807dc:app/src/shell/TopBar.test.tsx:200-213`**（`:182–:185` 是 T9 之前的时点 —— 行号更正已进 `rulings.md` B13 末与本节）· M7–M11 变异体全红 |
+| **B14** | `pinnable`：代码对、ADR 错 ⇒ 只加注 ADR | **未动 `columnRegistry.ts`、未动其 13 行映射判据**；ADR-034 加注①（`true` 1 行 / `false` 12 行，`notes-outline`） | `ADR-034` §2 下加注①（`+27/−0`，正文一字未改，`783a62ae`）· 本节 §一 未涉及 |
+| **B15** | B13 授权**扩到 4 条**（含 `:182`） | **4 条逐条改写**：3 条搬原语层 + `:182` 改**渲染级**（渲染真实装配件 `AiToast`，断言 `getByTestId("ai-toast")` + role/aria-live/类名/`zIndex`/无行内 `top`）；**语义保住** | T10 报告 §2；`rulings.md` B15 末的行号更正；`ADR-034` 加注⑤ S-3 行的「时点差更正」（`a25ed2c6`，`+5/−4`） |
+| **B16** | `Text` 只加 `testId` + `title` 两个受控槽 | **只加两个属性级槽**（交互类一律不加）；正反两向用例 | `Text.tsx`（89 → 119）· `Text.test.tsx`（12 → 16 用例）· `textBaseline`/`textRatchet` · 迁移实测用槽 **12 处**（`testId` 8 · `title` 5，一处同用） |
+| **B17** | 三条棘轮 + 药丸按切片实测判（≥3 ⇒ 加档） | **切片内 `999` 实测 3 处 ⇒ 加第 5 档 `radius="pill"`**；值映射照计划；调用点零 `boxShadow` 字面量；**补了「行内 style 覆盖 Surface」机器判据（正反 fixture + 变异）** | `2360c3d9`（5 文件）· `Surface.css` 的 `var(--ed-radius-pill, 999px)` 兜底 · **规格 §4.2 加注**（第 5 档 + 3 处 + 代价）· `surfaceRatchet.test.ts` ⑦（域内 0 命中） |
+| **B18** | T16/T17 一律拆「地基 A + 迁移 B」 | **四个单元（T16-A/B · T17-A/B）各自过门禁、各自独立评审**；`sliceScan.ts` 两侧**都未改**（零字节） | `3ed9cfe9`/`93763ae7`（A）· `9532b189`/`be925809`/`a9c7e300`（B）· `2360c3d9`/`0bc09a41`（A）· `1ac129ae`/`69489f9f`/`18d56cbc`/`199da54b`（B）· `sliceScan.ts`（76 行，`git diff` 为空）· **B18 附注**：`style-seams.test.ts` 归 T17-A 走 (B)，5 文件一并更新（`SURFACE_CLASSES` + `toHaveLength(13)`）—— 且**如实登记它是自计数式**（MS1b 实测绿） |
+| **B19** | T16-B 的 49 处待裁决：B 类迁 / A 类逐处判 / C 类登记 | **B 类 16 处全迁** · **A 类 6 迁 / 26 登记**（品牌青/粉/靛蓝/三红无等价档）· **C 类 2 登记**；`tone` 一律 `ink-3`；**非弱化文本一处未动**；例外**带非空理由 + 防僵尸豁免** | `textBaseline.RESIDUAL`（44 条 / 7 类）· `tmp/t16b/migrated.md`（185 行 + 手工 1 处 = 186）· 变异体 8 棵（M1/M2/M3/M4/M5/M7 红 + M6 反例绿）· ⚠️ **「24 处非弱化文本」作废 ⇒ 属性级重扫实为 6 处**（见 §八 偏差 ②） |
+| **B20** | T17-B 的迁移面判定（真面 172 + 三去向 + 非 Surface 圆角不迁 + 阴影走 token） | **只迁整圈 172 里够格的 21 处 → 实迁 14**；**57 分隔线 + 11 条件色不迁（登记）**；`6→8` **单独成提交**（`18d56cbc`）；`boxShadow` **20 处 → token（4 处有理由不改）**；棘轮**只降**并给对拍 | T17-B 报告 §4（`172 = 96+14+4+4+4+28+22`）· `surfaceResidual.ts`（31 + 13 条）· `SHADOW_RESIDUAL`（24 条）· `FROZEN_SURFACE_TAG_TOTAL 0 → 14` · 本节 §五「诚实代价」 |
+| **B21** | **B1/B2 守卫优先于「顺手迁移」**（维持守卫、不放开） | **两处实例**：T12 放弃 2 文件 5 处 · T16-B 回退 **9 处**（`b1-non-migrated`，7 文件）；**T17-B 回退 0 条**（动手前就用名单过滤）⇒ 三处**均未改守卫** | `buttonMigration.test.ts` ④ + `dialogMigration.e.test.ts` ②（本批**零改动**）· `textBaseline` 的 `b1-non-migrated` 9 处 · T17-B §6 的 14 文件表（`ui/primitives` 命中数保持 **0**）· **follow-up**：批 5/7 要迁这 14 个文件的排版**必须先裁决守卫范围** |
+| **B22** | T17-B 两条口径冲突：接受保守迁移面；**「254 处半径对齐」只落 9 处、维持现状** | **维持现状**：实迁 14（边框）/ 实改 9（`6→8`）；**不机械拉齐其余 245 处**；**172 / 254 两个数在回写时带分区与去向**；解锁路径登记为 follow-up | 本节 §八 偏差 ①/②（含完整分区）· 规格 §5.1 的 Surface 行加注 · `docs/versions/v0.22.md` 批 4 节「诚实代价」 |
+
+> **另：`rulings.md` 里的三条「另裁」（不属于 B1–B22 编号，但同属控制方裁决）**：① **T3 的 STOP**：`EmptyState` **不再加第二个档位**（`align` 即 B6 授权的那一个）—— 落地为「只开 `align`」；② **T4/T5/T6 评审的 3 条 Important**：I-1 选 (a) **真去 emoji**（回填单元 `4c52cdd8`，**11 处 / 13 串**）、I-2 **只改文档**（实测零收严）、I-3 **T4 的有意值收敛必须 durable 登记**（落在本节 §一 ① 与规格 §11-2 加注）；③ **T13 的同行双语义撞车**：`AsrConfusionPanel.tsx:112-115` 归 T13 一次性拆（`Loading` + `EmptyState`，文案逐字不变），T14 排除该行的加载臂。
 
 ### 五、诚实代价
 （**B5**：barrel 的 +3.41 kB 上界 + CSS 2.18 kB 不计入 + 实测 Δ 与 dist 出处 · **B9**：逐字写出「**只有接缝、没有纲领**」· 五类的观感变化规模（如 `borderRadius 6→8` 275 处、604 处字号**未动**）· 20 个弹层的档位宽度 Δ）
 
+1. **B5 的 barrel 代价（实测，不是估算）**：**上界 +3.41 kB gzip JS**（控制方 B5 给的界），**实测 T9 两半 = +2,348 B gzip（+2.35 kB）**（ShellFallback 半程 +2,159 · palette 半程 +189），**低于上界**；**CSS 不计入 200 kB 判据**，本次真构建的 CSS = **62.63 kB 原始 / 14.42 kB gzip**（3 个文件）。**出处**：`app/dist` mtime **2026-09-12 19:54:33** @ `HEAD = 199da54b`，入口 chunk `index-4qKuUwYr.js`（108,099 B，sha256 前 16 位 `C00AFAE4C7100300`）；**测量方式 = `node scripts/check-bundle-budget.mjs`（真实 `npm run build`，取 `tmp/build.lock`，第 1 次即取到）**。**从计划基线 97.16 kB 到终态 100.30 kB = +3.14 kB**，逐项机理见 §二。
+2. **B9 的逐字声明**：**「只有接缝、没有纲领」—— 三档强度 / 双基调 / GSAP 在批 6。** 批 4 **没有**交付动效系统：它只把 `usePresence` 的 `[data-phase]` 三态、`--ed-dur-*` 时长变量与 `motion.css` 的 reduced-motion 块**接到了真实调用点**上（14 个弹层 × 3 组、toast × 3、空态/加载/错误行各一组）⇒ **界面第一次真的会动**（规格 §10 逐字「观感从批 4 开始变」），但**手感未设计、未调参、未做双基调**。**验收不得把接缝当最终手感，也不得声称动效系统已交付。**
+3. **五类的观感变化规模（逐条给数，含「未动」的那一半）**：
+   - **卡片边框 / 圆角 / 阴影**：`1px solid #e5e7eb` **240 → 226 处**（迁 14 为 `<Surface>`）；`borderRadius: 6 → 8` **实改 9 处**（**而计划预估是 254 处** ⇒ 其余 **245 处维持现状**：控件 161 · NM14 25 · 交互 13 · 透明 13 · 间接 1 · 有底色 41 里含语义色条 30）；**20 处阴影值换 token（其中 1 处有损**：`AiConversationDock` 的方向性投影换成双向环境投影）；顺带的**颜色变化**：边框冷灰 `#e5e7eb` → 暖纸 `--ed-border #EAE7E0`（14 处）· 近白底 `#f8fafc/#f9fafb/#fafafa/#fcfcfd` → `--ed-bg-canvas #FBFAF8`（8 处）。
+   - **弱化文本 `Text`**：**186 处**改由 `Text tone="ink-3"` 接管（对比度 2.54:1 → **5.13:1** 的那一支）；**63 处例外一处未动**；**字号越界 558 处 / 120 文件一处未动**（批 5/6 才做映射）；已知视觉 Δ = **行高由六档字阶类接管**（原 `line-height: normal`）—— 被迁元素上仍留 `fontSize`/`lineHeight`/`fontWeight: 600` 各 1–2 处的越界项（逐处写进 `RESIDUAL` 理由）；**`ink-4` 全程 0 使用**（§4.3 条件③在仓内无实现）。
+   - **空态**：切片内 **33 → 5 处**内联灰字空态；`compact` 20 处 ⇒ 空气略收；字阶 11/12/13 → 第 3 档（15.5px）；`GoalDetail:257` 的 `span → 块级`；`AiProviderSettings` 新增主行动按钮。
+   - **加载**：**10 个文件**的加载态由手写灰字 → `Loading`/`Skeleton`（**6 处骨架**：GoalDetail / RefineLaunchDialog / RefineWorkbench / ReviewSessionPanel / WebArticleView / ReviewPage）；`SessionListBody` 等 8 处余量未动。
+   - **错误行**：**49 个文件**改走 `StatusLine`（`display:flex; gap:8px`）；**6 个文件的迁移被回退**（B21）；三红字面量剩 **114 处 / 67 文件**。
+4. **20 个弹层的档位宽度 Δ（「向上取档」的代价，逐条）**：`GoalPlanApprovalDialog` **560 → 720**（+160）· `GroupCreateDialog` **340 → 380**（+40）· `KnowledgeConceptDialog` **480 → 520**（+40）· `KnowledgeSystemWizard` **560 → 720**（+160）· `ProofreadPanel` **680 → 720**（+40）· `ModelCardFromNoteDialog` **460 → 520**（+60）· `RefineLaunchDialog` **680 → 720**（+40）· `PracticeQuestionsOverlays` **560 → 720**（+160）· `SopRunOverlay` **640 → 720**（+80）· `TaskLaunchDialog` **360 → 380**（+20）· `NoteAiDialog` **460/520 → 520** · **`RefineWorkbench` 1200/90vw → 720（−480）**（B12 的可见变化：并排 → 单栏可读，两栏 553 → 328）；其余 8 个弹层档位不变。**附加**：遮罩统一 `rgba(26,26,26,.34)`（原 `0.45/0.18` 混用）· `max-height` 统一 `85vh` · 标题 emoji **11 处 / 13 串被去掉**（`🗑` 等语义字符保留）· 关闭钮由自绘改为 `Modal` 统一（`${testId}-close`）· `RefineWorkbench` 的底栏由左对齐 → 右对齐。
+5. **T15 的守卫回退代价**：为守住 B1/B2，**6 个文件逐字回退**（3 个已提交的 + 3 个从未提交的）⇒ **迁移面 55 → 49**，**三红字面量回升 +6 行**（`emptyStateRatchet` 例外 5 → 8 条）。这是**明确选中**的代价（B21：代价不对称）。
+6. **`Text` 的行高接管是**已知**视觉 Δ**：jsdom 不排版、本批无像素证据 ⇒ **批 8 的像素探针才是判据**（本节 §六 已列）。
+7. **贴边文件（动它必须先拆）—— 控制方实测口径（`[System.IO.File]::ReadAllLines($p,[Text.Encoding]::UTF8).Count`）**：`ui/primitives/dialogMigration.e.test.ts` **300/300（余量 0 ⇒ 禁止再碰）** · `ui/primitives/textBaseline.ts` **299** · `ui/primitives/loadingRatchet.test.ts` **299** · `ui/primitives/emptyStateRatchet.test.ts` **296** · `pages/NotesPage.tsx` **300/300** · `ui/primitives/surfaceRatchet.test.ts` **287** · `ui/primitives/textRatchet.test.ts` **266** · `pages/ChatPage.tsx` **578/600** · `shell/CommandPalette.tsx` **203/220**。**规则：动它们之前必须先拆件（或先提预算并登记）；`dialogMigration.e.test.ts` 余量 0 ⇒ 任何新增都必须先挪走一段。**（另有 `ui/primitives` 侧：`surfaceBaseline.ts` 258 · `surfaceResidual.ts` 82 · `statusLineRatchet.test.ts` 191 · `statusLineBaseline.ts` 93。）
+8. **一条既有 flake 未消除**：`components/KnowledgeGraphView.test.tsx` 的负载敏感用例（**批 3 开工前就有**），本批多份报告各观测到 1 次、**孤立复跑均全绿** ⇒ 非本批引入，未定位根因。
+9. **计划预算被突破的清单（不是违规，是记账）**：`Modal.scroll-lock.test.tsx` 202/180 · `dialogMigration.a2.test.ts` 268/220 · `dialogMigration.b.test.ts` 224/200 · `dialogMigration.e.test.ts` 286/240 · `confirmMigration.test.tsx` 297/220 · `buttonMigration.test.ts` 268/220 · `toastMigration.test.tsx` 235/200 · `nativeButton.ratchet.test.ts` 263/200 · `textRatchet.test.ts` 214/260（**在预算内**）· `loadingRatchet.test.ts` 292/220 → 299 · `emptyStateRatchet.test.ts` 287/260 → 296 · `zIndex.guard.test.ts` 284/200 · `surfaceRatchet.test.ts` 260/260（恰好达标）。**绑定约束（≤300 ∧ 不新增豁免登记）全部满足**；批 3 已有 4 例同类先例，口径一致：**预算是估算，不为落进预算删判据。**
+
 ### 六、未验证（诚实单列，**不许含糊**）
 （真机/WebView2 未跑 · 像素归批 8 · 20 个弹层中无测试覆盖的那些（**逐条列名**）· `App.tsx` 无渲染级测试面 · 五类迁移的观感无断言面）
+
+1. **真机 / WebView2：未跑 —— 用户已裁决跳过验证**（不是「本批未做」，是**已裁决**）。**本批任何地方都不得出现「已在真机确认」类表述**；顶栏/面板的像素证据即使存在（T7 的 `RefineWorkbench` 探针）也来自 **headless Chrome，不是 WebView2**。
+2. **像素 / 排版：归批 8**。jsdom **不排版、不加载样式表**（`vitest.config.ts` 的 `css` false）⇒ 本批所有「观感变化」都只有**类级/属性级/源码级**证据；**本批无视觉回归基线**。逐项清单：`6→8` 的 9 处、边框暖色、`canvas` 底、20 处阴影 token 化（含 1 处有损）、`Text` 的行高接管、20 个弹层的档位宽度 Δ、`StatusLine` 的块级/间距、`ChatLaunchMenu` 的锚定几何、`align="start"` 的实际观感、`belowNav` 的 `top` 落点与 `right 16→18` 的 2px 差、`Modal` 退场 160ms 的手感、`iconBtn` 宽度 +12px、`RefineStrategyPicker` 胶囊 chip 变圆角矩形。
+3. **20 个弹层中「无测试覆盖」的那些（逐条列名）**：20 个文件里**只有 5 个有同名测试**——有测试面的是 `ChatSaveNoteDialog.test.tsx` · `InterviewDialog.test.tsx` · `RefineWorkbench.test.tsx` · `KnowledgeSystemWizard.test.tsx` · `TaskLaunchDialog.test.tsx`；**无测试覆盖的 15 个**：`GoalPlanApprovalDialog` · `GraduateDialog` · `GroupCreateDialog` · `GroupDeleteConfirm` · `KnowledgeConceptDialog` · `KnowledgeDecisionForm` · `KnowledgeModelDialog` · `ModelCardCreateDialog` · `ModelCardFromNoteDialog` · `NoteAiDialog` · `PracticeQuestionsOverlays` · `ProofreadPanel` · `RefineLaunchDialog`（`RefineLaunchDialog.vision.test.tsx` 只测视觉开关，**不测弹层形态**）· `SecondPassPanel` · `SopRunOverlay`。**并且**：`.e` 的判据只钉**源码形态**（20 个调用点 0 命中 ∧ `Modal.tsx` 恰 1 命中），「这 20 个调用点**各自渲染出来**的元素真的带 `role="dialog"`」**没有逐点渲染级断言**；`PracticeQuestionsOverlays` / `SopRunOverlay` 这两个弹层**从未被任何测试渲染过**（这也是 `.e` 必须存在的理由）。
+4. **`App.tsx` 无渲染级测试面**（仓内**没有** `App.test.tsx`）⇒ 顶栏/AI toast/命令面板在**真实装配**下的形态只有 T10 的 `ai-toast` 渲染级断言一条（B15 的改写产物）与真机证据（未跑）。`ChatPage` 同样没有 `ChatPage.test.tsx`。
+5. **五类迁移的观感无断言面**：五条棘轮都是**字面量计数**（处数/行数/键数），**不是**「渲染出来好不好看」的判据；`FROZEN_SURFACE_TAG_TOTAL = 14` 只证「14 个 `<Surface>` 开标签存在」，不证它们「看起来是一张卡」。
+6. **暗档（`[data-theme="dark"]`）的反相描边未接线（B9）**：`--ed-shadow-*` 的暗档值是白色反相描边，但**暗档开关在批 6 之前不存在** ⇒ 迁移后的 14 处 `<Surface>` 与 20 处 token 阴影**在暗档下无人能验**（本批只保证「值来自 token」）。
+7. **棘轮对 `style={S}` 间接写法是假阴**（`surfaceRatchet` ⑦ 的已知边界，写在 `overridesSurface()` 的文档注释里）；同族的还有：`stripComments` 的「`/` 前是 `<` 即认为正则起点」启发式会把 `</StatusLine></div>` 误判成正则并抹掉中间标签（实测 `KnowledgeSampleView.tsx:135`）⇒ 依赖它的棘轮可能**少算**极少见形态的命中（**假阴性方向**，本批迁移脚本另用保守掩码）。
+8. **`emptyStateRatchet` 的 ①「本批已触碰」无法在测试内复算**（需要 git 历史）⇒ 那一半只在 **gitignored 探针在场时**由 ⑥a 覆盖（净克隆里 `skipIf` 跳过，⑥b 用盘上可复算的第二源顶上）。
+9. **`cargo` 未复跑**（本批零 Rust 改动）—— 判据 2300/0/6 是**批 3 的读数**，不是本批的。
+10. **本机无 `pwsh`（只有 PS 5.1）** ⇒ 本节一切命令以 `powershell` 语义执行；`cmd /c "… & echo EXIT=%ERRORLEVEL%"` 是**错的**（`%ERRORLEVEL%` 在解析期展开，报的是**上一条命令**的退出码）—— 本节所有 exit code 均改用 `$LASTEXITCODE` 采集，**先前用该写法得到的两处 `EXIT=0` 已作废重测**。
+11. **`tmp/t4/tier-map.mjs` 已陈旧（exit 1）**：它校验的是 T4 时点的逐处快照，T5–T8 之后按定义失效（**不是**守卫退化）⇒ 本节 §一 ① 的「分档去向」只作历史记录引用。
+12. **未验证的老账（来自各单元，逐条保留）**：T7 的三个工作台**没有截图**（只有 `RefineWorkbench` 有）· 超长不可断 token 在两栏内的表现未实测 · `ConfirmDialog.tier` 的**真实消费者在批 4 结束时仍是 0**（T11 的 8 处全在顶层、不传 `tier`）· `Toast` 的 `belowNav` 档下 `--ed-toast-stack-offset` 失效（多条并发同 `top` 重叠，无判据、jsdom 也验不了）· `--ed-nav-h` 兜底 56px 与 `tokens.css:73` **无绑定判据**（两处各自漂移不会报错）· `Modal` 的滚动位置在 `overflow:hidden` 后**不恢复**（无 `position:fixed` + `scrollTop` 补偿）· `MIN_CALLS` **未与 T15 的探针表逐格对拍** · `loadingRatchet` 的 `describe` 标题仍写「冻结 18 → 第一提交 13」（历史标签，未随第二次收紧改名）· A 类 26 处的「无等价档」是**语义判断**不是机器证明 · `bundle-eager-graph` 把 `import type` 计成静态边（批 3 follow-up #2，本批未修）。
 
 ### 七、follow-ups（逐条具名归属）
 （批 3 的 #2/#15/#16/#17 + 本批新增的可执行项，**每条给归属批次**）
 
+**A. 批 3 留下的（逐条点名，逐条给本次处置）**
+
+| 批 3 # | 项 | 本次处置 / 归属 |
+|---|---|---|
+| **#2** | **`bundle-eager-graph.mjs` 把 `import type` 计成静态边**（11 个假阳性文件）⇒ 修工具；**改它会改历史读数 ⇒ 必须新旧口径并列** | **本批未修**（工具口径 89 与真实边 65 **并列报告**，见 §二 门禁 7）⇒ **归属：批 5 或独立小单元**（同一批内同时提供新旧口径） |
+| **#15** | 规格 §6.2「本次改动」里的 **`会话·详情头改粘性`** 与 **`笔记·工具栏三层合并为单行`**（= ADR-034 的 S-4） | **本批实测未做**（`git diff … \| Select-String '^\+.*(sticky\|粘性)'` 为空；`NotesPage.tsx` 无 `Toolbar`）⇒ **归属：批 5（视图层样板）**；若批 5 未做 ⇒ **回落批 8**。落点：`ADR-034 §登记` 加注⑦ |
+| **#16** | **3 套 markdown 渲染器归一**（B8：不并入批 4） | **本批零触碰**（规格 §12 的行已在 `42e88740` 加注）⇒ **归属：批 5 或批 7** |
+| **#17** | **`ADR-034`（壳层）未写** | **✅ 本批已做**：`4905d4d8` 补写 + `783a62ae` 五条加注与两条新守卫 + `a25ed2c6` 钉单源/回写 B15；已进 `docs/adr/README.md` 索引 ⇒ **结清**（剩余 **ADR-035** 仍顺延批 6） |
+| 其他批 3 项（非点名但同源） | #9（命令面板/AI toast/dock 裸 900 → 批 4） | **✅ 已做**（`bde807dc` · `4a804a58` · `8d84ecfe`）· #3（新判据必带变异体）= 本批**强制执行**（5 条棘轮 + 20 弹层 + toast + confirm + button 全部各带变异体）· #1（门禁 `--staged` 模式）= **仍归批 8**（本批实测提交树不自洽窗口见 §三 的 `8f5bd9f1` 与 T11/T12 的让路） |
+
+**B. 本批新增（逐条：内容 + 归属）**
+
+| # | 项 | 归属 |
+|---|---|---|
+| B-1 | **五类棘轮余量**（各自的计数与去向）：空态 **例外 8 + 余量 5 文件** · 加载 **8**（4 backlog + 3 `button-busy` + 1 例外）· 错误行 **114 处 / 67 文件** · 弱化文本 **63 处 / 44 文件 / 7 类** · 卡片边框 **226 / 108 + 261 / 109 + 24** | **批 5/7**（五条棘轮已冻结、只许降；`RESIDUAL` 每条带理由 + 防僵尸判据） |
+| B-2 | **11 锚定菜单的退出语义**（含 `SelectionActionMenu.tsx:78` 的 `window` **捕获相** ESC 残留 + 4 处元素级 `onKeyDown`：`GroupSidebarRow`/`LinkEntityPicker`/`SessionDetailHeader`/`SessionListRow`） | **批 5 或批 8**（B1 裁定不迁；改它们 = 改菜单退出语义） |
+| B-3 | **`Text` 的 558 处字号越界**（`9px×6 · 10px×95 · 10.5px×16 · 11px×431 · 11.5px×10`）—— 映射规则已在 `tmp/t16a/slice.md` ⑤ | **批 5/6**（`11.5` 只在 `font="mono"` 时合法；其余 `9/10/10.5/11 → 12`） |
+| B-4 | **`ink-4` 与 §4.3 条件③**（审校模式 ≥4.5:1 在仓内**无实现**）⇒ 本批 `tone` 一律 `ink-3`、`ink-4` **0 使用** | **批 5/6**（补「审校模式」之后 `ink-4` 才可能被合法使用） |
+| B-5 | **`b1-non-migrated` 9 处（2.54:1 冻结）+ `NON_MIGRATED_14`**：批 5/7 若要迁这 14 个文件的排版，**必须先由控制方裁决 B1/B2 的守卫范围** | **批 5/7（前置裁决）** |
+| B-6 | **token 真源补 `pill` 档的四处**：`app/scripts/gen-tokens.mjs` · `ui/tokens.gen.ts` · `ui/tokens.css` · `ui/tokens.drift.test.ts:52` 的 `toEqual([3,5,8,10])` | **批 5/6**（token 层；现走 `var(--ed-radius-pill, 999px)` 兜底） |
+| B-7 | **`Surface` 的 DOM 属性透传**（`onClick`/`id`/`aria-*`/`data-*`/`dangerouslySetInnerHTML`/`ref`）⇒ 解锁 **3 处**已点名 + 未来 21 处 | **批 5 与视图层一并裁**（B22 第 3 条①） |
+| B-8 | **透明容器是否接受多一层底**（+**28 处**） | **批 5**（B22 第 3 条②） |
+| B-9 | **错误行的「位置」问题**（`StatusLine` 迁移只解决墨度/结构，错误仍在列表原位、可能落在视觉盲区） | **批 5** |
+| B-10 | **`SURFACE_CLASSES` 自计数式守卫是否升级为真判据**（MS1b：拿掉 `pill` **且**同步把 13 改回 12 ⇒ 绿；完整性方向的牙在 `style-contract.test.ts` 的 `Record<SurfaceRadius,string>`） | **批 5/8**（评估，不是缺陷） |
+| B-11 | **`MIN_CALLS` 与 T15 探针表逐格对拍**（M-7 的下界值由 `scan-statusline-calls.mjs` 扫出，未与 `tmp/t15rec/migrated-table.md` 对拍） | **批 5/8**（或下一个动 `StatusLine` 的单元） |
+| B-12 | **`docs/tech-debt/review-2026-09-11.md`**（**191 KB** · mtime **2026-09-11 01:32** · `git log --all -- docs/tech-debt/` **0 命中** ⇒ **批 4 之前的既有未跟踪残留**，本批未触碰） | **待用户裁决**（批 3 follow-up #4 同款；`docs-check` 已用「故意不写链接」规避断链） |
+| B-13 | **批 8 的像素探针是观感判据**（本批 §六 列出的全部像素项） | **批 8**（用户已裁决跳过真机验证 ⇒ 本批不做、也不声称） |
+| B-14 | 其余零散项（逐条带出处）：`Toast` 的 `belowNav` 堆叠失效（多条并发同 `top`）· `--ed-nav-h` 兜底 56px 无绑定判据 · `Modal` 滚动位置不恢复 · `loadingRatchet` 的 `describe` 历史标签 · `textRatchet`/`surfaceRatchet` 的锚是「值 > 0 的具名文件」（迁移归零后需换锚）· `bundle-eager-graph` 的 `import type`（= 批 3 #2） | **批 5/6/8**（逐条已在 §六 列名） |
+
 ### 八、与计划的偏差（本节自陈）
 （实施中偏离计划处逐条列：哪一步 · 为什么 · 代价 · 谁批准）
+
+> 口径：**这里只写「实际 ≠ 计划」**，不重复 §四 的裁决落点。每条给「偏离 · 为什么 · 代价 · 批准」。**本批**所有未经批准的规模缩小都在此列明**，不许只换数字。
+
+1. **计划预期的「`6→8` **254 处**观感变化」只落地 9 处**（**本批最大的计划-实际偏差**）。**为什么**：254 是**切片全域计数**，不是 Surface 形态计数；B20 第 3 条把迁移面限定为「有背景 ∧ 容器 ∧ 非交互 ∧ 直接形态 ∧ 非 `NON_MIGRATED_14`」⇒ 够格只有 21 处、实迁 **14**（`6→8` 实改 **9** = 6 处随 `<Surface radius="panel">` + 3 处就地改）。**完整分区（非重叠，合计 254）**：**控件 161** · **NM14 25** · **交互容器 13** · **透明容器 13** · **间接形态 1** · **有底色容器 41**（其中标准卡边框 11 = 迁 6 + 就地 3 + 余 2；**语义色提示条 30**）。⇒ **其余 245 处归批 5/7/8**（控件档 / 语义色条 / NM14）。**代价**：批 5 的 `Button` 迁移会**再碰一次**这些元素（两轮工作，但避免了两轮返工）。**批准**：控制方 **B22 裁决第 2 条：维持现状，不机械拉齐**（理由：161 处是控件、25 处被 B21 挡着、现在硬拉齐会与批 5 两轮返工，且是一次无测试面的 245 处观感变化）。
+2. **计划「卡片边框 **172** 处」在 B20 第 3 条约束下只有 21 处够格、实迁 14**。**完整分区**：`172 = 控件 96 + NM14 14 + 锚定菜单 4 + 交互 4 + 条件底色 4 + 透明容器 28 + 有底色容器 22`（控件 96 = 控件标签 74 + 控件常量 22）。**另外两类结构上表达不了**：**单向分隔线 57 处**（`bordered` 只出整圈）· **三元条件边框色 11 处**（`interactive` 给不了任意状态色）⇒ **一处未动、只登记**。**代价**：边框迁移面比计划小 **158 处**（172 → 14）。**批准**：B20 第 3 条 + B22 第 1 条。
+3. **`Text` 的「24 处非弱化文本」作废 ⇒ 属性级重扫实为 6 处**。**为什么**：T16-A 的**行级**归属把「同行 `background:` + `color:` 三元」记成了 background（例 `LearningLibraryEngineSection.tsx:104` 的 `#9ca3af` 其实在 `color:` 上）。**属性级**重扫 = `color` 241 · `background` **3** · `border` **2** · 常量/映射 **3** = **249** ✔。**代价**：无（**处置不变：一处未动**）；但**任何引用「24 处」的地方都改用 6 处**（规格 §5.1 的 `Text` 行加注已按属性级写）。**批准**：控制方追认（`task-16b-report.md` §2 脚注 · §9.6）。
+4. **基线数字的漂移与机理（逐条给口径，不只换数字）**：
+   - **弱化灰 `#9ca3af`**：计划 **296 行 / 105 文件** ⇒ 实测在 `42e88740` 上 **295/105**（计划的「296」是**手抄噪声**，与 T1 的 295 一致）⇒ 终态 **249/100**。
+   - **字号越界**：计划 **604 处 / 124 文件** ⇒ 在 `42e88740` 上**逐字复现 604/124**；`8f5bd9f1` 时 **586/123**；终态 **558/120**。**上一轮探针的「576」不是口径差** —— 它的越界正则**漏了 `11.5`**（576 = 586 − 10；`regex-diff.mjs` 实测两条正则全量只差 1 处）。**`fontSize` 全量**：计划 1271–1273 ⇒ `42e88740` **1274** ⇒ 终态 **1123**。
+   - **加载态**：计划者探针 **19 行 / 19 文件** ⇒ 实测 **18/18**，机理 = `p.includes("/ui/primitives/")` 在 **Windows 反斜杠**下恒假 ⇒ 域过滤**整个失效**（陷阱 #26）。
+   - **`1px solid #e5e7eb`**：计划 **180 处**（精确写法）⇒ 在 `42e88740` 上**逐字复现 180**、含复合写法 **258 行 / 111 文件**；终态 **171 精确 / 226 含复合 / 108 文件**。
+   - **`line-limits` 的 301–600 档**：计划 **123 / 123** ⇒ 终态 **122 / 122**，机理 = `components/SecondPassPanel.tsx` **303 → 289**（离开该档）。
+5. **计划错处累计 ①–⑰（全表；`⑧–⑰` 是台账 §四 点名的那一段）**：
+   - ① Task 5 的 **6 个「需改」测试文件实际 0 处需改**（全仓对这 9 个锚点零引用）；② Task 5 的 V5 把 `zIndex.guard` 记成 **4 用例**（实为 **7**，4 是 T4 之前的数）；③ Task 6 的 **M5 是一条无断言的空变异**（锚 `task-launch-backdrop` 自 T4 起已无引用）；④ Task 0 Step 2 的两处口径（六档值判据的真身是 `ui/zIndex.test.ts:16-25` 而非 guard；删规格行红在**模块加载期**）；⑤ 计划 `:13` 的 **gitignored 链接**（导出树 `docs-check` 必红）—— **✅ 已修 `0228a013`**；⑥ T1 发现：Step 5 的 **M4 期望写反**（基线 −1 实测红、且**必须**红）；⑦ T1 发现：**计划者探针在 Windows 下域过滤失效**（#26）；
+   - ⑧ `SessionListPanel.tsx` **误记为第 4 套 toast 实现**（它只是 `showToast` 的消费者 ⇒ **零 diff、不在提交路径**）；⑨ Task 5 的「6 个测试文件需改」= 同上 ① 的另一次登记（T5 报告 §1/D1）；⑩ Task 6 的 M5 空变异（同上 ③）；⑪ Task 9 Step 2 的 **autofocus 前提错**（`Modal` 首个可聚焦元素是**关闭钮**，`Modal.test.tsx:200` 逐字钉着）；⑫ 任务总表把 T11 标为可与 T12 并行、**漏了 `AiProviderSettings.tsx` 双点名**；⑬ **B4 的 37 文件清单未扣除 B1/B2 的 14 条**（实测 2 文件 5 处）；⑭ Task 11 的「**16 处 `confirm(`**」与「`impacts{` ≥ 8」**两个数都不成立**（实测 `confirm(` 共 **24** = `window.confirm` 8 + 非 window 16；`impacts={` = **6**；8 处落在 **6** 个弹层实例上）；⑮ Task 13 的 Step 3 + V2 **与铁律①自相矛盾**；⑯ 施工图 §13.1/§13.2 **与守卫 ② 的文本口径互斥**；⑰ 施工图**未核对「文件是否本就 >300」**（施工图 23 个文件里 **8 个在 HEAD 上已 >300**）。
+   - **另有两条同源错处（台账未编号，本节补登）**：⑱ Task 14 的 V2/V3 三个数**不可复现**（`19（可见）+ 9（门控）= 28 行 / 24 文件` 与 `总数 ≤ 88`；真值 **18/18**，「门控」用任何可辩护口径都复现不出 9/5）；⑲ Task 8 的 V3「四个测试文件共 **92** 条」实为 **70**（6+31+18+15）。
+6. **`slice.md` §6 实际 6 条坑，派发书误写 8 条 —— 控制方引用错误，如实登记**。事实：`tmp/t17a/slice.md` §6 逐字只有 **6 条**（单向边框 57 · `6→8` 的 254 · 14 文件禁 import · 药丸档已就位 · `FROZEN_SURFACE_TAG_TOTAL=0` 会红 · 三族只许降）；T17-B **按 6 条执行**并点名「以免下游按 8 条找证据」。**代价**：无（内容无缺失、无截断）。**批准**：N/A（引用错误）。
+7. **两条口径冲突由 T17-B 点名、控制方 B22 裁决**（同 1/2 条）：**接受保守迁移面 · 维持现状**；另登记两条**解锁路径**（`Surface` DOM 透传 / 透明容器是否接受多一层底）为 follow-up（见 §七 B-7/B-8）。
+8. **提交历史的两处不实（不重写历史，只登记）**：① `8f5bd9f1` 是 **T13 误 `--amend`** 的产物（内容 = T14 的 6 路径 + T13 的 2 文件；**无内容缺失**；原 sha `0f9dbcc9` 只在 reflog）⇒ 处置 = **登记**（不 reword/rebase）；② `54b9b938`（T3）**携带了 T2 的 ADR-033 加注**（T2 写了未 `git add`）⇒ 归因改写为「由 `54b9b938` 落库」。**批准**：控制方对 ① 明示「接受并登记」。
+9. **本次收口的三处「不做」（逐条给理由，避免被读成遗漏）**：① **规格 §12 的 markdown 归一那行不再重复加注** —— 它在 `42e88740`（批 3 收口）已就地写明 B8 的去向（「不并入批 4 ⇒ 批 5 或批 7」），**重复加注只会制造第二处真源**；V4 的存在性核对按「已在位」通过。② **`docs/standards/line-limit-exemptions.md` 不在收口提交路径里** —— `--write` 复跑**零 diff**（sha256 前后一致），符合「只在有 diff 时改」的条件。③ **`ui-ux-system.md` 不动** —— T17-A 复核：它**没有**「四档圆角」字样（其圆角表述是 2026-08-24 旧目标态、§十一 自陈「待批 8 统一回写」）⇒ 第 5 档 `pill` 的落点是**规格 §4.2**。
+10. **一处「派发书口径错误」的更正**：控制方派发书写的「§6 的 8 条坑」（= 第 6 条）与「`tmp/t17a/slice.md` 是否被截断」的疑问 ⇒ 已逐字核对：**6 条，无截断**（陷阱 #32 的又一实例）。
+11. **本任务自身的一处仪器自纠（如实登记）**：第一次 `cmd /c "… & echo EXIT=%ERRORLEVEL%"` 采集到的两处 exit 0 **是假的**（`%ERRORLEVEL%` 解析期展开）⇒ **已全部改用 `$LASTEXITCODE` 重测**；另有一次「按 `[n, rel]` 建 Map」的比较脚本 bug ⇒ `LOST=143` **假读数**，已修正为 **LOST=0（真）**（见 §二 门禁 5-对拍）。**两处都保留了作废记录**（`tmp/t18/raw/`）。

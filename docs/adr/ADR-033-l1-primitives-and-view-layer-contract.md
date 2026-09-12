@@ -89,6 +89,11 @@ ADR-032 交付了 token 层（色阶 / 字阶 / z-index 标尺 / 图标），但
 （首个落在 `Surface.css`，`Button.css` 是第二个）· `:disabled` 与 `[aria-disabled="true"]` 的统一视觉降级 ·
 `cursor: not-allowed` · `:disabled` 移出 Tab 序而 `busy` 保留焦点（`aria-disabled` + `aria-busy`）。
 
+> ⚠️ **批 4 收口就地加注 · §4 的「行内 style 禁令」自何时起有真实输入（2026-09-12；**上面原文一字未改**）**：
+> - 本条禁令（「调用点不得用行内 `style` 覆盖类的底/圆角/边框」）在批 0-D 落笔时**对真实代码是空真的** —— 当时全仓 `<Surface>` **0 个**。批 4 的 `69489f9f`（`refactor(ui): migrate card borders to surface`）**第一次真正使用 `Surface`**：14 个 `<Surface>` 开标签，机器判据（`surfaceRatchet.test.ts` ⑦）实测**覆盖命中 0**；同一提交把 `FROZEN_SURFACE_TAG_TOTAL` 由 **0 → 14**（T17-A 冻结的「零」是**故意的空真登记**，一迁移就会红）。⇒ 本条禁令**自 `69489f9f` 起有真实输入**。
+> - **已知边界（诚实登记，不得读成「判据完备」）**：⑦ 的文本级启发式只认 `style={{ … }}` **字面对象** ⇒ `style={S}` / `style={pick()}` 这类**间接写法是假阴**（写在 `overridesSurface()` 的文档注释里）。批 4 迁移的 14 处**全是直接形态**，故对本批读数无影响 —— 但**下游若用变量间接给 `style`，棘轮会漏**。
+> - **同源的两条原语缺口（批 4 实测，登记为 follow-up 而非本批动作）**：① `SurfaceProps` 无 DOM 属性透传（`onClick`/`id`/`aria-*`/`data-*`/`dangerouslySetInnerHTML`/`ref`）⇒ 至少挡住 3 处已点名 + 未来 21 处；② `Surface` 基类**必出底色**、无「只出边框」档 ⇒ 挡住 **28 处**透明边框容器。两条都属「批 5 与视图层一并裁」（B22 第 3 条）。
+
 ### 5. 动效接缝契约：`[data-phase]` 三态 + `usePresence` + 时长变量名
 
 - **相位协议**：`enter`（已挂载的起点态，等一帧让过渡起步）→ `entered`（终态）→ `exit`（退场中），
@@ -150,6 +155,14 @@ ADR-032 交付了 token 层（色阶 / 字阶 / z-index 标尺 / 图标），但
 **新增契约（本批实测得出，批 4 必须遵守）**：`Modal` 是**唯一**持有 Portal、焦点陷阱与 ESC 栈的实现，
 **消费者不得自建第二套** —— `ConfirmDialog` 已按此改写（无 `createPortal` / 无 `zIndex` / 无文档级键盘监听，
 有源码与 CSS 扫描断言钉住），批 4 的 28 个手写弹层迁移后同样不得保留自己的遮罩与 `window` ESC 监听。
+
+> ⚠️ **批 4 收口就地加注 · 本条契约的「适用对象」与三口径并列（2026-09-12；**上面这段原文一字未改**）**：
+> - **适用对象 = 对话框类（`role="dialog"` 那一类），不是「一切手写浮层」。** 上句「批 4 的 28 个手写弹层」是**本 ADR 落笔时（批 0-D / 批 4 开工前）的合计口径**；批 4 的实际执行按控制方 **B1/B2** 分成了「迁」与「不迁」两支：
+>   - **迁（验收口径 = 20）**：`role="dialog"` 20/20 —— 20 个文件全部只经原语（barrel 含 `Modal` ∧ 无深导入 ∧ 无自建遮罩 ∧ 无 `keydown` ∧ 无裸 z-index），`role="dialog"` 的**源码命中**只出现在 `ui/primitives/Modal.tsx` 与已登记例外；构成 `A14 + B4 + E2` 钉在 `dialogMigration.e.test.ts` 的 `DIALOG_20`。
+>   - **不迁（14）**：**11 个锚定菜单**（`BrowserChrome` · `GroupRowContextMenu` · `GroupSidebarRow` · `NoteHeaderActions` · `NoteListBatchMenu` · `NoteMoveToGroupMenu` · `NoteRowContextMenu` · `RouteInfoPopover` · `SessionRowContextMenu` · `chat/ChatLaunchMenu` · `note-selection/SelectionActionMenu`）**只落 `popover(200)`**；**3 个采集/预览覆盖层**（`CaptureOverlayPanel` · `ImagePreviewOverlay` · `ScreenSelectOverlay`）**保留裸值并逐条带理由**。这 14 个**仍须登记在案**（不许从账本里消失），且**不得 import 原语层**（两条硬守卫：`dialogMigration.e.test.ts` ② + `buttonMigration.test.ts` ④）。
+> - **三口径并列（互不替代）**：**20**（本 ADR 上文「20/20」的验收口径 = 对话框类）· **28**（本 ADR 这句的**同行口径**）· **34**（**跨行容忍口径**：把 `position:fixed` 与 `inset:0` 分写两行的形态也算进来）。**等式**：`34 − 20 = 14 = 11 锚定菜单 + 3 覆盖层`；`28 ⊆ 34 ∧ |28| = 28 ∧ 28 == 34 − 6`（机器判据在 `dialogMigration.e.test.ts`）。
+> - **本条的 ESC 残留纪律仍然有效且已结清登记**：上句「5 处属批 4 迁移时必须一并处理的残留」——批 4 的处置是**逐条登记、不修**（B1：改它们 = 改菜单退出语义，属批 5/8）：`note-selection/SelectionActionMenu.tsx:78` 的 `window` **捕获相**监听 + 4 处元素级 `onKeyDown`（`GroupSidebarRow` / `LinkEntityPicker` / `SessionDetailHeader` / `SessionListRow`）。⇒ 本 ADR 的「必须一并处理」**应读作「必须一并登记并给出不修的理由」**，不是「批 4 必须改掉它们」。
+> - **§7 的 z-index 面**：批 4 已完成整段迁移 —— 裸数字 **58 处 / 43 文件 / 17 值 → 3 处 / 3 文件 / 3 值**（全部是上述 B2 例外）；六档标尺 6 个值（`raised 10` / `panel 100` / `popover 200` / `modal 300` / `modalNested 400` / `toast 500`）；**有意值收敛**（`50/51/60/999/1000/1100/1150 → modal(300)` · `30–61 → popover(200)` · `900 → panel(100)`）是**可见观感变化**，已在规格 §11-2 与 `docs/versions/v0.22.md` 批 4 节 durable 登记。
 
 两条实现口径（踩过坑，勿再犯）：
 - **ESC 的"最内层"判定必须用 React 树深度**（`ModalDepthContext`）：实测**朴素入栈序**（React effect 自底向上）
