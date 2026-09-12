@@ -29,6 +29,7 @@ import type {
 } from "../types";
 // 批 3 T8：列规格（宽/夹取/阈值 1100）改从 `shell/columnRegistry` 取——页面不再自建规格
 import { columnSpec } from "../shell/columnRegistry";
+import { Text } from "../ui/primitives";
 
 interface Props {
   focusSessionId?: number | null;
@@ -304,9 +305,9 @@ export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocu
       {/* ── 右栏：会话详情（v0.7.1 拆出 SessionDetailPanel） ── */}
       <div style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: 16 }}>
         {!detail ? (
-          <p style={{ fontSize: 13, color: "#9ca3af", textAlign: "center", marginTop: 60 }}>
+          <Text as="p" size={4} tone="ink-3" style={{ textAlign: "center", marginTop: 60 }}>
             选择左侧会话查看转写时间轴与画面要点
-          </p>
+          </Text>
         ) : (
           <SessionDetailPanel
             detail={detail}

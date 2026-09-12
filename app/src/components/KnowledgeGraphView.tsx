@@ -29,7 +29,7 @@ import {
   type GraphSnapshot,
 } from "../utils/graphSnapshot";
 import { isColorId, onColorText, paletteHex, type ThemeMode } from "../utils/colorPalette";
-import { StatusLine } from "../ui/primitives";
+import { StatusLine, Text } from "../ui/primitives";
 
 /** 图谱节点 data（RF 节点 data 契约——跳转/着色所需全部字段）
  * 注意：type 而非 interface——RF v12 Node<T> 约束 Record<string, unknown>，
@@ -171,9 +171,9 @@ function GraphFlow({ onOpenNote, onOpenGroup, onOpenSystem, refreshToken }: Prop
           </button>
         ))}
         {snapshot && (
-          <span data-testid="graph-counts" style={{ fontSize: 11, color: "#9ca3af" }}>
+          <Text tone="ink-3" testId="graph-counts" style={{ fontSize: 11 }}>
             {snapshot.nodes.length} 节点 · {visibleCount} 边
-          </span>
+          </Text>
         )}
         <span style={{ fontSize: 10, color: "#d1d5db", marginLeft: "auto" }}>单击聚焦 · 双击跳转</span>
       </div>
@@ -194,13 +194,13 @@ function GraphFlow({ onOpenNote, onOpenGroup, onOpenSystem, refreshToken }: Prop
 
       {empty ? (
         /* 空态（spec §5：空图不阻塞其他功能；重试按钮） */
-        <div data-testid="graph-empty" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, color: "#9ca3af", fontSize: 13 }}>
+        <Text as="div" size={4} tone="ink-3" testId="graph-empty" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
           <div style={{ fontSize: 36 }}>🕸</div>
           <p>图谱还是空的——挂接笔记/概念后这里会出现关系。</p>
           <button data-testid="graph-retry" onClick={() => void load()} style={{ fontSize: 12, cursor: "pointer", padding: "4px 12px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>
             刷新
           </button>
-        </div>
+        </Text>
       ) : (
         <div style={{ flex: 1, minHeight: 0 }}>
           <ReactFlow

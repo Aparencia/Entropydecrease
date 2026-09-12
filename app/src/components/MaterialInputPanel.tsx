@@ -13,7 +13,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { Note } from "../types";
 // Low 清扫：标题截断长度单一定义源（与 ClassroomPage 共享）
 import { NOTE_TITLE_MAX_LEN } from "../utils/constants";
-import { Button } from "../ui/primitives";
+import { Button, Text } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
 const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
@@ -92,7 +92,7 @@ export default function MaterialInputPanel({ windowTitle, onNote, onStatus }: Pr
           {processing ? "处理中…" : "🚀 提取为笔记"}
         </button>
         {!hasMaterial && (
-          <p style={{ marginTop: 6, textAlign: "center", fontSize: 11, color: "#9ca3af" }}>请先选择音频或图片素材</p>
+          <Text as="p" tone="ink-3" style={{ marginTop: 6, textAlign: "center", fontSize: 11 }}>请先选择音频或图片素材</Text>
         )}
       </div>
     </>

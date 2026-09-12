@@ -15,7 +15,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import type { Note, NoteFilterResult, TextFilterDecision, TextFilterReview, TextFilterStatus } from "../types";
 import { escapeHtml, renderTimestampAnchors } from "../utils/html";
 import AiRefineCard from "./AiRefineCard";
-import { ConfirmDialog, Loading } from "../ui/primitives";
+import { ConfirmDialog, Loading, Text } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 
@@ -309,14 +309,14 @@ export default function NotePreviewView({
             被过滤内容（原料层未动——如属误杀请在产物/笔记中人工补回）
           </div>
           {preview.filtered.length === 0 && (
-            <p style={{ fontSize: 12, color: "#9ca3af" }}>无被过滤内容</p>
+            <Text as="p" size={5} tone="ink-3">无被过滤内容</Text>
           )}
           {preview.filtered.map((f) => (
             <div key={f.segment_id} style={{ fontSize: 12, color: "#4b5563", marginBottom: 3 }}>
               <span style={{ color: "#b91c1c", marginRight: 6 }}>[{REASON_LABEL[f.reason] ?? f.reason}]</span>
-              <span style={{ color: "#9ca3af", fontVariantNumeric: "tabular-nums" }}>
+              <Text tone="ink-3" style={{ fontVariantNumeric: "tabular-nums" }}>
                 {Math.floor(f.start_ms / 1000 / 60)}:{String(Math.floor(f.start_ms / 1000) % 60).padStart(2, "0")}
-              </span>{" "}
+              </Text>{" "}
               {f.text}
             </div>
           ))}

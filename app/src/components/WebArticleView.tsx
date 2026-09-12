@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
-import { Button, Loading, Skeleton } from "../ui/primitives";
+import { Button, Loading, Skeleton, Text } from "../ui/primitives";
 
 /** WebPage 响应结构（db_web::WebPage 为 serde camelCase——字段须 camel 读取） */
 interface WebPageView {
@@ -130,9 +130,9 @@ export default function WebArticleView({ sessionId, onToNote, onRemove }: Props)
           {page.markdown}
         </div>
       )}
-      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
+      <Text as="div" tone="ink-3" style={{ fontSize: 11, marginTop: 10 }}>
         抓取于 {new Date(page.fetchedAt * 1000).toLocaleString()} · 正文为整篇初稿（原子化拆解留给核心处理/提炼动线）
-      </div>
+      </Text>
     </div>
   );
 }

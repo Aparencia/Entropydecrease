@@ -11,7 +11,7 @@
  *              （`SessionDetailPanel` 的 `showProofread` 条件挂载）⇒ `open` 恒为 `true`。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Button, Modal, EmptyState, StatusLine } from "../ui/primitives";
+import { Button, EmptyState, Modal, StatusLine, Text } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { RefineDraftView, SecondPassView } from "./SecondPassPanel";
 
@@ -170,11 +170,11 @@ export default function ProofreadPanel({ sessionId, onClose }: Props) {
                 background: d.status === "adopted" ? "#ecfdf5" : d.status === "rejected" ? "#f9fafb" : "#fff",
               }}
             >
-              <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 3 }}>
+              <Text as="div" tone="ink-3" style={{ fontSize: 11, marginBottom: 3 }}>
                 {fmtClock(d.start_ms)} – {fmtClock(d.end_ms)} · 草稿 #{d.id} · 状态：
                 {d.status === "pending" ? "待裁决" : d.status === "adopted" ? "已采纳 ✓" : "已回退"}
                 {d.similarity != null ? ` · 相似 ${(d.similarity * 100).toFixed(0)}%` : ""}
-              </div>
+              </Text>
               <div style={{ fontSize: 12.5, color: "#6b7280", marginBottom: 3, textDecoration: "line-through", opacity: 0.75 }}>
                 {d.base_text}
               </div>
@@ -194,9 +194,9 @@ export default function ProofreadPanel({ sessionId, onClose }: Props) {
           ))}
         </div>
       )}
-      <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
+      <Text as="p" tone="ink-3" style={{ fontSize: 11, marginTop: 10 }}>
         采纳后于「笔记预览/转为笔记」生效（与离线精修共用覆盖合成）；原料视图恒显示原始转写。双闸门默认关——如需使用请先在设置→AI 服务开启。
-      </p>
+      </Text>
     </Modal>
   );
 }

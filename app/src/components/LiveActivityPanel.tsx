@@ -22,6 +22,7 @@ import type { AsrFinalEvent, LiveSessionStatus, OcrEvent, SessionInfo, SubtitleE
 // 批 2b：暂停展示单一来源（context 注入 pausedReason + 三态文案，防双轨）
 import { useCaptureControl } from "../hooks/useLiveCaptureControl";
 import { pauseReasonLabel } from "../hooks/liveCaptureState";
+import { Text } from "../ui/primitives";
 
 /** 定稿转写行（字幕或语音） */
 interface TranscriptLine {
@@ -394,13 +395,13 @@ export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionI
             {/* 2026-08 用户需求：实时图片数据（最近画面条；独立区域，图片更新不引起转写行跳动） */}
             <LiveImageStrip sessionId={sessionId ?? null} />
             {shownTranscripts.length === 0 && partials.length === 0 && (
-              <p style={{ fontSize: 12, color: "#9ca3af" }}>等待识别…（说话或屏幕出现字幕时显示）</p>
+              <Text as="p" size={5} tone="ink-3">等待识别…（说话或屏幕出现字幕时显示）</Text>
             )}
             {shownTranscripts.map((t) => (
               <div key={t.id} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 13, lineHeight: 1.6 }}>
-                <span style={{ fontSize: 11, color: "#9ca3af", width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                <Text tone="ink-3" style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
                   {fmtTime(t.time)}
-                </span>
+                </Text>
                 <span
                   title={t.source === "subtitle" ? "字幕" : "语音"}
                   style={{
@@ -416,9 +417,9 @@ export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionI
               </div>
             ))}
             {totalTranscript > SHOW_TRANSCRIPT_LINES && (
-              <p style={{ fontSize: 11, color: "#9ca3af", margin: "4px 0 0", paddingLeft: 52 }}>
+              <Text as="p" tone="ink-3" style={{ fontSize: 11, margin: "4px 0 0", paddingLeft: 52 }}>
                 ⋯ 共 {totalTranscript} 段，仅显示最近 {SHOW_TRANSCRIPT_LINES} 条（会话页可看全部）
-              </p>
+              </Text>
             )}
             {/* 2026-08 用户需求：ASR 未沉淀行全部展示——识别中（灰斜）按句读拆多行
                 全部显示；已定稿待沉淀（黑）一行；连续定稿各行并存；新句首个
@@ -458,17 +459,12 @@ export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionI
               // 首行带时间，后续行对齐留空；残余段（无句读尾段）加 … 
               const segs = splitBySentence(p.text);
               return segs.map((seg, i) => (
-                <div
-                  key={`${p.id}-${i}`}
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    alignItems: "baseline",
-                    fontSize: 13,
-                    color: "#9ca3af",
-                    fontStyle: "italic",
-                  }}
-                >
+                <Text as="div" size={4} tone="ink-3" key={`${p.id}-${i}`} style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "baseline",
+                  fontStyle: "italic",
+                }}>
                   <span style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
                     {i === 0 ? fmtTime(elapsedMs) : ""}
                   </span>
@@ -484,20 +480,20 @@ export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionI
                     }}
                   />
                   <span>{seg}{i === segs.length - 1 ? "…" : ""}</span>
-                </div>
+                </Text>
               ));
             })}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             {shownOcr.length === 0 && (
-              <p style={{ fontSize: 12, color: "#9ca3af" }}>等待画面识别…（屏幕出现文字/板书时显示）</p>
+              <Text as="p" size={5} tone="ink-3">等待画面识别…（屏幕出现文字/板书时显示）</Text>
             )}
             {shownOcr.map((o) => (
               <div key={o.id} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 13, lineHeight: 1.6 }}>
-                <span style={{ fontSize: 11, color: "#9ca3af", width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                <Text tone="ink-3" style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
                   {fmtTime(o.time)}
-                </span>
+                </Text>
                 <span style={{ fontSize: 10, color: "#2563eb", flexShrink: 0, fontWeight: 600 }}>
                   屏{o.screenId}
                 </span>
@@ -505,9 +501,9 @@ export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionI
               </div>
             ))}
             {counts.ocr > SHOW_OCR_LINES && (
-              <p style={{ fontSize: 11, color: "#9ca3af", margin: "4px 0 0", paddingLeft: 52 }}>
+              <Text as="p" tone="ink-3" style={{ fontSize: 11, margin: "4px 0 0", paddingLeft: 52 }}>
                 ⋯ 共 {counts.ocr} 块 / {ocrLines.length} 屏，仅显示最近 {SHOW_OCR_LINES} 屏（会话页可看全部）
-              </p>
+              </Text>
             )}
           </div>
         )}

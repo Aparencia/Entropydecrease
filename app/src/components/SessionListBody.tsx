@@ -20,6 +20,7 @@ import { isSessionConvertible } from "../utils/sessionEligibility";
 import SessionListRow from "./SessionListRow";
 import type { SessionRenameRequest } from "./SessionListRow";
 import SessionSearchHits from "./SessionSearchHits";
+import { Text } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 
@@ -79,12 +80,12 @@ export default function SessionListBody({
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
       {loading && itemCount === 0 && (
-        <p style={{ fontSize: 12, color: "#9ca3af", padding: 16, textAlign: "center" }}>加载中…</p>
+        <Text as="p" size={5} tone="ink-3" style={{ padding: 16, textAlign: "center" }}>加载中…</Text>
       )}
       {!loading && itemCount === 0 && !hits && (
-        <p style={{ fontSize: 12, color: "#9ca3af", padding: 16, textAlign: "center" }}>
+        <Text as="p" size={5} tone="ink-3" style={{ padding: 16, textAlign: "center" }}>
           暂无会话，去「课堂助手」开始实时捕获
-        </p>
+        </Text>
       )}
       {hits || ocrHits ? (
         <SessionSearchHits hits={hits} ocrHits={ocrHits} searchKw={searchKw} onOpenDetail={onOpenDetail} />
@@ -103,12 +104,12 @@ export default function SessionListBody({
         ))
       ) : itemCount > 0 && filtered.length === 0 ? (
         /* 筛选无结果：给出清除入口 */
-        <p style={{ fontSize: 12, color: "#9ca3af", padding: 16, textAlign: "center" }}>
+        <Text as="p" size={5} tone="ink-3" style={{ padding: 16, textAlign: "center" }}>
           无匹配会话{" "}
           <button style={{ ...btn, fontSize: 11 }} onClick={onClearFilters}>
             清除筛选
           </button>
-        </p>
+        </Text>
       ) : (
         filtered.map(renderRow)
       )}

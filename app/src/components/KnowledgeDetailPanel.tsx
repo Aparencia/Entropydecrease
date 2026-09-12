@@ -22,7 +22,7 @@ import KnowledgeLinkSection from "./KnowledgeLinkSection";
 import DiscoverySuggestSection from "./DiscoverySuggestSection";
 import KnowledgeDecisionForm from "./KnowledgeDecisionForm";
 import KnowledgeDecisionLog from "./KnowledgeDecisionLog";
-import { StatusLine } from "../ui/primitives";
+import { StatusLine, Text } from "../ui/primitives";
 
 interface Props {
   /** 面板宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 320=历史值） */
@@ -163,9 +163,9 @@ export default function KnowledgeDetailPanel({ width = 320, system, nodes, conce
           </div>
         )}
         {!selection && (
-          <div style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", paddingTop: 40 }}>
+          <Text as="div" size={5} tone="ink-3" style={{ textAlign: "center", paddingTop: 40 }}>
             从中间选择一个实体查看详情
-          </div>
+          </Text>
         )}
 
         {/* ── 节点：只读信息 + 引用 ── */}
@@ -175,9 +175,9 @@ export default function KnowledgeDetailPanel({ width = 320, system, nodes, conce
             <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", marginBottom: 4 }}>{selectedNode.text}</div>
             <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
               <span style={{ fontSize: 11, padding: "1px 8px", borderRadius: 8, background: "#f9fafb", color: "#6b7280" }}>{nodeTypeLabel[selectedNode.type]}</span>
-              <span style={{ fontSize: 11, color: "#9ca3af", alignSelf: "center" }}>
+              <Text tone="ink-3" style={{ fontSize: 11, alignSelf: "center" }}>
                 父节点：{selectedNode.parentId != null ? (nodes.find((n) => n.id === selectedNode.parentId)?.text ?? "—") : "（根）"}
-              </span>
+              </Text>
             </div>
             <KnowledgeLinkSection systemId={system.id} entityType="node" entityId={selectedNode.id} links={links} nodes={nodes} concepts={concepts} models={models} onChanged={onChanged} />
           </div>

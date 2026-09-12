@@ -13,7 +13,7 @@
  *              （`ActionCenterPanel` 的条件挂载）⇒ `open` 恒为 `true`，160ms 退场相位不触发。
  */
 import { useEffect, useState } from "react";
-import { Button, Modal } from "../ui/primitives";
+import { Button, Modal, Text } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 
 /** 响应结构（SopTemplate/SopRunStep/SopRun/SopRunDetail 均 serde camelCase——字段须 camel 读取） */
@@ -188,9 +188,9 @@ export default function SopRunOverlay({ template, onClose, onChanged }: Props) {
             <Button variant="secondary" size="md" title="两种执行模式可随时切换" onClick={() => setConfirmMode((m) => !m)}>
               {confirmMode ? "切到逐步引导" : "切到总览核对"}
             </Button>
-            <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: "auto" }}>
+            <Text tone="ink-3" style={{ fontSize: 11, marginLeft: "auto" }}>
               进行中 {detail.stats.done + detail.stats.failed + detail.stats.skipped}/{detail.stats.total} · 待办 {pending}
-            </span>
+            </Text>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {detail.steps.map((s) => {
@@ -200,11 +200,11 @@ export default function SopRunOverlay({ template, onClose, onChanged }: Props) {
               return (
                 <div key={s.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 10px", background: done ? "#ecfdf5" : failed ? "#fef2f2" : "#fff" }}>
                   <div style={{ display: "flex", gap: 6 }}>
-                    <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0 }}>步骤 {s.stepNo}</span>
+                    <Text tone="ink-3" style={{ fontSize: 11, flexShrink: 0 }}>步骤 {s.stepNo}</Text>
                     <span style={{ fontSize: 13, color: "#111827", flex: 1 }}>{s.textSnapshot}</span>
-                    <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0 }}>
+                    <Text tone="ink-3" style={{ fontSize: 11, flexShrink: 0 }}>
                       {done ? "✓" : failed ? "✗" : skipped ? "⏭" : s.status}
-                    </span>
+                    </Text>
                   </div>
                   {!done && !failed && !skipped && (
                     <>
@@ -221,7 +221,7 @@ export default function SopRunOverlay({ template, onClose, onChanged }: Props) {
                       )}
                       {s.status === "todo" && (
                         <div style={{ display: "flex", gap: 4, marginTop: 4, alignItems: "center" }}>
-                          <span style={{ fontSize: 11, color: "#9ca3af" }}>证据路径（notes-images/…，可选）：</span>
+                          <Text tone="ink-3" style={{ fontSize: 11 }}>证据路径（notes-images/…，可选）：</Text>
                           <input
                             value={evidenceByStep[s.stepNo] ?? ""}
                             onChange={(e) => setEvidenceByStep((m) => ({ ...m, [s.stepNo]: e.target.value }))}

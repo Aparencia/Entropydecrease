@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { WeekContractStatus } from "../types";
+import { Text } from "../ui/primitives";
 
 interface Props {
   groupId: number;
@@ -89,18 +90,18 @@ export default function WeekContractCard({ groupId }: Props) {
           </span>
         )}
         {status && (
-          <span style={{ fontSize: 10, color: "#9ca3af", marginLeft: "auto" }}>
+          <Text tone="ink-3" style={{ fontSize: 10, marginLeft: "auto" }}>
             本周自 {formatWeekStart(status.weekStart)} 起
-          </span>
+          </Text>
         )}
       </div>
 
       {/* 未立约：设定表单 */}
       {!c && !editing && (
         <div>
-          <p style={{ fontSize: 11, color: "#9ca3af", margin: "2px 0 6px" }}>
+          <Text as="p" tone="ink-3" style={{ fontSize: 11, margin: "2px 0 6px" }}>
             给自己一个本周目标——断签不清零，欠账不追。
-          </p>
+          </Text>
           <button
             onClick={() => setEditing(true)}
             style={{ fontSize: 11, cursor: "pointer", padding: "2px 10px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}
@@ -165,7 +166,7 @@ export default function WeekContractCard({ groupId }: Props) {
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
-            <span style={{ fontSize: 10, color: "#9ca3af" }}>弹性承诺：无连续打卡 · 断签不清零</span>
+            <Text tone="ink-3" style={{ fontSize: 10 }}>弹性承诺：无连续打卡 · 断签不清零</Text>
             <button
               onClick={() => setEditing(true)}
               style={{ marginLeft: "auto", fontSize: 10, cursor: "pointer", padding: "1px 8px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}

@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { GoalRetroView } from "../types/goals";
 import { ReportBody } from "./GraduateDialog";
+import { Text } from "../ui/primitives";
 
 interface Props {
   goalId: number;
@@ -33,7 +34,7 @@ export default function RetroTimeline({ goalId }: Props) {
   }, [goalId]);
 
   if (err) return <p style={{ fontSize: 11, color: "#dc2626" }}>{err}</p>;
-  if (!view) return <p style={{ fontSize: 11, color: "#9ca3af" }}>回顾流加载中…</p>;
+  if (!view) return <Text as="p" tone="ink-3" style={{ fontSize: 11 }}>回顾流加载中…</Text>;
 
   return (
     <div data-testid="retro-timeline">
@@ -42,9 +43,9 @@ export default function RetroTimeline({ goalId }: Props) {
           <span style={{ width: 8, height: 8, borderRadius: 4, background: KIND_DOT[e.kind] ?? "#9ca3af", marginTop: 5, flexShrink: 0 }} />
           <div>
             <div style={{ fontSize: 12, color: "#1f2937" }}>{e.title}</div>
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>
+            <Text as="div" tone="ink-3" style={{ fontSize: 11 }}>
               {e.occurredAt > 0 ? new Date(e.occurredAt * 1000).toISOString().slice(0, 10) + " · " : ""}{e.detail}
-            </div>
+            </Text>
           </div>
         </div>
       ))}

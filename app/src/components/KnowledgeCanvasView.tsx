@@ -30,7 +30,7 @@ import { layoutCanvas } from "../utils/layoutCanvas";
 import CanvasNodeQuestion from "./CanvasNodeQuestion";
 import CanvasNodeConcept from "./CanvasNodeConcept";
 import CanvasNodeModel from "./CanvasNodeModel";
-import { StatusLine } from "../ui/primitives";
+import { StatusLine, Text } from "../ui/primitives";
 
 interface Props {
   systemId: number;
@@ -376,7 +376,7 @@ function CanvasFlow({
           ← 树视图
         </button>
         <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>🗺 知识画布</span>
-        <span style={{ fontSize: 11, color: "#9ca3af" }}>拖拽整理你的知识结构——位置只由你决定</span>
+        <Text tone="ink-3" style={{ fontSize: 11 }}>拖拽整理你的知识结构——位置只由你决定</Text>
       </div>
 
       <div style={{ flex: 1, minHeight: 0 }}>

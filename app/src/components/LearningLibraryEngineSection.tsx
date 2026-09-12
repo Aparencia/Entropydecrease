@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { EmbeddingStatusView } from "../types/kb";
+import { Text } from "../ui/primitives";
 
 export default function LearningLibraryEngineSection() {
   const [emb, setEmb] = useState<EmbeddingStatusView | null>(null);
@@ -82,9 +83,9 @@ export default function LearningLibraryEngineSection() {
             ✓ 就绪（dim={emb.dim}）
           </span>
         ) : (
-          <span data-testid="kb-emb-noop" style={{ color: "#9ca3af" }} title={emb?.modelDir ?? "模型目录未探测"}>
+          <Text tone="ink-3" testId="kb-emb-noop" title={emb?.modelDir ?? "模型目录未探测"}>
             ○ {emb?.detail ?? "状态读取中…"}
-          </span>
+          </Text>
         )}
         <span style={{ flex: 1 }} />
         <button

@@ -20,7 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import SopRunOverlay from "../SopRunOverlay";
 import { PracticeOverlay, QuestionsOverlay } from "../PracticeQuestionsOverlays";
-import { Button, EmptyState, StatusLine } from "../../ui/primitives";
+import { Button, EmptyState, StatusLine, Text } from "../../ui/primitives";
 
 /** 响应结构（SopTemplate/ActionQueueRow/CompletionEvent 均 serde camelCase——字段须 camel 读取） */
 interface SopTemplateView {
@@ -326,7 +326,7 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
     <div key={r.id} style={{ border: overdueFlag ? "1px solid #fca5a5" : "1px solid #e5e7eb", background: overdueFlag ? "#fff7f7" : "#fff", borderRadius: 6, padding: "6px 8px", display: "flex", flexDirection: "column", gap: 4 }}>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <span style={{ fontSize: 12.5, color: "#111827", flex: 1 }}>{r.text}</span>
-        <span style={{ fontSize: 10.5, color: "#9ca3af" }}>@{r.noteTitle}</span>
+        <Text tone="ink-3" style={{ fontSize: 10.5 }}>@{r.noteTitle}</Text>
         {overdueFlag && <span style={{ fontSize: 10.5, color: "#dc2626", fontWeight: 600 }}>逾期</span>}
       </div>
       {reasonFor === r.id && (
@@ -419,7 +419,7 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
             {batchMode && (
               <div style={{ border: "1px dashed #c4b5fd", borderRadius: 8, padding: 6, marginBottom: 8, display: "flex", flexDirection: "column", gap: 4 }}>
                 {[...overdue, ...planned, ...rows].filter((r) => !r.unrefined).length === 0 && (
-                  <p style={{ margin: 0, fontSize: 12, color: "#9ca3af" }}>当前无可批决议的 todo 行</p>
+                  <Text as="p" size={5} tone="ink-3" style={{ margin: 0 }}>当前无可批决议的 todo 行</Text>
                 )}
                 {[...overdue, ...planned, ...rows]
                   .filter((r) => !r.unrefined)
@@ -427,7 +427,7 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
                     <label key={r.id} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, cursor: "pointer", padding: "2px 4px", borderRadius: 4, background: checked.has(r.id) ? "#f5f3ff" : "transparent" }}>
                       <input type="checkbox" checked={checked.has(r.id)} onChange={() => toggleChecked(r.id)} />
                       <span style={{ color: "#111827" }}>{r.text}</span>
-                      <span style={{ fontSize: 10.5, color: "#9ca3af", marginLeft: "auto" }}>@{r.noteTitle}</span>
+                      <Text tone="ink-3" style={{ fontSize: 10.5, marginLeft: "auto" }}>@{r.noteTitle}</Text>
                     </label>
                   ))}
               </div>
@@ -449,7 +449,7 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
               {unrefined.length === 0 ? empty("无待提炼产物行") : unrefined.map((r) => (
                 <div key={r.id} style={{ border: "1px solid #e5e7eb", borderRadius: 6, padding: "6px 8px", display: "flex", gap: 6, alignItems: "center" }}>
                   <span style={{ fontSize: 12.5, flex: 1 }}>☑️ {r.text}</span>
-                  <span style={{ fontSize: 10.5, color: "#9ca3af" }}>@{r.noteTitle}</span>
+                  <Text tone="ink-3" style={{ fontSize: 10.5 }}>@{r.noteTitle}</Text>
                   <button style={{ ...okBtn, fontSize: 11 }} onClick={() => void refineUnrefined(r.id)}>提炼为任务行</button>
                 </div>
               ))}
@@ -459,12 +459,12 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             {history.length === 0 ? <EmptyState title="暂无完成记录——" description="完成即证据，周回顾原料在此沉淀" compact /> : history.map((h) => (
               <div key={h.id} style={{ display: "flex", gap: 8, fontSize: 12, borderBottom: "1px solid #f3f4f6", padding: "4px 2px" }}>
-                <span style={{ color: "#9ca3af", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmtDate(h.ts)}</span>
+                <Text tone="ink-3" style={{ fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmtDate(h.ts)}</Text>
                 <span style={{ color: h.eventType === "abandoned" ? "#dc2626" : "#0f766e", flexShrink: 0, width: 90 }}>
                   {TYPE_LABEL[h.eventType] ?? h.eventType}
                 </span>
                 <span style={{ flex: 1, color: "#374151" }}>{h.text}</span>
-                {h.note && <span style={{ fontSize: 11, color: "#9ca3af" }}>因：{h.note}</span>}
+                {h.note && <Text tone="ink-3" style={{ fontSize: 11 }}>因：{h.note}</Text>}
               </div>
             ))}
           </div>
@@ -473,7 +473,7 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
             {/* SOP 库：模板行范围引用 + 执行（REQ-296） */}
             <div style={{ fontSize: 12, color: "#374151", marginBottom: 8 }}>
               <b>SOP 模板（{templates.length}）</b>{" "}
-              <span style={{ color: "#9ca3af", fontSize: 11 }}>模板=笔记段落行范围引用（编辑正文即编辑模板，无双写）；执行=步骤快照跑 run</span>
+              <Text tone="ink-3" style={{ fontSize: 11 }}>模板=笔记段落行范围引用（编辑正文即编辑模板，无双写）；执行=步骤快照跑 run</Text>
             </div>
             <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, marginBottom: 10 }}>
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
@@ -482,15 +482,15 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
                   {notes.map((n) => <option key={n.id} value={n.id}>{n.title.slice(0, 18)}</option>)}
                 </select>
                 <input value={sopName} onChange={(e) => setSopName(e.target.value)} placeholder="模板名" style={{ fontSize: 12, width: 110, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }} />
-                <span style={{ fontSize: 11, color: "#9ca3af" }}>行</span>
+                <Text tone="ink-3" style={{ fontSize: 11 }}>行</Text>
                 <input value={sopStart} onChange={(e) => setSopStart(e.target.value)} style={{ fontSize: 12, width: 44, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }} />
-                <span style={{ fontSize: 11, color: "#9ca3af" }}>–</span>
+                <Text tone="ink-3" style={{ fontSize: 11 }}>–</Text>
                 <input value={sopEnd} onChange={(e) => setSopEnd(e.target.value)} style={{ fontSize: 12, width: 44, border: "1px solid #e5e7eb", borderRadius: 4, padding: "2px 6px" }} />
                 <Button variant="primary" size="md" onClick={() => void createTemplate()}>创建</Button>
               </div>
-              <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
+              <Text as="div" tone="ink-3" style={{ fontSize: 11, marginTop: 4 }}>
                 行号 0 起（标题=0）；空行自动跳过；超 50 步拒绝。编辑器内选中段落生成入口在笔记工具栏接线（同款命令）。
-              </div>
+              </Text>
             </div>
             {templates.length === 0 ? (
               <EmptyState title="暂无 SOP 模板——" description="选中笔记步骤段落（行范围）即可创建" compact />
@@ -500,7 +500,7 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
                   <div key={t.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }}>
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                       <span style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{t.name}</span>
-                      <span style={{ fontSize: 11, color: "#9ca3af" }}>@{t.noteTitle} · 行 {t.startLine}–{t.endLine} · {t.mode === "confirm" ? "总览核对" : "逐步引导"}</span>
+                      <Text tone="ink-3" style={{ fontSize: 11 }}>@{t.noteTitle} · 行 {t.startLine}–{t.endLine} · {t.mode === "confirm" ? "总览核对" : "逐步引导"}</Text>
                       <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
                         <Button variant="primary" size="md" onClick={() => setActiveTemplate(t)}>▶ 执行</Button>
                         <Button variant="secondary" size="md" onClick={() => void fetchSuggestions(t.id)}>💡 修订建议</Button>
@@ -518,9 +518,9 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
             )}
           </>
         )}
-        <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
+        <Text as="p" tone="ink-3" style={{ fontSize: 11, marginTop: 10 }}>
           勾选任务行即被自动收录；产物 ☑️ 行可在上方「待提炼」区一键转标准任务行；🎴 转卡为规划中出口（G7 预留）。SOP run 完成自动入完成史。
-        </p>
+        </Text>
         {/* v0.20.3（REQ-296）：SOP 执行器（嵌套 Overlay——覆盖本面板） */}
         {activeTemplate && (
           <SopRunOverlay

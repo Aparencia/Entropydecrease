@@ -23,7 +23,7 @@ import {
   matchIntent,
   type StrategyDraft,
 } from "../utils/refineStrategy";
-import { Button, Loading } from "../ui/primitives";
+import { Button, Loading, Text } from "../ui/primitives";
 
 const optBtn = (active: boolean): React.CSSProperties => ({
   padding: "2px 8px", cursor: "pointer", fontSize: 11, borderRadius: 6,
@@ -133,7 +133,7 @@ export default function RefineStrategyPicker({
             <div style={{ fontSize: 11, color: "#3730a3", marginBottom: 4, display: "flex", justifyContent: "space-between", gap: 8 }}>
               <span>自定义要求（写下你想要的精修程度/风格，将随提示词发送）</span>
               {/* 低2（审查）：maxLength 与 Rust MAX_CUSTOM_TEXT_CHARS=500 对齐——所见即所发 */}
-              <span style={{ color: "#9ca3af", flexShrink: 0 }}>≤500 字</span>
+              <Text tone="ink-3" style={{ flexShrink: 0 }}>≤500 字</Text>
             </div>
             <textarea
               value={value.customText ?? ""}

@@ -20,7 +20,7 @@ import GoalCard from "../components/GoalCard";
 import GoalDetail from "../components/GoalDetail";
 import InterviewDialog from "../components/InterviewDialog";
 import { ReportBody } from "../components/GraduateDialog";
-import { Button, StatusLine } from "../ui/primitives";
+import { Button, StatusLine, Text } from "../ui/primitives";
 
 const HOT_DOMAINS = ["学 Python", "练听力", "画水彩"];
 
@@ -80,7 +80,7 @@ export default function GoalsPage() {
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid #e5e7eb", flexShrink: 0 }}>
         <span style={{ fontWeight: 700, fontSize: 14 }}>🎯 目标</span>
-        <span style={{ fontSize: 11, color: "#9ca3af" }}>意图层——把素材串成可毕业的目标</span>
+        <Text tone="ink-3" style={{ fontSize: 11 }}>意图层——把素材串成可毕业的目标</Text>
         <Button variant="primary" size="md" testId="open-interview" onClick={() => setDialog({ mode: "interview" })}>＋ 新建目标（访谈）</Button>
         <Button variant="secondary" size="md" testId="open-quick" onClick={() => setDialog({ mode: "quick" })}>只想简单记一下</Button>
       </div>
@@ -96,7 +96,7 @@ export default function GoalsPage() {
           {loaded && cards.length === 0 && (
             <div style={{ padding: 24, textAlign: "center" }}>
               <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 8px" }}>定一个学习目标——不是「我要学 xx」，是「用它做什么」。</p>
-              <div style={{ fontSize: 12, color: "#9ca3af" }}>
+              <Text as="div" size={5} tone="ink-3">
                 领域热词推荐：
                 {HOT_DOMAINS.map((h) => (
                   <button
@@ -107,7 +107,7 @@ export default function GoalsPage() {
                     {h}
                   </button>
                 ))}
-              </div>
+              </Text>
             </div>
           )}
           {cards.map((c) => (
@@ -146,7 +146,7 @@ export default function GoalsPage() {
               onDeleted={() => { setSelectedId(null); void load(); }}
             />
           ) : (
-            <div style={{ padding: 32, fontSize: 13, color: "#9ca3af" }}>← 选择一个目标查看详情（周契约/组徽标/弱项/里程碑都在这里）</div>
+            <Text as="div" size={4} tone="ink-3" style={{ padding: 32 }}>← 选择一个目标查看详情（周契约/组徽标/弱项/里程碑都在这里）</Text>
           )}
         </div>
       </div>

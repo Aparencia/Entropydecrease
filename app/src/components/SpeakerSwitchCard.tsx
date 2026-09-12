@@ -15,6 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { DownloadProgress, SpeakerAnalysisResult } from "../types";
 import { fmtMs } from "../utils/fmt";
+import { Text } from "../ui/primitives";
 
 export default function SpeakerSwitchCard({
   sessionId,
@@ -99,9 +100,9 @@ export default function SpeakerSwitchCard({
   // v0.12.1：图文会话无音频——直接渲染"不适用"，不进入错误/加载/未启用分支
   if (kind === "photo") {
     return (
-      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 8 }}>
+      <Text as="div" tone="ink-3" style={{ fontSize: 11, marginBottom: 8 }}>
         👥 讲者分析不适用（图文会话无音频）
-      </div>
+      </Text>
     );
   }
   if (error) {
@@ -113,12 +114,12 @@ export default function SpeakerSwitchCard({
   }
   if (!result) {
     return (
-      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 8 }}>👥 讲者分析中…</div>
+      <Text as="div" tone="ink-3" style={{ fontSize: 11, marginBottom: 8 }}>👥 讲者分析中…</Text>
     );
   }
   if (!result.enabled) {
     return (
-      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 8 }}>
+      <Text as="div" tone="ink-3" style={{ fontSize: 11, marginBottom: 8 }}>
         <div>
           👥 讲者分离未启用（缺少说话人模型——wespeaker，约 20-70MB，可一键下载）
         </div>
@@ -147,14 +148,14 @@ export default function SpeakerSwitchCard({
             ⬇ 下载说话人模型
           </button>
         )}
-      </div>
+      </Text>
     );
   }
   if (result.changes.length === 0) {
     return (
-      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 8 }}>
+      <Text as="div" tone="ink-3" style={{ fontSize: 11, marginBottom: 8 }}>
         👥 讲者切换：未检测到（单人讲解或音色变化未达阈值）
-      </div>
+      </Text>
     );
   }
   return (

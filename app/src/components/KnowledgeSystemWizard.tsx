@@ -18,7 +18,7 @@
  *              底栏「取消」仍直连 `onClose`（原行为：取消不确认）。
  */
 import { useMemo, useState } from "react";
-import { Modal, StatusLine } from "../ui/primitives";
+import { Modal, StatusLine, Text } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { KnowledgeSystem, KnowledgeNodeType } from "../types/knowledge";
@@ -226,7 +226,7 @@ export default function KnowledgeSystemWizard({ onClose, onCreated }: Props) {
 
         {step === 2 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>每个入口一行；可全部跳过（空行自动忽略）。</div>
+            <Text as="div" tone="ink-3" style={{ fontSize: 11, marginBottom: 4 }}>每个入口一行；可全部跳过（空行自动忽略）。</Text>
             {domainEntries.map((val, i) => (
               <input
                 key={i}

@@ -15,7 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { KnowledgeNode, KnowledgeLink, KnowledgeNodeType } from "../types/knowledge";
 import { nodeTypeColor, nodeTypeLabel } from "../types/knowledge";
-import { Button, StatusLine } from "../ui/primitives";
+import { Button, StatusLine, Text } from "../ui/primitives";
 
 interface Props {
   systemId: number;
@@ -179,7 +179,7 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
             <span style={{ flex: 1, fontSize: 13, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.text}</span>
           )}
           {count > 0 && (
-            <span data-testid={`node-ref-${n.id}`} style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>{count} 引用</span>
+            <Text tone="ink-3" testId={`node-ref-${n.id}`} style={{ fontSize: 11, whiteSpace: "nowrap" }}>{count} 引用</Text>
           )}
           {!isEditing && (
             <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", gap: 2 }}>
@@ -240,9 +240,9 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
       <div style={{ padding: "24px 20px", textAlign: "center" }}>
         <div style={{ fontSize: 26, marginBottom: 8 }}>🌱</div>
         <div style={{ fontSize: 14, fontWeight: 600, color: "#374151", marginBottom: 6 }}>从子问题开始</div>
-        <p style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.7, margin: "0 auto 12px", maxWidth: 300 }}>
+        <Text as="p" size={5} tone="ink-3" style={{ lineHeight: 1.7, margin: "0 auto 12px", maxWidth: 300 }}>
           把卡住你的大问题拆成一个个能动手的子问题，每拆一层，就把它从"一团乱麻"变成"一条路径"。
-        </p>
+        </Text>
         <button data-testid="tree-add-root" onClick={() => startAdd(null)} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e" }}>
           ＋ 添加根问题
         </button>
@@ -276,9 +276,9 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
         {nodes.length === 0 && addDraft?.parentId === null && (
           <div style={{ padding: "16px 8px 8px", textAlign: "center" }}>
             <div style={{ fontSize: 20, marginBottom: 6 }}>🌱</div>
-            <p style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6, margin: "0 0 10px" }}>
+            <Text as="p" size={5} tone="ink-3" style={{ lineHeight: 1.6, margin: "0 0 10px" }}>
               写下第一个根问题，让它成为问题树的起点。
-            </p>
+            </Text>
           </div>
         )}
 

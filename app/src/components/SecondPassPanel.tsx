@@ -13,7 +13,7 @@
  *              的 `showPass2` 条件挂载）⇒ `open` 恒为 `true`。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Button, Modal, EmptyState, Loading, StatusLine } from "../ui/primitives";
+import { Button, EmptyState, Loading, Modal, StatusLine, Text } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -207,9 +207,9 @@ export default function SecondPassPanel({ sessionId, onChanged, onClose }: Props
             ⏹ 取消
           </button>
         )}
-        <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: "auto" }}>
+        <Text tone="ink-3" style={{ fontSize: 11, marginLeft: "auto" }}>
           待裁决 {pending} · 已采纳 {adopted} · 已回退 {view?.rejected ?? 0}
-        </span>
+        </Text>
       </div>
 
       {view === null ? (
@@ -239,9 +239,9 @@ export default function SecondPassPanel({ sessionId, onChanged, onClose }: Props
                 }}
               >
                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                  <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                  <Text tone="ink-3" style={{ fontSize: 11 }}>
                     {fmtClock(d.start_ms)} – {fmtClock(d.end_ms)}
-                  </span>
+                  </Text>
                   {d.similarity != null && (
                     <span style={{ fontSize: 11, color: "#6b7280" }}>相似度 {(d.similarity * 100).toFixed(0)}%</span>
                   )}
@@ -281,9 +281,9 @@ export default function SecondPassPanel({ sessionId, onChanged, onClose }: Props
           })}
         </div>
       )}
-      <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
+      <Text as="p" tone="ink-3" style={{ fontSize: 11, marginTop: 10 }}>
         说明：采纳的替换在「笔记预览 / 转为笔记」时生效（服务端合成）；原料视图恒显示原始转写便于复核。批量采纳为逐条裁决，失败即停。
-      </p>
+      </Text>
     </Modal>
   );
 }

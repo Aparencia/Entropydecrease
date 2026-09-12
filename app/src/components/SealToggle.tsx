@@ -6,6 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Text } from "../ui/primitives";
 
 export function SealToggle() {
   const [on, setOn] = useState(false);
@@ -31,7 +32,7 @@ export function SealToggle() {
     <div style={{ fontSize: 12, color: "#374151", display: "flex", alignItems: "center", gap: 8 }}>
       <b>🧊 封存显隐（#树洞）</b>
       <input type="checkbox" checked={on} onChange={(e) => void toggle(e.target.checked)} style={{ cursor: "pointer" }} />
-      <span style={{ fontSize: 11, color: "#9ca3af" }}>{on ? "显示封存笔记" : "默认排除（推荐——情绪内容不进学习主流程）"}</span>
+      <Text tone="ink-3" style={{ fontSize: 11 }}>{on ? "显示封存笔记" : "默认排除（推荐——情绪内容不进学习主流程）"}</Text>
       {msg && <span style={{ fontSize: 11, color: msg.startsWith("设置失败") ? "#dc2626" : "#047857" }}>{msg}</span>}
     </div>
   );

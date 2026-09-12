@@ -6,6 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Text } from "../ui/primitives";
 
 /** AiSettingsView 响应结构（serde camelCase——proofreadEnabled 须 camel 读取） */
 interface AiSettingsView {
@@ -58,7 +59,7 @@ export function ProofreadToggle() {
           data-testid="proofread-toggle"
           style={{ cursor: "pointer" }}
         />
-        <span style={{ fontSize: 11, color: "#9ca3af" }}>{on ? "已开启（默认关双闸门之二）" : "默认关"}</span>
+        <Text tone="ink-3" style={{ fontSize: 11 }}>{on ? "已开启（默认关双闸门之二）" : "默认关"}</Text>
         {on && (
           <button
             style={{ ...btn, border: "1px solid #e5e7eb", background: "#fff", color: "#374151" }}

@@ -35,7 +35,7 @@ import KnowledgeSampleView from "../components/KnowledgeSampleView";
 import KnowledgeGraphView from "../components/KnowledgeGraphView";
 // 批 3 T8：列规格（体系列/详情列两行的宽·夹取·阈值）改从 `shell/columnRegistry` 取
 import { columnSpec } from "../shell/columnRegistry";
-import { EmptyState, StatusLine } from "../ui/primitives";
+import { EmptyState, StatusLine, Text } from "../ui/primitives";
 
 type MiddleView = "tree" | "canvas" | "concept" | "model" | "graph";
 
@@ -311,7 +311,7 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup, 
           </div>
         ) : (
         !selectedSystem ? (
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 13 }}>从左侧选择一个体系查看</div>
+          <Text as="div" size={4} tone="ink-3" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>从左侧选择一个体系查看</Text>
         ) : (
           <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
             {/* 树视图常驻（display 切换——折叠/展开状态保持，§4.5 组件不退场） */}
@@ -371,7 +371,7 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup, 
                       <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{m.name}</span>
                       <span style={{ fontSize: 10, color: "#6b7280", background: "#f9fafb", borderRadius: 8, padding: "0 5px" }}>{m.disciplines.join(" / ")}</span>
                     </div>
-                    {m.claim && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.claim}</div>}
+                    {m.claim && <Text as="div" tone="ink-3" style={{ fontSize: 11, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.claim}</Text>}
                   </div>
                 ))}
               </div>
@@ -422,7 +422,7 @@ function SystemCard({ system, selected, onSelect, onArchive }: { system: Knowled
         <span style={{ fontSize: 13, fontWeight: 500, flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{system.name}</span>
         <span style={{ fontSize: 10, color: systemStatusColor(system.status) }}>{systemStatusLabel[system.status]}</span>
       </div>
-      {system.coreQuestion && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{system.coreQuestion}</div>}
+      {system.coreQuestion && <Text as="div" tone="ink-3" style={{ fontSize: 11, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{system.coreQuestion}</Text>}
       <div style={{ display: "flex", gap: 6, marginTop: 3 }}>
         <span style={{ fontSize: 10, color: "#6b7280" }}>节点 {system.nodeCount ?? 0}</span>
         <span style={{ fontSize: 10, color: "#6b7280" }}>概念 {system.conceptCount ?? 0}</span>

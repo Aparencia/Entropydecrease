@@ -34,6 +34,7 @@ import { buildTaskFollowUpPrompt } from "../utils/taskFollowUp";
 // 2026-09-09 批 1：任务标题统一按类别解析（taskRefLabel——笔记级精修
 // ref_id=笔记 id，仅按 opType 会错查会话标题表；enrich 恒笔记级）
 import { taskRefLabel } from "../utils/entityLabel";
+import { Text } from "../ui/primitives";
 
 interface Props {
   /** 页面可见门控（App 层注入——保活挂载下切回重同步；2026-09-09 批 1：
@@ -492,7 +493,7 @@ export default function ChatPage(props: Props) {
                 批 4 T13-b：菜单（含透明点击层与锚定面板）已拆到 ChatLaunchMenu。 */}
             <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 16px", flexShrink: 0 }}>
               <ChatLaunchMenu onLaunch={(kind) => { setLaunchDialog(kind); setLaunchTargetId(null); }} />
-              <span style={{ fontSize: 11, color: "#9ca3af" }}>试试 '/refine' '/enrich' 快捷命令</span>
+              <Text tone="ink-3" style={{ fontSize: 11 }}>试试 '/refine' '/enrich' 快捷命令</Text>
             </div>
             {/* v0.16.1：线程任务卡（进行中实时 + 完成可追问）；v0.17.0 精修
                 完成双入口（回到会话/查看笔记——REQ-247） */}
@@ -545,9 +546,9 @@ export default function ChatPage(props: Props) {
           />
         )}
         {activeChatId === null && activeTaskId === null && (
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 13 }}>
+          <Text as="div" size={4} tone="ink-3" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             选择左侧一个会话，或在「对话」段点 ＋ 新建；精修/补充任务请选「AI 任务」段
-          </div>
+          </Text>
         )}
       </div>
 

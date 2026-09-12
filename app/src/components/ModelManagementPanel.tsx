@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Button, StatusLine } from "../ui/primitives";
+import { Button, StatusLine, Text } from "../ui/primitives";
 import StructureModelSetting from "./StructureModelSetting";
 // L11 去重：HealthSnapshot/StreamingModelStatus/DownloadProgress 单一定义源在 types/system.ts
 import type { DownloadProgress, HealthSnapshot, OcrDeviceStatus, StreamingModelStatus } from "../types";
@@ -146,7 +146,7 @@ export default function ModelManagementPanel() {
         ) : (
           <span style={{ ...badge, background: "#fef2f2", color: "#dc2626" }}>缺失（重打分降级）</span>
         )}
-        <span style={{ fontSize: 10.5, color: "#9ca3af" }}>随安装包捆绑；脚本 scripts/download-streaming-asr.mjs 可重装</span>
+        <Text tone="ink-3" style={{ fontSize: 10.5 }}>随安装包捆绑；脚本 scripts/download-streaming-asr.mjs 可重装</Text>
       </div>
 
       {/* 说话人模型（讲者切换；应用内下载入口——用户需求） */}
@@ -181,7 +181,7 @@ export default function ModelManagementPanel() {
         ) : (
           <span style={{ ...badge, background: "#fffbeb", color: "#b45309" }}>未下载（无标点降级）</span>
         )}
-        <span style={{ fontSize: 10.5, color: "#9ca3af" }}>脚本 scripts/download-punctuation.mjs 可安装</span>
+        <Text tone="ink-3" style={{ fontSize: 10.5 }}>脚本 scripts/download-punctuation.mjs 可安装</Text>
       </div>
 
       {/* OCR 模型（ModelScope 自动缓存）——v0.12.1：就绪判定用 engine_ready
@@ -193,7 +193,7 @@ export default function ModelManagementPanel() {
         ) : (
           <span style={{ ...badge, background: "#fef2f2", color: "#dc2626" }}>✗ 引擎未就绪</span>
         )}
-        <span style={{ fontSize: 10.5, color: "#9ca3af" }}>首次使用经 ModelScope 自动缓存</span>
+        <Text tone="ink-3" style={{ fontSize: 10.5 }}>首次使用经 ModelScope 自动缓存</Text>
         {!ocr?.engine_ready && (
           <span style={{ fontSize: 10.5, color: "#b45309" }}>重启应用自动重试；失败原因见设置页「OCR 推理设备」</span>
         )}

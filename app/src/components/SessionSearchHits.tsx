@@ -12,6 +12,7 @@
  */
 import type { OcrBlockHit, SegmentHit } from "../types";
 import { fmtMs } from "../utils/fmt";
+import { Text } from "../ui/primitives";
 
 interface Props {
   hits: SegmentHit[] | null;
@@ -35,7 +36,7 @@ export default function SessionSearchHits({ hits, ocrHits, searchKw, onOpenDetai
             style={{ fontSize: 12, color: "#374151", padding: "6px 8px", cursor: "pointer", borderBottom: "1px solid #f3f4f6" }}
           >
             <div style={{ fontWeight: 500, color: "#0f766e" }}>{h.session_title}</div>
-            <div style={{ color: "#9ca3af", fontVariantNumeric: "tabular-nums" }}>[{fmtMs(h.start_ms)}]</div>
+            <Text as="div" tone="ink-3" style={{ fontVariantNumeric: "tabular-nums" }}>[{fmtMs(h.start_ms)}]</Text>
             <div>
               {h.snippet.split(searchKw).map((part, j, arr) => (
                 <span key={j}>
@@ -66,10 +67,10 @@ export default function SessionSearchHits({ hits, ocrHits, searchKw, onOpenDetai
               {h.sessionTitle}
               {h.imagePath && <span style={{ marginLeft: 6 }} title="此命中有关联图">📷</span>}
             </div>
-            <div style={{ color: "#9ca3af", fontVariantNumeric: "tabular-nums" }}>
+            <Text as="div" tone="ink-3" style={{ fontVariantNumeric: "tabular-nums" }}>
               [{fmtMs(h.timestampMs)}]
               {h.screenFirstMs != null && ` · 屏 ${h.screenId ?? "?"} ${fmtMs(h.screenFirstMs)}–${fmtMs(h.screenLastMs ?? 0)}`}
-            </div>
+            </Text>
             <div>{h.text}</div>
           </div>
         ))}

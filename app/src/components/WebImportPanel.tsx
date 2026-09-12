@@ -9,7 +9,7 @@
  */
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button } from "../ui/primitives";
+import { Button, Text } from "../ui/primitives";
 
 /** WebCaptureView 响应结构（serde camelCase——字段须 camel 读取） */
 interface CaptureView {
@@ -89,9 +89,9 @@ export default function WebImportPanel({ onOpenSessions, onStatus }: Props) {
       </div>
       {msg && <div style={{ fontSize: 11, color: "#047857", marginTop: 5 }}>{msg}</div>}
       {err && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 5 }}>{err}</div>}
-      <div style={{ fontSize: 10.5, color: "#9ca3af", marginTop: 5 }}>
+      <Text as="div" tone="ink-3" style={{ fontSize: 10.5, marginTop: 5 }}>
         正文本地抽取入库（kind=web 会话）；静态站直取，SPA/登录墙由浏览器扩展（阶段 2）覆盖
-      </div>
+      </Text>
     </div>
   );
 }

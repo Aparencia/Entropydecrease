@@ -19,6 +19,7 @@ import { paletteHex } from "../utils/colorPalette";
 import type { SectionData } from "../utils/noteSectionModel";
 import NoteListRow from "./NoteListRow";
 import NoteTreeSection from "./NoteTreeSection";
+import { Text } from "../ui/primitives";
 
 interface Props {
   /** 展示节（树=未分组+各组顺次；平铺=单 flat 节） */
@@ -82,7 +83,7 @@ export default function NoteListBody({
 
   return (
     <div style={{ flex: 1, overflowY: "auto" }}>
-      {sections.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", marginTop: 24 }}>暂无笔记</p>}
+      {sections.length === 0 && <Text as="p" size={5} tone="ink-3" style={{ textAlign: "center", marginTop: 24 }}>暂无笔记</Text>}
       {sections.map((sec) => (
         sec.scope === "flat" ? (
           <div key="flat">{notes.map(renderRow)}</div>

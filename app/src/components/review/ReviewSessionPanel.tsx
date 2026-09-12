@@ -19,7 +19,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Flashcard } from "../../types/notes";
 import PromoteCardButton from "../PromoteCardButton";
-import { Loading, Skeleton, StatusLine } from "../../ui/primitives";
+import { Loading, Skeleton, StatusLine, Text } from "../../ui/primitives";
 
 /** 四档评分按钮（文案=回忆质量自评） */
 const RATINGS: { value: string; label: string; color: string }[] = [
@@ -106,7 +106,7 @@ export default function ReviewSessionPanel({ groupId, groupName, active = true, 
       {/* 会话头部（页面自适应形态——去模态遮罩后的固定工具行） */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", borderBottom: "1px solid #e5e7eb", background: "#fff", flexShrink: 0 }}>
         <span style={{ fontWeight: 600, fontSize: 14 }}>🎴 复习 · {groupName}</span>
-        {current && <span data-testid="session-progress" style={{ fontSize: 12, color: "#9ca3af" }}>{index + 1}/{queue.length}</span>}
+        {current && <Text size={5} tone="ink-3" testId="session-progress">{index + 1}/{queue.length}</Text>}
         <button
           onClick={onExit}
           data-testid="session-exit"
@@ -134,11 +134,11 @@ export default function ReviewSessionPanel({ groupId, groupName, active = true, 
               <p style={{ fontSize: 15, fontWeight: 600 }}>
                 {done > 0 ? `本轮复习完成：${done} 张卡片` : "当前没有到期卡片"}
               </p>
-              <p style={{ fontSize: 12, color: "#9ca3af", marginTop: 6 }}>
+              <Text as="p" size={5} tone="ink-3" style={{ marginTop: 6 }}>
                 {done > 0
                   ? "间隔已由 FSRS 推进，到期后再来。"
                   : "本范围没有到期卡——可在笔记页组 ⓘ「⚙ 生成闪卡」补充卡池，或等待调度到期。"}
-              </p>
+              </Text>
               <button
                 onClick={onExit}
                 data-testid="session-back-overview"

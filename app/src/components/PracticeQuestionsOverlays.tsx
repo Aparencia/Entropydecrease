@@ -11,7 +11,7 @@
  *              （`ActionCenterPanel` 的条件挂载）⇒ `open` 恒为 `true`，160ms 退场相位不触发。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Button, Modal, EmptyState } from "../ui/primitives";
+import { Button, EmptyState, Modal, Text } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 
 /** 响应结构（PracticeItem/QuestionItem 均 serde camelCase——字段须 camel 读取） */
@@ -46,7 +46,7 @@ const ghostBtn: React.CSSProperties = { ...btn, background: "#fff", border: "1px
 function shell(testId: string, title: string, subtitle: string, onClose: () => void, children: React.ReactNode) {
   return (
     <Modal open onClose={onClose} title={title} size="l" testId={testId}>
-      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 10 }}>{subtitle}</div>
+      <Text as="div" tone="ink-3" style={{ fontSize: 11, marginBottom: 10 }}>{subtitle}</Text>
       {children}
     </Modal>
   );
@@ -114,17 +114,17 @@ export function PracticeOverlay({ onClose }: { onClose: () => void }) {
           {items.map((it) => (
             <div key={it.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px", display: "flex", gap: 6, alignItems: "center" }}>
               <span style={{ fontSize: 12.5, flex: 1 }}>{it.text}</span>
-              <span style={{ fontSize: 10.5, color: "#9ca3af" }}>
+              <Text tone="ink-3" style={{ fontSize: 10.5 }}>
                 {it.frequency === "daily" ? "每日" : "手动"}
                 {it.mastery != null ? ` · 熟练 ${it.mastery}/5` : ""}
                 {it.nextDue != null ? ` · 下次 ${new Date(it.nextDue * 1000).toLocaleDateString()}` : ""}
-              </span>
+              </Text>
               <Button variant="primary" size="md" onClick={() => void tick(it)}>🎯 打点</Button>
             </div>
           ))}
         </div>
       )}
-      <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>打点入完成史（practice_tick）——练习曲线由史聚合；缺勤不追债不清零。</p>
+      <Text as="p" tone="ink-3" style={{ fontSize: 11, marginTop: 10 }}>打点入完成史（practice_tick）——练习曲线由史聚合；缺勤不追债不清零。</Text>
     </>
   ));
 }
@@ -221,7 +221,7 @@ export function QuestionsOverlay({ onClose }: { onClose: () => void }) {
             {answered.map((q) => (
               <div key={q.id} style={{ fontSize: 12, color: "#6b7280", display: "flex", gap: 6 }}>
                 <span>✓ {q.text}</span>
-                {q.answerRef && <span style={{ fontSize: 10.5, color: "#9ca3af" }}>→ {q.answerRef}</span>}
+                {q.answerRef && <Text tone="ink-3" style={{ fontSize: 10.5 }}>→ {q.answerRef}</Text>}
               </div>
             ))}
           </div>

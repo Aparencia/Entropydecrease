@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { OcrDeviceMode, OcrDeviceStatus } from "../types";
+import { Text } from "../ui/primitives";
 
 const MODE_LABELS: Record<OcrDeviceMode, string> = {
   Auto: "自动（推荐）",
@@ -158,25 +159,25 @@ export function OcrDeviceSetting() {
               {backendLabel(status.actual)}
             </b>
             {backendKey(status.requested) !== backendKey(status.actual) && (
-              <span style={{ color: "#9ca3af" }}>（请求 {backendLabel(status.requested)}）</span>
+              <Text tone="ink-3">（请求 {backendLabel(status.requested)}）</Text>
             )}
           </div>
           {status.fallback_reason && (
             <div style={{ color: "#b45309" }}>⚠ {status.fallback_reason}</div>
           )}
           {status.bench && (
-            <div style={{ color: status.engine_ready ? undefined : "#9ca3af" }}>
+            <Text as="div" tone={status.engine_ready ? "inherit" : "ink-3"}>
               校准：CPU {status.bench.cpu_ms.toFixed(1)}ms / GPU {status.bench.gpu_ms.toFixed(1)}ms
               {!status.engine_ready && "（历史基准，引擎恢复后重新检测）"}
-            </div>
+            </Text>
           )}
         </div>
       )}
       {note && <div style={{ fontSize: 11, color: "#0d9488", marginTop: 4 }}>{note}</div>}
       {error && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>{error}</div>}
-      <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 4 }}>
+      <Text as="div" tone="ink-3" style={{ fontSize: 10, marginTop: 4 }}>
         变更与校准结果在下次引擎启动生效
-      </div>
+      </Text>
     </div>
   );
 }

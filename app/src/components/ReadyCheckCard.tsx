@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 // L11 去重：HealthSnapshot 单一定义源在 types/system.ts（三组件重复定义清偿）
 import type { HealthSnapshot } from "../types";
+import { Text } from "../ui/primitives";
 
 interface StructureStatus {
   kind: string;
@@ -147,11 +148,11 @@ export default function ReadyCheckCard() {
           ))}
         </div>
       ) : (
-        <div style={{ fontSize: 11, color: "#9ca3af" }}>{error || "检查中…"}</div>
+        <Text as="div" tone="ink-3" style={{ fontSize: 11 }}>{error || "检查中…"}</Text>
       )}
-      <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 6 }}>
+      <Text as="div" tone="ink-3" style={{ fontSize: 10, marginTop: 6 }}>
         缺失模型的下载入口在各设置面板（实时捕获/结构模型）
-      </div>
+      </Text>
     </div>
   );
 }

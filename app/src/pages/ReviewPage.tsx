@@ -20,7 +20,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { NoteGroup } from "../types/notes";
 import ReviewSessionPanel from "../components/review/ReviewSessionPanel";
 import { dueGroupRows, scopeDueCount, scopeLabel } from "../utils/reviewStats";
-import { Loading, Skeleton, StatusLine } from "../ui/primitives";
+import { Loading, Skeleton, StatusLine, Text } from "../ui/primitives";
 
 interface Props {
   /** 页面是否可见（App 层 display 门控同步透传——切回时重载到期统计） */
@@ -144,9 +144,9 @@ export default function ReviewPage({ active, focusGroupId, onFocusGroupConsumed 
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontWeight: 600, fontSize: 14 }}>🔄 复习</span>
           {loaded && (
-            <span data-testid="review-total-due" style={{ fontSize: 12, color: totalDue > 0 ? "#b45309" : "#9ca3af" }}>
+            <Text size={5} tone={totalDue > 0 ? "due" : "ink-3"} testId="review-total-due">
               {totalDue > 0 ? `共 ${totalDue} 张到期` : "暂无到期卡"}
-            </span>
+            </Text>
           )}
           <button onClick={() => void load()} style={{ fontSize: 13, cursor: "pointer", border: "none", background: "none", color: "#9ca3af" }} title="刷新到期统计">⟳</button>
           <button
@@ -212,7 +212,7 @@ export default function ReviewPage({ active, focusGroupId, onFocusGroupConsumed 
         {loaded && !status && scopeDue <= 0 && (
           <div data-testid="review-empty" style={{ textAlign: "center", padding: "56px 0", maxWidth: 480, margin: "0 auto" }}>
             <p style={{ fontSize: 15, fontWeight: 600, color: "#374151" }}>{emptyTitle}</p>
-            <p style={{ fontSize: 12, color: "#9ca3af", marginTop: 10, lineHeight: 1.8 }}>{emptyBody}</p>
+            <Text as="p" size={5} tone="ink-3" style={{ marginTop: 10, lineHeight: 1.8 }}>{emptyBody}</Text>
           </div>
         )}
         {loaded && !status && scopeDue > 0 && (
@@ -220,9 +220,9 @@ export default function ReviewPage({ active, focusGroupId, onFocusGroupConsumed 
             <p>
               范围「{scopeName}」共 <b>{scopeDue}</b> 张到期卡，按到期先后出卡，一轮至多 200 张。
             </p>
-            <p style={{ marginTop: 8, fontSize: 12, color: "#9ca3af" }}>
+            <Text as="p" size={5} tone="ink-3" style={{ marginTop: 8 }}>
               流程：看线索回忆 → 查看答案验证 → 四档评分推进 FSRS 调度。
-            </p>
+            </Text>
           </div>
         )}
       </div>

@@ -25,6 +25,7 @@ import WebArticleView from "../components/WebArticleView";
 import SpeakerSwitchCard from "../components/SpeakerSwitchCard";
 import type { SessionDetail } from "../types";
 import { fmtMs } from "../utils/fmt";
+import { Text } from "../ui/primitives";
 
 /** 通用小按钮基础样式（视图切换组与精修工具条复用） */
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
@@ -209,15 +210,15 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {/* v0.11.7：图文会话空态语义区分（无讲述内容）；其余会话维持原文案 */}
             {detail.segments.length === 0 && (
-              <p style={{ fontSize: 12, color: "#9ca3af" }}>
+              <Text as="p" size={5} tone="ink-3">
                 {detail.session.kind === "photo" ? "本会话无讲述内容（图文采集）" : "本会话无转写段"}
-              </p>
+              </Text>
             )}
             {detail.segments.map((seg) => (
               <div key={seg.id} id={`seg-${sessionId}-${seg.id}`} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-                <span style={{ fontSize: 11, color: "#9ca3af", width: 70, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                <Text tone="ink-3" style={{ fontSize: 11, width: 70, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
                   {fmtMs(seg.start_ms)} – {fmtMs(seg.end_ms)}
-                </span>
+                </Text>
                 <span style={{ fontSize: 11, flexShrink: 0, color: seg.source === "subtitle" ? "#0d9488" : "#9ca3af", width: 36 }}>
                   {SOURCE_LABEL[seg.source] ?? seg.source}
                 </span>
@@ -270,9 +271,9 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
                     <span style={{ fontSize: 11, color: "#6b7280" }}>
                       画面 ×{g.ocrCount} / 语音 ×{g.asrCount}
                     </span>
-                    <span style={{ fontSize: 10, color: "#9ca3af", marginLeft: "auto" }}>
+                    <Text tone="ink-3" style={{ fontSize: 10, marginLeft: "auto" }}>
                       分 {g.score.toFixed(1)}
-                    </span>
+                    </Text>
                   </div>
                 ))}
               </div>

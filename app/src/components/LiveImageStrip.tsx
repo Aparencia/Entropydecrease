@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { Text } from "../ui/primitives";
 
 /** 横条最多展示张数（最新 N 张，旧的到「会话」页图集查看） */
 const MAX_SHOWN = 12;
@@ -128,7 +129,7 @@ export default function LiveImageStrip({ sessionId }: { sessionId: number | null
       )}
 
       {shown.length === 0 ? (
-        <div style={{ fontSize: 11, color: "#9ca3af" }}>等待画面变化…（板书/PPT 翻页时自动截取，Ctrl+Shift+S 手动截图）</div>
+        <Text as="div" tone="ink-3" style={{ fontSize: 11 }}>等待画面变化…（板书/PPT 翻页时自动截取，Ctrl+Shift+S 手动截图）</Text>
       ) : (
         <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
           {shown.map((rel) => (

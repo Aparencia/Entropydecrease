@@ -14,6 +14,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import type { AiSettingsView } from "../types/ai";
 import type { KbIndexStats, KbReindexEvent } from "../types/kb";
 import LearningLibraryEngineSection from "./LearningLibraryEngineSection";
+import { Text } from "../ui/primitives";
 
 const TIERS = [
   { id: "light", label: "轻量（~4K）" },
@@ -189,9 +190,9 @@ export default function LearningLibraryPanel({ active = true }: { active?: boole
             <option key={t.id} value={t.id}>{t.label}</option>
           ))}
         </select>
-        <span style={{ fontSize: 11, color: "#9ca3af" }}>
+        <Text tone="ink-3" style={{ fontSize: 11 }}>
           双闸门（AI 授权之上）；片段预算硬顶；命中列表恒可用
-        </span>
+        </Text>
       </div>
 
       {/* v0.19.3（REQ-261）：相关素材建议开关（建议制·默认关——本地检索恒可用） */}
@@ -207,9 +208,9 @@ export default function LearningLibraryPanel({ active = true }: { active?: boole
           />
           开启（默认关）
         </label>
-        <span style={{ fontSize: 11, color: "#9ca3af" }}>
+        <Text tone="ink-3" style={{ fontSize: 11 }}>
           概念详情建议候选 · 勾选确认后经引用通道落库（建议零双写）
-        </span>
+        </Text>
       </div>
 
       {/* 索引统计 + 重建 */}

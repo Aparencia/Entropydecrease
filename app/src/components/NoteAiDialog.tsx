@@ -16,7 +16,7 @@
  *              busy 门（`running || showWorkbench` 时不关）现在是**唯一的**关闭门。
  */
 import { useCallback, useState } from "react";
-import { Button, Modal, StatusLine } from "../ui/primitives";
+import { Button, Modal, StatusLine, Text } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { useAiTaskPolling } from "../hooks/useAiTaskPolling";
 import type { AiRefineResult, AiTaskState } from "../types";
@@ -119,11 +119,11 @@ export default function NoteAiDialog({
 
   /** 头行右侧状态位（原面板头的 `smallBtn` 自定义关闭钮已删——关闭由 `Modal` 的 `-close` 承载） */
   const statusHint = (
-    <span style={{ fontSize: 11, color: "#9ca3af" }}>
+    <Text tone="ink-3" style={{ fontSize: 11 }}>
       {/* 信息9（审查裸号）：本对话框未传标题上下文（仅 noteId/content）——
           中性「当前笔记」不裸显 #id（REQ-277 口径） */}
       当前笔记
-    </span>
+    </Text>
   );
 
   return (

@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button, StatusLine } from "../ui/primitives";
+import { Button, StatusLine, Text } from "../ui/primitives";
 
 interface InboxView {
   running: boolean;
@@ -72,9 +72,9 @@ export function WebInboxPanel() {
     <div>
       <div style={{ fontSize: 12, color: "#374151", marginBottom: 6 }}>
         <b>🛬 本地收件（浏览器扩展投递）</b>{" "}
-        <span style={{ fontSize: 11, color: "#9ca3af" }}>
+        <Text tone="ink-3" style={{ fontSize: 11 }}>
           登录墙正解：扩展读已登录 DOM → 本服务（127.0.0.1 + token 单向投递）→ kind=web 会话
-        </span>
+        </Text>
       </div>
       {msg && <div style={{ fontSize: 11, color: "#047857", marginBottom: 4 }}>{msg}</div>}
       {err && <StatusLine kind="error">{err}</StatusLine>}
@@ -90,9 +90,9 @@ export function WebInboxPanel() {
           </>
         )}
       </div>
-      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
+      <Text as="div" tone="ink-3" style={{ fontSize: 11, marginTop: 4 }}>
         安装扩展：Edge/Chrome 扩展管理页开启开发者模式 → 「加载已解压的扩展程序」→ 选 app/extension-web-clipper（投递契约见 docs/Foresight/web-capture-extension-protocol.md）
-      </div>
+      </Text>
     </div>
   );
 }

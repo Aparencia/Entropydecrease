@@ -8,7 +8,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { zIndex } from "../ui/zIndex";
-import { Button } from "../ui/primitives";
+import { Button, Text } from "../ui/primitives";
 import type { WindowInfo } from "../types";
 
 interface Props {
@@ -48,21 +48,15 @@ function WindowRow({ win, isSelected, onClick }: { win: WindowInfo; isSelected: 
           {win.title}
           {/* 2026-08：站点首页标记（无视频内容落地页，不进入推荐但可手动选） */}
           {win.isHomepage && (
-            <span
-              style={{ marginLeft: 6, fontSize: 10, color: "#9ca3af", background: "#f3f4f6", borderRadius: 4, padding: "0 4px" }}
-              title="站点首页（无视频内容），可手动选择兜底"
-            >
+            <Text tone="ink-3" title="站点首页（无视频内容），可手动选择兜底" style={{ marginLeft: 6, fontSize: 10, background: "#f3f4f6", borderRadius: 4, padding: "0 4px" }}>
               🏠 首页
-            </span>
+            </Text>
           )}
           {/* v0.19.2：系统窗口标记（默认过滤——勾选"显示系统窗口"后可见） */}
           {win.systemWindow && (
-            <span
-              style={{ marginLeft: 6, fontSize: 10, color: "#9ca3af", background: "#f3f4f6", borderRadius: 4, padding: "0 4px" }}
-              title="系统/工具窗口（终端/资源管理器等），默认隐藏"
-            >
+            <Text tone="ink-3" title="系统/工具窗口（终端/资源管理器等），默认隐藏" style={{ marginLeft: 6, fontSize: 10, background: "#f3f4f6", borderRadius: 4, padding: "0 4px" }}>
               🖥 系统
-            </span>
+            </Text>
           )}
         </div>
         <div style={{ fontSize: 11, color: "#6b7280" }}>
@@ -140,12 +134,9 @@ export function WindowSelectCard({ windows, selected, onSelect, onRefresh, loadi
                 {/* v0.19.3 审查 LOW-3：折叠卡也标记系统窗口（标题常为终端提示符/
                     目录名，无标记易与"已隐藏"心智冲突） */}
                 {selected.systemWindow && (
-                  <span
-                    style={{ marginLeft: 6, fontSize: 10, color: "#9ca3af", background: "#f3f4f6", borderRadius: 4, padding: "0 4px" }}
-                    title="系统/工具窗口——列表默认隐藏，可在选择器上方勾选显示系统窗口找回"
-                  >
+                  <Text tone="ink-3" title="系统/工具窗口——列表默认隐藏，可在选择器上方勾选显示系统窗口找回" style={{ marginLeft: 6, fontSize: 10, background: "#f3f4f6", borderRadius: 4, padding: "0 4px" }}>
                     🖥 系统窗口
-                  </span>
+                  </Text>
                 )}
               </div>
               <div style={{ fontSize: 11, color: "#0d9488" }}>
@@ -186,12 +177,12 @@ export function WindowSelectCard({ windows, selected, onSelect, onRefresh, loadi
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 260, overflowY: "auto" }}>
             {windows.length === 0 && !loading && (
-              <p style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", padding: "8px 0" }}>未检测到可捕获窗口</p>
+              <Text as="p" size={5} tone="ink-3" style={{ textAlign: "center", padding: "8px 0" }}>未检测到可捕获窗口</Text>
             )}
             {windows.length > 0 && recommended.length === 0 && (
-              <p style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", padding: "8px 0" }}>
+              <Text as="p" size={5} tone="ink-3" style={{ textAlign: "center", padding: "8px 0" }}>
                 未发现疑似网课/视频窗口，可从下方全部窗口手动选择
-              </p>
+              </Text>
             )}
             {recommended.map((win) => (
               <WindowRow key={win.id} win={win} isSelected={selected?.id === win.id} onClick={() => handlePick(win)} />

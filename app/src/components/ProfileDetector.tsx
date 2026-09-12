@@ -22,7 +22,7 @@ import type {
 // 审查修复（领域枚举漂移）：共享常量替换本地定义——与 Rust ALL_DOMAINS 20 类
 // 同口径（新建组/改判共用），本地重复定义删除
 import { DOMAIN_OPTIONS } from "../utils/domainOptions";
-import { StatusLine } from "../ui/primitives";
+import { StatusLine, Text } from "../ui/primitives";
 
 /** 形态标签映射（Rust ContentForm::label 同源） */
 export const FORM_LABELS: Record<ContentForm, string> = {
@@ -236,7 +236,7 @@ export default function ProfileDetector({
         视频档案（三维一体 · v0.9.0）
       </div>
       {detecting ? (
-        <div style={{ fontSize: 11, color: "#9ca3af" }}>检测中…</div>
+        <Text as="div" tone="ink-3" style={{ fontSize: 11 }}>检测中…</Text>
       ) : (
         <div>
           <div style={{ fontSize: 12, marginBottom: 6 }}>
@@ -273,7 +273,7 @@ export default function ProfileDetector({
               <span style={{ fontSize: 10, color: "#b45309" }}>待确认</span>
             )}
             {form === null && !needConfirm && (
-              <span style={{ fontSize: 10, color: "#9ca3af" }}>识别中（不阻塞）</span>
+              <Text tone="ink-3" style={{ fontSize: 10 }}>识别中（不阻塞）</Text>
             )}
           </div>
           {/* 维度②：画面价值（4 档下拉——默认中档+诚实声明） */}
@@ -290,7 +290,7 @@ export default function ProfileDetector({
                 </option>
               ))}
             </select>
-            <span style={{ fontSize: 10, color: "#9ca3af" }}>会话中自动重评 · 升档静默/降档确认</span>
+            <Text tone="ink-3" style={{ fontSize: 10 }}>会话中自动重评 · 升档静默/降档确认</Text>
           </div>
           {/* M3 诚实化：画面档无后端记忆通道——明示仅本次会话生效 */}
           {tierNotice && (
@@ -350,18 +350,18 @@ export default function ProfileDetector({
             </div>
           ) : null}
           {result && result.candidates.length > 1 && (
-            <div style={{ fontSize: 10, color: "#9ca3af" }}>
+            <Text as="div" tone="ink-3" style={{ fontSize: 10 }}>
               候选：{result.candidates.map((c) => `${KIND_TO_FORM[c.kind] ?? c.kind}(${(c.score * 100) | 0}%)`).join(" / ")}
-            </div>
+            </Text>
           )}
           {profiles.length > 0 && form && (
-            <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 4 }}>
+            <Text as="div" tone="ink-3" style={{ fontSize: 10, marginTop: 4 }}>
               {profiles.find((p) => p.kind === formToKind(form))?.artifact_template ?? ""} 模板 ·{" "}
               {(() => {
                 const b = profiles.find((p) => p.kind === formToKind(form))?.sampling_budget;
                 return b ? `${b.subtitle_every}s/字幕 · ${b.full_every}s/全帧` : "";
               })()}
-            </div>
+            </Text>
           )}
           {error && <StatusLine kind="error">{error}</StatusLine>}
         </div>

@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Button } from "../ui/primitives";
+import { Button, Text } from "../ui/primitives";
 
 /** 词表全量（Rust VocabState） */
 interface VocabState {
@@ -205,7 +205,7 @@ export function VocabManager() {
             placeholder="错词（如：主者）"
             style={{ flex: 1, padding: "4px 6px", fontSize: 12, borderRadius: 6, border: "1px solid #e5e7eb" }}
           />
-          <span style={{ alignSelf: "center", color: "#9ca3af" }}>→</span>
+          <Text tone="ink-3" style={{ alignSelf: "center" }}>→</Text>
           <input
             value={to}
             onChange={(e) => setTo(e.target.value)}
@@ -281,9 +281,9 @@ export function VocabManager() {
       )}
       {message && <div style={{ fontSize: 11, color: "#0d9488", marginTop: 4 }}>{message}</div>}
       {error && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>{error}</div>}
-      <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 4 }}>
+      <Text as="div" tone="ink-3" style={{ fontSize: 10, marginTop: 4 }}>
         ASR 热词在下一个断句生效；替换词即时生效
-      </div>
+      </Text>
     </div>
   );
 }

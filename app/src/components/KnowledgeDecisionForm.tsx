@@ -13,7 +13,7 @@
  *              application 且 conceptId 提供时默认带上 conceptIds=[conceptId]（挂概念）。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Modal, StatusLine } from "../ui/primitives";
+import { Modal, StatusLine, Text } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   KnowledgeConcept, KnowledgeDecision, KnowledgeModel, KnowledgeNode,
@@ -230,7 +230,7 @@ function Field({ label, testid, value, onChange, placeholder }: { label: string;
 
 /** 复选列表（引用多选：概念/节点/模型/笔记/闪卡/碎片） */
 function RefCheckboxList({ title, items, checked, onToggle, dataPrefix }: { title: string; items: { id: number; label: string }[]; checked: (id: number) => boolean; onToggle: (id: number) => void; dataPrefix: string }) {
-  if (items.length === 0) return <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{title}：暂无</div>;
+  if (items.length === 0) return <Text as="div" tone="ink-3" style={{ fontSize: 11, marginTop: 2 }}>{title}：暂无</Text>;
   return (
     <div style={{ marginTop: 4 }}>
       <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 2 }}>{title}</div>

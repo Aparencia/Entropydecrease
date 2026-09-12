@@ -12,6 +12,7 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiEnrichResult, AiTaskRecord, AiTurn } from "../types";
 import ChatMessageMarkdown, { truncatePreview } from "./ChatMessageMarkdown";
+import { Text } from "../ui/primitives";
 
 interface Props {
   task: AiTaskRecord;
@@ -193,9 +194,9 @@ export default function TaskConversationView({ task, turns, refTitle, onOpenSess
 
       {/* 轨迹（提示词/回答全文） */}
       {turns.length === 0 && task.state !== "failed" && (
-        <div style={{ fontSize: 12.5, color: "#9ca3af", padding: "8px 0" }}>
+        <Text as="div" tone="ink-3" style={{ fontSize: 12.5, padding: "8px 0" }}>
           该任务无轨迹存档（v0.16.0 升级前的任务未记录提示词/回答）
-        </div>
+        </Text>
       )}
       {turns.map((t) => (
         <div key={t.turn} style={{ marginBottom: 10 }}>

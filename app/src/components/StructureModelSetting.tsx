@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { Text } from "../ui/primitives";
 
 type ModelKind = "layout" | "table" | "formula";
 
@@ -134,10 +135,10 @@ export default function StructureModelSetting() {
             </span>
             {/* 下载进度（下载中显示当前文件 + 字节进度） */}
             {downloading && st?.currentFile && (
-              <span style={{ fontSize: 10, color: "#9ca3af", flexShrink: 0 }}>
+              <Text tone="ink-3" style={{ fontSize: 10, flexShrink: 0 }}>
                 {st.currentFile}{" "}
                 {st.totalBytes > 0 ? `${(st.downloadedBytes / 1048576) | 0}MB/${(st.totalBytes / 1048576) | 0}MB` : "…"}
-              </span>
+              </Text>
             )}
             {state === "failed" && st?.error && (
               <span style={{ fontSize: 10, color: "#dc2626" }} title={st.error}>⚠ {st.error.slice(0, 40)}</span>

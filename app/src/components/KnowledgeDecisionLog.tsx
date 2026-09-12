@@ -16,7 +16,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { DecisionKind, KnowledgeDecision } from "../types/knowledge";
 import { countUsedRefs, parseUsedRefs } from "../types/knowledge";
-import { EmptyState, StatusLine } from "../ui/primitives";
+import { EmptyState, StatusLine, Text } from "../ui/primitives";
 
 interface Props {
   systemId: number;
@@ -96,7 +96,7 @@ export default function KnowledgeDecisionLog({ systemId, conceptId, onChanged }:
                 <span data-testid={`decision-kind-${d.id}`} style={{ fontSize: 12 } as const}>{d.kind === "decision" ? "🧭" : "🛠"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div data-testid={`decision-content-${d.id}`} style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.content}</div>
-                  <div style={{ fontSize: 11, color: "#9ca3af" }}>{formatDecisionTime(d.decidedAt)} · {refCount} 个引用</div>
+                  <Text as="div" tone="ink-3" style={{ fontSize: 11 }}>{formatDecisionTime(d.decidedAt)} · {refCount} 个引用</Text>
                 </div>
                 <button data-testid={`decision-delete-${d.id}`} onClick={() => void remove(d.id)} title="删除记录" style={{ border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#9ca3af" }}>🗑</button>
               </div>

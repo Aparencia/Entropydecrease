@@ -8,6 +8,7 @@
  *              （pointerdown 起点上抛 parent——行间/空列表同用空白锚点语义）。
  */
 import { useState, type ReactNode } from "react";
+import { Text } from "../ui/primitives";
 
 interface Props {
   /** 组名（未分组区显示「未分组」） */
@@ -104,7 +105,7 @@ export default function NoteTreeSection({
             手排 ↺
           </button>
         )}
-        <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 400 }}>{count}</span>
+        <Text tone="ink-3" style={{ fontSize: 10 }}>{count}</Text>
       </div>
       {!folded && <div data-testid={`tree-body-${title}`}>{children}</div>}
     </div>

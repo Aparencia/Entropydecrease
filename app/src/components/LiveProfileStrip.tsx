@@ -20,6 +20,7 @@ import { FORM_LABELS, KIND_TO_FORM, TIER_LABELS } from "./ProfileDetector";
 // 消重后 ProfileDetector 不再导出，直接 import 共享常量）
 import { DOMAIN_OPTIONS } from "../utils/domainOptions";
 import type { ContentForm, DetectResult, DomainDetection, DomainFineOption, VisualTier } from "../types";
+import { Text } from "../ui/primitives";
 
 /** 升档提示停留时长（ms）——简要设计：瞬时提示不占常驻空间 */
 const NOTE_TTL_MS = 3000;
@@ -238,12 +239,12 @@ export default function LiveProfileStrip({ windowTitle }: { windowTitle: string 
               🏷 {domain?.kind ? domainLabel(domain.kind) : "领域未定"}
             </span>
             {(domain?.fine_ids?.length ?? 0) > 0 ? (
-              <span style={{ color: "#9ca3af" }}>
+              <Text tone="ink-3">
                 细目：{domain!.fine_ids!.map((id) => (domain!.kind ? fineMap[domain!.kind]?.find((f) => f.id === id)?.label ?? id : id)).join(" / ")}
-              </span>
+              </Text>
             ) : null}
             {domain?.fine_tags?.length ? (
-              <span style={{ color: "#9ca3af" }}>细标签：{domain.fine_tags.join(" / ")}</span>
+              <Text tone="ink-3">细标签：{domain.fine_tags.join(" / ")}</Text>
             ) : null}
             <button
               onClick={() => setEditing(true)}

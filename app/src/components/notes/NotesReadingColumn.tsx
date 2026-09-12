@@ -36,6 +36,7 @@ import NoteReadingView from "../NoteReadingView";
 import RichEditorView from "../RichEditorView";
 import NoteHeaderActions from "../NoteHeaderActions";
 import VersionPanel from "../VersionPanel";
+import { Text } from "../../ui/primitives";
 
 interface Props {
   /** 当前选中笔记（null=空态占位） */
@@ -156,9 +157,9 @@ export default function NotesReadingColumn({
           onSelectionAction={onSelectionAction}
         />
       ) : (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 13 }}>
+        <Text as="div" size={4} tone="ink-3" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
           从左侧选择一条笔记查看
-        </div>
+        </Text>
       )}
     </div>
   );

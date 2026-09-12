@@ -29,6 +29,7 @@ import SelectionActionMenu from "./note-selection/SelectionActionMenu";
 // 列宽执行器仍是 useColumnLayout（A5 裁决：注册表持规格、hook 执行）
 import { columnSpec } from "../shell/columnRegistry";
 import ColumnResizer from "./ColumnResizer";
+import { Text } from "../ui/primitives";
 
 interface Props {
   note: Note;
@@ -292,9 +293,9 @@ export default function NoteReadingView({
                 style={{ flex: 1, maxWidth: 240, padding: "3px 6px", fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 4 }}
                 autoFocus
               />
-              <span style={{ fontSize: 11, color: "#9ca3af" }}>
+              <Text tone="ink-3" style={{ fontSize: 11 }}>
                 {searchMatches.length > 0 ? `${searchIndex + 1}/${searchMatches.length}` : "无匹配"}
-              </span>
+              </Text>
               <button onClick={() => jumpSearch(1)} style={{ fontSize: 11, cursor: "pointer", border: "none", background: "none", color: "#4b5563" }}>↓</button>
               <button onClick={() => jumpSearch(-1)} style={{ fontSize: 11, cursor: "pointer", border: "none", background: "none", color: "#4b5563" }}>↑</button>
             </>

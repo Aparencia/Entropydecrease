@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiUsageRecord, DiffOp, NoteVersion, NoteVersionSource } from "../types";
 import RefineWorkbench from "./RefineWorkbench";
-import { ConfirmDialog, StatusLine } from "../ui/primitives";
+import { ConfirmDialog, StatusLine, Text } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "4px 8px", cursor: "pointer", fontSize: 11, borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" };
 
@@ -121,11 +121,11 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
         )}
         {/* A4：版本统计摘要 */}
         {versions.length > 0 && (
-          <span style={{ fontSize: 10, color: "#9ca3af", marginLeft: "auto" }}>
+          <Text tone="ink-3" style={{ fontSize: 10, marginLeft: "auto" }}>
             {versions.filter((v) => v.source === "user-edit").length} 次编辑 ·
             {versions.filter((v) => v.source === "ai-refine" || v.source === "ai-enrich").length} 次 AI ·
             {versions.length} 版本
-          </span>
+          </Text>
         )}
       </div>
 
@@ -140,8 +140,8 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
                   <span style={{ color: "#6b7280", width: 110, flexShrink: 0 }}>{fmtTime(v.createdAt)}</span>
                   <span style={{ color: badge.color, background: badge.bg, borderRadius: 8, padding: "1px 8px", fontWeight: 600 }}>{badge.label}</span>
                   {v.meta.costYuan != null && <span style={{ color: "#b45309" }}>¥{v.meta.costYuan.toFixed(4)}</span>}
-                  {v.meta.model && <span style={{ color: "#9ca3af", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.meta.model}</span>}
-                  {v.meta.mergedFrom && <span style={{ color: "#9ca3af" }} title={v.meta.mergedFrom}>· 已合并</span>}
+                  {v.meta.model && <Text tone="ink-3" style={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.meta.model}</Text>}
+                  {v.meta.mergedFrom && <Text tone="ink-3" title={v.meta.mergedFrom}>· 已合并</Text>}
                   <span style={{ flex: 1 }} />
                   <button
                     style={{ ...btn, color: "#2563eb" }}

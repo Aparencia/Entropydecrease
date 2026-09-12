@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 // v0.14 A：外链/本地判定提取为共享纯函数（编辑 widget 与阅读共用同一解析逻辑）
 import { resolveNoteImageSrc } from "../utils/resolveNoteImageSrc";
+import { Text } from "../ui/primitives";
 
 interface Props {
   src: string;
@@ -21,6 +22,8 @@ interface Props {
 
 /** 无需本地解析的直出源判定已提取至 utils/resolveNoteImageSrc（v0.14 A） */
 
+/** 占位块**只留布局/形状**：墨度（`color`）与字号（`fontSize`）已交 `Text` 的 `tone`/`size`
+ *  （批 4 T16-B：原 `color: "#9ca3af"` 2.54:1 ⇒ `tone="ink-3"` 5.13:1；`fontSize: 12` == 字阶 s5） */
 const PLACEHOLDER: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -30,8 +33,6 @@ const PLACEHOLDER: React.CSSProperties = {
   background: "#f9fafb",
   border: "1px dashed #d1d5db",
   borderRadius: 6,
-  color: "#9ca3af",
-  fontSize: 12,
   padding: "8px 12px",
   margin: "4px 0",
 };
@@ -68,10 +69,10 @@ export default function NoteImage({ src, alt = "", noteId, onOpen }: Props) {
   }, [src, noteId, kind]);
 
   if (failed) {
-    return <div style={PLACEHOLDER}>🖼 {alt || "图片不可用"}</div>;
+    return <Text as="div" size={5} tone="ink-3" style={PLACEHOLDER}>🖼 {alt || "图片不可用"}</Text>;
   }
   if (!url) {
-    return <div style={PLACEHOLDER}>…</div>;
+    return <Text as="div" size={5} tone="ink-3" style={PLACEHOLDER}>…</Text>;
   }
   return (
     <img

@@ -12,6 +12,7 @@
 import type { AiTaskRecord } from "../types";
 // REQ-290①（v0.19.7）：delta 逐节增量并入片正文（打字机）；blockDone 收尾
 import { sliceStreamContent, useRefineStream } from "../hooks/useRefineStream";
+import { Text } from "../ui/primitives";
 
 interface Props {
   tasks: AiTaskRecord[];
@@ -59,11 +60,11 @@ function RefineStreamBody({ taskId, total }: { taskId: number; total: number | n
   if (slices.length === 0 && frames.length === 0) return null;
   return (
     <div style={{ width: "100%", marginTop: 4, borderTop: "1px dashed #e5e7eb", paddingTop: 4 }}>
-      <div style={{ fontSize: 10.5, color: "#9ca3af", marginBottom: 2 }}>
+      <Text as="div" tone="ink-3" style={{ fontSize: 10.5, marginBottom: 2 }}>
         已整理 {slices.filter((s) => s.complete).length}/{total ?? "?"} 片{failedCount > 0 && ` · 失败 ${failedCount} 片（保留规则版）`}
         {streamingLive && " · 逐节流出中"}
         {doneFrames > 0 && " · 完成"}
-      </div>
+      </Text>
       {slices.map((s) => (
         <pre
           key={s.sliceIndex}
@@ -96,7 +97,7 @@ export default function TaskThreadCard({
             ⚙ {OP_LABEL[t.opType] ?? t.opType} {refTitle(t)}
           </span>
           <span style={{ color: "#b45309" }}>{t.state === "running" ? "进行中…" : "排队中…"}</span>
-          {t.slices != null && t.slices > 1 && <span style={{ color: "#9ca3af" }}>{t.slices} 片</span>}
+          {t.slices != null && t.slices > 1 && <Text tone="ink-3">{t.slices} 片</Text>}
           <button style={{ marginLeft: "auto", fontSize: 11, cursor: "pointer", border: "none", background: "none", color: "#6b7280" }} onClick={() => onOpenTask(t.taskId)}>
             查看轨迹 ▸
           </button>

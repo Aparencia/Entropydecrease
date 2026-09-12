@@ -19,7 +19,7 @@
  *              两栏的**独立滚动 + 同步滚动**保留（见 `PANE_MAX_H` 的 Why）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, EmptyState, Loading, Skeleton, StatusLine } from "../ui/primitives";
+import { EmptyState, Loading, Modal, Skeleton, StatusLine, Text } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiRefineResult, DiffOp, MarkdownDiffOps, RefineStrategyInfo, RefineStrategyMeta, WorkbenchData } from "../types";
 import { escapeHtml } from "../utils/html";
@@ -366,7 +366,7 @@ export default function RefineWorkbench({
         <span style={{ fontSize: 11, color: "#047857" }}>新增 {stats.added} 行</span>
         <span style={{ fontSize: 11, color: "#b91c1c" }}>删除 {stats.removed} 行</span>
         <span style={{ fontSize: 11, color: "#6b7280" }}>章节 {sections.length}</span>
-        {wb.meta?.model && <span style={{ fontSize: 10, color: "#9ca3af" }}>{wb.meta.model}</span>}
+        {wb.meta?.model && <Text tone="ink-3" style={{ fontSize: 10 }}>{wb.meta.model}</Text>}
         {wb.meta?.costYuan != null && (
           <span style={{ fontSize: 10, color: "#b45309" }}>¥{wb.meta.costYuan.toFixed(4)}</span>
         )}

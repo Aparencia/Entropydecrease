@@ -16,6 +16,7 @@ import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
 import { fmtDate, parseTags } from "../utils/noteHelpers";
 import { crateDndWriteIds } from "./NoteTreeSection";
+import { Text } from "../ui/primitives";
 
 interface Props {
   note: Note;
@@ -114,7 +115,7 @@ export default function NoteListRow({
           {note.title}
         </div>
       </div>
-      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
+      <Text as="div" tone="ink-3" style={{ fontSize: 11, marginTop: 2, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
         <span>{note.source === "classroom" ? "📡 课堂" : "✍ 手动"} · {fmtDate(note.updated_at)}</span>
         {tags.slice(0, 3).map((t) => (
           <span
@@ -127,7 +128,7 @@ export default function NoteListRow({
             {t}
           </span>
         ))}
-        {tags.length > 3 && <span style={{ fontSize: 10, color: "#9ca3af" }}>+{tags.length - 3}</span>}
+        {tags.length > 3 && <Text tone="ink-3" style={{ fontSize: 10 }}>+{tags.length - 3}</Text>}
         {note.session_id != null && (
           <span
             onClick={(e) => { e.stopPropagation(); onOpenSession(note.session_id as number); }}
@@ -137,7 +138,7 @@ export default function NoteListRow({
             来源会话 →
           </span>
         )}
-      </div>
+      </Text>
     </div>
   );
 }

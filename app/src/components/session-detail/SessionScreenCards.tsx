@@ -22,6 +22,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import BoxSelectOverlay from "../BoxSelectOverlay";
 import type { SessionOcrBlock, SessionScreen } from "../../types";
 import { fmtMs } from "../../utils/fmt";
+import { Text } from "../../ui/primitives";
 
 /** 通用小按钮基础样式（拆分前 SessionDetailPanel 的 `btn`——本文件仅「框选截取」展开复用） */
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
@@ -70,14 +71,14 @@ export default function SessionScreenCards({
           图文会话（kind=photo）保持 OCR 文本屏 —— 头部文案与原始块提示随类型分派 */}
       <h3 style={{ fontSize: 13, margin: "16px 0 6px" }}>
         {kind === "photo" ? "画面要点（OCR）" : "画面要点（关键帧纯图）"} · {screens.length} 屏
-        <span style={{ color: "#9ca3af", fontWeight: 400 }}>
+        <Text tone="ink-3">
           {screens.length === 0 || kind !== "photo" ? "" : `（原始 ${ocrBlockCount} 块）`}
-        </span>
+        </Text>
       </h3>
       {screens.length === 0 && (
-        <p style={{ fontSize: 12, color: "#9ca3af" }}>
+        <Text as="p" size={5} tone="ink-3">
           {kind === "photo" ? "本会话无画面识别内容" : "本会话无关键帧图"}
-        </p>
+        </Text>
       )}
       {screens.map((s, i) => {
         // 块级明细（原料复查）：预构建分组直取（M7：替代逐屏 O(n×m) filter）

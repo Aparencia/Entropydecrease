@@ -9,7 +9,7 @@
  * @ai-context: 不预填内容（预填＝假燃料）——所有输入从空字符串开始。
  */
 import { useState } from "react";
-import { Modal, StatusLine } from "../ui/primitives";
+import { Modal, StatusLine, Text } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 
 interface Props {
@@ -138,9 +138,9 @@ export default function KnowledgeConceptDialog({ systemId, onCreated, onClose }:
         style={textarea}
       />
 
-      <p style={{ fontSize: 11, color: "#9ca3af", margin: "10px 0 0" }}>
+      <Text as="p" tone="ink-3" style={{ fontSize: 11, margin: "10px 0 0" }}>
         新概念默认状态为「核心」，创建后可在右栏详情面板修改。
-      </p>
+      </Text>
 
       {error && (
         <div style={{ marginTop: 10 }}>
