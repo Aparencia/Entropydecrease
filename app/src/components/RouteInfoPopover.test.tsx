@@ -143,7 +143,7 @@ describe("RouteInfoPopover ⓘ 弹层", () => {
       switch (cmd) {
         case "list_group_cards":
           return [
-            { id: 1, groupId: 3, kind: "model", front: "曝光三角", back: "q", noteId: null, fragmentId: null, stateJson: "", createdAt: 0, updatedAt: 0, dueAt: 0 },
+            { id: 1, groupId: 3, kind: "model", front: "曝光三角", back: "q", noteId: null, fragmentId: null, stateJson: "", createdAt: 0, updatedAt: 0, dueAt: 0, intervalDays: 0 },
           ];
         case "list_knowledge_systems":
           return [{ id: 2, parentSystemId: null, name: "摄影", kind: "domain", coreQuestion: null, status: "active", createdAt: 0, updatedAt: 0 }];

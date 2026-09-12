@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { NoteGroup } from "../types/notes";
 import ReviewSessionPanel from "../components/review/ReviewSessionPanel";
+import DueScale from "../components/review/DueScale";
 import { dueGroupRows, scopeDueCount, scopeLabel } from "../utils/reviewStats";
 import { Loading, Skeleton, StatusLine, Text } from "../ui/primitives";
 
@@ -162,6 +163,15 @@ export default function ReviewPage({ active, focusGroupId, onFocusGroupConsumed 
             ▶ 开始复习{scopeDue > 0 ? `（${scopeDue}）` : ""}
           </button>
         </div>
+
+        {/* 到期刻度（R5.4 的承载面 · §8.6 #4 的静态形态）：长度 = 当前范围的到期数 scopeDue
+            —— 与「开始复习（N）」同源；`intervals` 不传（队列要进会话才拉，这里**不新增 IPC**）。
+            生长/回缩动效归 T30：本刻度今天静止。 */}
+        {loaded && (
+          <div style={{ marginTop: 8 }}>
+            <DueScale due={scopeDue} testId="review-due-scale" />
+          </div>
+        )}
 
         {/* 组过滤器：全部 + 有到期卡的组（含到期数；打开即见——本页即到期感知面） */}
         <div data-testid="review-scope-bar" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>

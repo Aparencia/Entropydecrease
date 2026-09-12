@@ -32,7 +32,7 @@ const GROUPS = [groupA, groupB];
 const DUE_BY_ID: Record<number, number> = { 1: 3, 2: 1 };
 
 function card(id: number, front: string): Flashcard {
-  return { id, groupId: 1, noteId: null, fragmentId: null, front, back: "b", kind: "fact", stateJson: "", dueAt: 0, createdAt: 0 };
+  return { id, groupId: 1, noteId: null, fragmentId: null, front, back: "b", kind: "fact", stateJson: "", dueAt: 0, createdAt: 0, intervalDays: 0 };
 }
 
 /** count_due_cards 调用次数（含全量+逐组）——active 门控/退出会话重载断言用 */
@@ -168,5 +168,22 @@ describe("ReviewPage 刷新与深链", () => {
     await screen.findByTestId("review-scope-all");
     const start = screen.getByTestId("review-start") as HTMLButtonElement;
     expect(start.textContent).toContain("1");
+  });
+});
+
+describe("ReviewPage 到期刻度（批 6 T21 · R5.4 承载面）", () => {
+  it("刻度接入且与既有文案同屏：段数 == 当前范围数（逐序）· 切范围即随 scopeDue 变短", async () => {
+    render(<ReviewPage active={false} />);
+    const scale = await screen.findByTestId("review-due-scale");
+    expect(scale.getAttribute("data-due")).toBe("4");
+    expect([...scale.querySelectorAll("[data-tick]")].map((el) => el.getAttribute("data-tick"))).toEqual([
+      "0", "1", "2", "3",
+    ]);
+    // V4 只增不减：既有「共 N 张到期」文案逐字仍在
+    expect(screen.getByTestId("review-total-due").textContent).toBe("共 4 张到期");
+    // 切到组 1（到期 3）⇒ 刻度长度随当前范围变（同源 scopeDue，未新增任何 IPC）
+    fireEvent.click(screen.getByTestId("review-scope-1"));
+    await waitFor(() => expect(screen.getByTestId("review-due-scale").getAttribute("data-due")).toBe("3"));
+    expect(dueCalls()).toBe(3);
   });
 });

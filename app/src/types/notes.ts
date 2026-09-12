@@ -159,6 +159,20 @@ export interface Flashcard {
   /** 到期时刻（Unix 毫秒） */
   dueAt: number;
   createdAt: number;
+  /**
+   * 真实复习间隔天数（**只读**；Rust `Flashcard.interval_days` 的镜像）。
+   *
+   * @ai-context: 唯一合法口径 —— 前端**不得**用 `dueAt` 差值、`stateJson` 解析或字符数自造
+   *              「真实间隔」（R5.4 明文禁止；AGENTS.md「不发明数字」）。
+   * @ai-context: 精度**双域**（PB2 裁决，两域不许混为一谈）：① `review_card` 返回体 = 当次调度的
+   *              **精确值**；② 行派生路径（`list_due_cards` 等 5 个查询方法，`row_to_card` 反推）
+   *              = **整天粒度**（DB 无 interval 列，f32 原值不可恢复）。UI 必须如实区分。
+   *              新卡 / 无复习记录 / 劣化输入 ⇒ `0`（不是「间隔 0 天」的断言，是「无记录」）。
+   *              确切时刻看 `dueAt`。契约不变：`stateJson` 仍是「后端调度契约，前端透传不解析」。
+   * @ai-context: **必填**（不是可选）：Rust 侧**总是**序列化该字段（10 键恒全量，无 `skip` / `default`）
+   *              ⇒ 必填才与线格式一致；可选会掩盖「字段没到」的真实故障。
+   */
+  intervalDays: number;
 }
 
 // ────────────────────────────────────────────────────────────

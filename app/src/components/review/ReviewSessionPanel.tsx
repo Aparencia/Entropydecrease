@@ -53,6 +53,9 @@ export default function ReviewSessionPanel({ groupId, groupName, active = true, 
   const [done, setDone] = useState(0);
   const [status, setStatus] = useState("");
   const [loaded, setLoaded] = useState(false);
+  // 上一张卡的**新间隔**（`review_card` 返回体的 intervalDays —— PB2 ①域：精确值）。
+  // null = 尚未评分 / 后端没给该字段（不猜 0：「缺失」≠「间隔为 0」，PB2 裁决）
+  const [lastInterval, setLastInterval] = useState<number | null>(null);
 
   // 加载到期队列（一次性——复习中评分出的卡不回插本队列，下次再现）
   const loadQueue = useCallback(async () => {
@@ -89,7 +92,12 @@ export default function ReviewSessionPanel({ groupId, groupName, active = true, 
   const rate = async (rating: string) => {
     if (!current) return;
     try {
-      await invoke("review_card", { cardId: current.id, rating });
+      // 接住返回值（PB2 Q5：旧写法 `await invoke(...)` 把整份返回体丢弃）。这里用的是
+      // `review_card` 的 **intervalDays = 精确域**（①域）—— 与 `list_due_cards` 的整天粒度
+      // **不同源**，故绝不与队列里的整天值混用（PB2：两个精度域不许混为一谈）。
+      const rated = await invoke<Flashcard>("review_card", { cardId: current.id, rating });
+      const days: unknown = rated?.intervalDays;
+      setLastInterval(typeof days === "number" && Number.isFinite(days) ? days : null);
       setDone((d) => d + 1);
       setRevealed(false);
       setIndex((i) => i + 1);
@@ -107,6 +115,10 @@ export default function ReviewSessionPanel({ groupId, groupName, active = true, 
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", borderBottom: "1px solid #e5e7eb", background: "#fff", flexShrink: 0 }}>
         <span style={{ fontWeight: 600, fontSize: 14 }}>🎴 复习 · {groupName}</span>
         {current && <Text size={5} tone="ink-3" testId="session-progress">{index + 1}/{queue.length}</Text>}
+        {/* 评分回执：`review_card` 返回的 intervalDays（精确域）—— 字段被真用起来的可见证据 */}
+        {lastInterval !== null && (
+          <Text size={5} tone="due" testId="session-last-interval">{`上一张下次间隔 ${lastInterval} 天`}</Text>
+        )}
         <button
           onClick={onExit}
           data-testid="session-exit"

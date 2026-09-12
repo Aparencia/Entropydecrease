@@ -18,7 +18,7 @@ import ReviewSessionPanel from "./ReviewSessionPanel";
 function card(id: number, front: string, back: string, kind = "fact"): Flashcard {
   return {
     id, groupId: 1, noteId: null, fragmentId: null, front, back,
-    kind, stateJson: "", dueAt: 0, createdAt: 0,
+    kind, stateJson: "", dueAt: 0, createdAt: 0, intervalDays: 0,
   };
 }
 
@@ -94,6 +94,23 @@ describe("ReviewSessionPanel 复习流", () => {
     expect(onExit).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onExit).toHaveBeenCalledTimes(2);
+  });
+
+  it("评分返回值被接住：review_card 的精确 intervalDays 落到回执读数上（PB2 ①域——今天被整份丢弃）", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_due_cards") return [card(21, "隔离霜作用", "打底", "fact")];
+      // 精确域：非整数天（整天粒度的行派生路径不可能给出这个值 —— 两个域必须可区分）
+      if (cmd === "review_card") return { ...card(21, "隔离霜作用", "打底", "fact"), intervalDays: 12.5 };
+      throw new Error(`unexpected: ${cmd}`);
+    });
+    renderPanel();
+    // 评分前无回执（缺失 ≠ 0：不猜、不预先显示 0 天）
+    expect(screen.queryByTestId("session-last-interval")).toBeNull();
+    fireEvent.click(await screen.findByText("回忆完成 · 查看答案"));
+    fireEvent.click(screen.getByText("记得"));
+    await waitFor(() =>
+      expect(screen.getByTestId("session-last-interval").textContent).toBe("上一张下次间隔 12.5 天"),
+    );
   });
 
   it("active=false（页面隐藏保活期）→ ESC 不退出会话；active=true 后 ESC 恢复生效（审查 P2-11）", async () => {

@@ -19,7 +19,7 @@ import PromoteCardButton from "./PromoteCardButton";
 const modelCard: Flashcard = {
   id: 5, groupId: 3, noteId: null, fragmentId: null,
   front: "安全边际", back: "本质：\n边界：\n联系：",
-  kind: "model", stateJson: "{}", dueAt: 0, createdAt: 0,
+  kind: "model", stateJson: "{}", dueAt: 0, createdAt: 0, intervalDays: 0,
 };
 
 const systems: KnowledgeSystem[] = [
