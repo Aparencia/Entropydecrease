@@ -53,7 +53,6 @@ export const BORDER_RESIDUAL: readonly { file: string; kind: SurfaceResidualKind
   { file: "components/RichEditorView.tsx", kind: "b1-non-migrated", count: 4 },
   { file: "components/RouteInfoPopover.tsx", kind: "b1-non-migrated", count: 5 },
   { file: "components/ScreenSelectOverlay.tsx", kind: "b1-non-migrated", count: 3 },
-  { file: "components/SessionDetailPanel.tsx", kind: "conditional-color", count: 1 },
   { file: "components/SessionListPanel.tsx", kind: "conditional-color", count: 1 },
   { file: "components/SessionRowContextMenu.tsx", kind: "b1-non-migrated", count: 1 },
   { file: "components/SystemStatusBadge.tsx", kind: "anchored-menu", count: 1 },

@@ -29,13 +29,13 @@
  * 副作用：无（纯数据，被 `textRatchet.test.ts` 读）。边界：**棘轮只许降** —— 真迁走一处要**手工收紧**
  *   （`FROZEN_*_TOTAL` 必须恰等于逐文件之和；常数不许手工改成自洽）。
  */
-export const FROZEN_MUTED_GRAY_TOTAL = 64;
+export const FROZEN_MUTED_GRAY_TOTAL = 63;
 
 /** 弱化灰冻结**文件数**（条目数；迁移清零一个文件 ⇒ 必须删键，条目数随之降） */
-export const FROZEN_MUTED_GRAY_FILES = 44;
+export const FROZEN_MUTED_GRAY_FILES = 43;
 
 /** 字号越界冻结**总处数**（= `FROZEN_FONT_OOB_BY_FILE` 逐文件之和；只许降） */
-export const FROZEN_FONT_OOB_TOTAL = 558;
+export const FROZEN_FONT_OOB_TOTAL = 551;
 
 /** 字号越界冻结**文件数**（条目数；只许降） */
 export const FROZEN_FONT_OOB_FILES = 120;
@@ -45,7 +45,7 @@ export const FROZEN_FONT_OOB_FILES = 120;
  * ⚠️ **T16-B 换锚**：T16-A 的锚（`LiveActivityPanel` 9）正是本单元的迁移目标（9 → 2）⇒ 随迁移失效。
  * 新锚 = `NoteLinkToSystem.tsx`：5 处**全部**是登记例外（B1 硬守卫 + 品牌青三元）⇒ 无裁决不可能下降。
  */
-export const ANCHOR_MUTED_GRAY = { file: "components/NoteLinkToSystem.tsx", count: 5, files: 44 } as const;
+export const ANCHOR_MUTED_GRAY = { file: "components/NoteLinkToSystem.tsx", count: 5, files: 43 } as const;
 export const ANCHOR_FONT_OOB = { file: "components/action-center/ActionCenterPanel.tsx", count: 19, files: 120 } as const;
 
 /**
@@ -90,7 +90,6 @@ export const FROZEN_MUTED_GRAY_BY_FILE: Readonly<Record<string, number>> = {
   "components/RichEditorView.tsx": 1,
   "components/RouteInfoPopover.tsx": 3,
   "components/SecondPassPanel.tsx": 1,
-  "components/SessionDetailPanel.tsx": 1,
   "components/SessionListPanel.tsx": 1,
   "components/TaskConversationView.tsx": 1,
   "components/VideoImportPanel.tsx": 1,
@@ -159,7 +158,6 @@ export const RESIDUAL: readonly { file: string; kind: TextResidualKind; reason: 
   { file: "components/RichEditorView.tsx", kind: "b1-non-migrated", reason: "B1/B2 硬守卫（同上，`buttonMigration.test.ts` 的 `EXCLUDED` 逐字点名）：高亮气泡文件整体不迁 ⇒ 快捷键提示不迁" },
   { file: "components/RouteInfoPopover.tsx", kind: "b1-non-migrated", reason: "B1/B2 硬守卫（同上）：ⓘ 弹层文件整体不迁 ⇒ `:310`（重复合并对）/ `:351`（影响面提示）不迁；`:234` 是原生 `<button onClick>`（关闭）⇒ `Button` 域" },
   { file: "components/SecondPassPanel.tsx", kind: "ternary-no-equivalent", reason: "A 类三支三元（adopted #047857 / rejected 灰 / 其余 #b45309）：琥珀支语义是「待裁决」，`due` 是到期刻度 ⇒ 无反例安全的等价档" },
-  { file: "components/SessionDetailPanel.tsx", kind: "ternary-no-equivalent", reason: "A 类三元：`:221` 非灰支 #0d9488 品牌青（字幕来源标记）⇒ 无等价档" },
   { file: "components/SessionListPanel.tsx", kind: "interactive", reason: "原生 `<button onClick title>`（折叠列表；`{...btn}` 样式常量）⇒ `Button` 域（批 5/7）" },
   { file: "components/TaskConversationView.tsx", kind: "interactive-no-equivalent", reason: "原生 `<button disabled>`（重试）+ 非灰支 #b91c1c（三红 / StatusLine 领域）+ `background` 三元 ⇒ 交互 + 无等价档" },
   { file: "components/VideoImportPanel.tsx", kind: "interactive-no-equivalent", reason: "原生 `<button disabled>` + 非灰支 #fff（品牌青实底白字）⇒ 交互 + 无等价档" },
@@ -264,7 +262,7 @@ export const FROZEN_FONT_OOB_BY_FILE: Readonly<Record<string, number>> = {
   "components/ScreenSelectOverlay.tsx": 1,
   "components/SealToggle.tsx": 2,
   "components/SecondPassPanel.tsx": 9,
-  "components/SessionDetailPanel.tsx": 8,
+  "components/SessionDetailPanel.tsx": 1,
   "components/SessionListBody.tsx": 1,
   "components/SessionListPanel.tsx": 2,
   "components/SessionListRow.tsx": 7,

@@ -71,7 +71,7 @@
  */
 
 /** 棘轮一 · 卡片边框 `1px solid #e5e7eb`（含复合写法）的冻结总数（只许降；T17-B 收紧：240 → 226） */
-export const FROZEN_BORDER_TOTAL = 226;
+export const FROZEN_BORDER_TOTAL = 223;
 
 /** 相对 `app/src` 的路径 → 该文件允许的边框字面量**处数上限**（只许降；未登记文件命中即红） */
 export const FROZEN_BORDER_BY_FILE: Readonly<Record<string, number>> = {
@@ -110,7 +110,7 @@ export const FROZEN_BORDER_BY_FILE: Readonly<Record<string, number>> = {
   "components/RefineLaunchDialog.tsx": 2, "components/RefineStrategyPicker.tsx": 2,
   "components/RefineWorkbench.tsx": 6, "components/RichEditorView.tsx": 4,
   "components/RouteInfoPopover.tsx": 5, "components/ScreenSelectOverlay.tsx": 3,
-  "components/SecondPassPanel.tsx": 2, "components/SessionDetailPanel.tsx": 3,
+  "components/SecondPassPanel.tsx": 2,
   "components/SessionListBody.tsx": 1, "components/SessionListPanel.tsx": 4,
   "components/SessionRowContextMenu.tsx": 1, "components/SessionSearchBar.tsx": 1,
   "components/SessionSelectionToolbar.tsx": 1, "components/SopRunOverlay.tsx": 4,
@@ -127,7 +127,7 @@ export const FROZEN_BORDER_BY_FILE: Readonly<Record<string, number>> = {
 };
 
 /** 棘轮二 · 越界圆角 `6|12|14|999|2` 的冻结总数（`3/4/5/8/10` 与 `0` 按映射表处理，不入棘轮；T17-B 收紧：270 → 261） */
-export const FROZEN_RADIUS_OUTLIER_TOTAL = 261;
+export const FROZEN_RADIUS_OUTLIER_TOTAL = 260;
 
 /** 相对 `app/src` 的路径 → 越界圆角的**处数上限**（只许降；迁移时换成 `radius="…"` 档位） */
 export const FROZEN_RADIUS_OUTLIER_BY_FILE: Readonly<Record<string, number>> = {
@@ -168,7 +168,7 @@ export const FROZEN_RADIUS_OUTLIER_BY_FILE: Readonly<Record<string, number>> = {
   "components/RefineStrategyPicker.tsx": 3, "components/RefineWorkbench.tsx": 4,
   "components/RichEditorView.tsx": 1, "components/RouteInfoPopover.tsx": 3,
   "components/ScreenSelectOverlay.tsx": 5, "components/SecondPassPanel.tsx": 2,
-  "components/SessionDetailPanel.tsx": 1, "components/SessionListPanel.tsx": 3,
+  "components/SessionListPanel.tsx": 3,
   "components/SessionRowContextMenu.tsx": 1, "components/SessionSearchBar.tsx": 1,
   "components/SessionSearchHits.tsx": 1, "components/SessionSelectionToolbar.tsx": 2,
   "components/SopRunOverlay.tsx": 3, "components/SpeakerSwitchCard.tsx": 1,
@@ -217,8 +217,8 @@ export const FROZEN_SURFACE_TAG_TOTAL = 14;
  * `file/value` = 一个**具名文件**的冻结值（防"仪器静默失效后所有计数都变 0 而总数判据仍绿"）。
  * T17-B 同步：边框条目 111 → 108 · 圆角条目 112 → 109 · 阴影条目 24（不变）。
  */
-export const BORDER_ANCHOR = { entries: 108, file: "components/action-center/ActionCenterPanel.tsx", value: 11 } as const;
-export const RADIUS_OUTLIER_ANCHOR = { entries: 109, file: "components/KnowledgeSystemWizard.tsx", value: 9 } as const;
+export const BORDER_ANCHOR = { entries: 107, file: "components/action-center/ActionCenterPanel.tsx", value: 11 } as const;
+export const RADIUS_OUTLIER_ANCHOR = { entries: 108, file: "components/KnowledgeSystemWizard.tsx", value: 9 } as const;
 export const SHADOW_ANCHOR = { entries: 24, file: "components/NoteRowContextMenu.tsx", value: 1 } as const;
 
 /** 阴影残留的分类：`exception` = 结构上表达不了 · `anchored-menu` = B1 锚定菜单（不迁原语）· `backlog` = 切片外余量 */

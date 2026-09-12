@@ -76,7 +76,6 @@ export const FROZEN_RED_BY_FILE: Readonly<Record<string, number>> = {
   "components/review/ReviewSessionPanel.tsx": 1,
   "components/SealToggle.tsx": 1,
   "components/session-detail/SessionDetailHeader.tsx": 1,
-  "components/SessionDetailPanel.tsx": 1,
   "components/SessionSelectionToolbar.tsx": 1,
   "components/SpeakerSwitchCard.tsx": 1,
   "components/StructureImageSection.tsx": 1,
@@ -90,4 +89,4 @@ export const FROZEN_RED_BY_FILE: Readonly<Record<string, number>> = {
 };
 
 /** 全仓三红十六进制字面量的**冻结总数**（= 上面逐文件之和的独立校验和，只许降） */
-export const FROZEN_RED_TOTAL = 114;
+export const FROZEN_RED_TOTAL = 113;
