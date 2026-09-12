@@ -12,7 +12,7 @@
  *   W7 图标走 `ui/icons` 注册表（渲染出 `svg` 且**装饰性**；类型层由 `tsc` 承担，见报告 V2）；
  *   W8（C14① 的 §8.6.1 第 3 条）响应层接缝 `--ed-dur-micro` 120ms，且**没有新增未被覆盖的动效类**。
  *
- * 副作用：只挂 React 树 + 只读同目录 `ViewSwitcher.css` / `motion.css`。边界：本仓未装 jest-dom ⇒ 原生 DOM API；
+ * 副作用：只挂 React 树 + 只读 `ViewSwitcher.css` / `motion.css` / 唯一真源产物 `../tokens.css`。边界：本仓未装 jest-dom ⇒ 原生 DOM API；
  *   jsdom **不是真浏览器** —— 真实观感/焦点环像素/真实粘性与动效一律登记为「未验证」（见 T5 报告 §未验证）。
  */
 import { readFileSync } from "node:fs";
@@ -28,6 +28,8 @@ const read = (file: string): string => readFileSync(join(HERE, file), "utf8").re
 const stripComments = (s: string): string => s.replace(/\/\*[\s\S]*?\*\//g, "");
 const VS_CSS = stripComments(read("ViewSwitcher.css"));
 const MOTION_CSS = stripComments(read("motion.css"));
+/** 批 6 T5：时长/缓动的**唯一真源产物**已迁到 `ui/tokens.css`（`motion.css` 的临时变量块已删） */
+const TOKENS_CSS = stripComments(read("../tokens.css"));
 
 /** 取某选择器的规则体（选择器 → 第一个 `}`）—— 防「写在别的规则里也算过」 */
 function bodyOf(css: string, sel: string): string {
@@ -209,7 +211,7 @@ describe("W8 响应层接缝（§8.6.1 第 3 条）：`--ed-dur-micro` 120ms + �
     expect(body, "ViewSwitcher.css 缺 `.ed-btn--segment` 规则").not.toBe("");
     expect(body.match(/var\(--ed-dur-micro, 120ms\)/g) ?? [], "接缝不是三属性单值 120ms").toHaveLength(3);
     expect(body, "过渡缺 `transition:` 声明").toContain("transition:");
-    expect(MOTION_CSS, "`--ed-dur-micro` 的真源定值不是 120ms").toContain("--ed-dur-micro: 120ms;");
+    expect(TOKENS_CSS, "`--ed-dur-micro` 的真源定值不是 120ms").toContain("--ed-dur-micro: 120ms;");
     // 反例守门：同一条取段器喂一条**没有**接缝的合成规则必须取不到 ⇒ 上面三条不承重时会露馅
     expect(bodyOf(".ed-btn--segment { color: var(--ed-ink-3); }", ".ed-btn--segment {")).not.toContain("transition:");
   });
