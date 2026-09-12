@@ -8,7 +8,7 @@
  *              （onOpenNote 已由 ChatPage 透传）+ 关闭；失败红字不关窗（改后再试）。
  */
 import { useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note, NoteGroup } from "../types";
 
@@ -63,87 +63,71 @@ export default function ChatSaveNoteDialog({ initialTitle, content, groups, onOp
   };
 
   return (
-    <>
-      <div
-        onClick={onClose}
-        data-testid="chat-note-backdrop"
-        style={{ position: "fixed", inset: 0, zIndex: zIndex("modal"), background: "rgba(0,0,0,0.18)" }}
-      />
-      <div
-        data-testid="chat-note-dialog"
-        style={{
-          position: "fixed", zIndex: zIndex("modal"), top: "50%", left: "50%",
-          transform: "translate(-50%, -50%)",
-          width: 380, background: "#fff", borderRadius: 10,
-          border: "1px solid #e5e7eb", boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
-          padding: 14, fontSize: 12.5,
-        }}
-      >
-        <div style={{ fontWeight: 700, fontSize: 14, color: "#111827", marginBottom: 10 }}>
-          📄 另存为笔记
-        </div>
-
-        {savedId != null ? (
-          <>
-            <div data-testid="chat-note-saved" style={{ color: "#047857", marginBottom: 10 }}>
-              {/* 信息9（审查裸号）：去 `#id`——成功态以标题语义回显（REQ-277）；
-                  title 恒非空（保存前置校验 + 默认值）——空时仅兜底不带书名号 */}
-              ✓ 已保存为笔记{title.trim() ? `《${title.trim()}》` : ""}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                data-testid="chat-note-open"
-                style={{ ...BTN_BASE, background: "#0d9488", color: "#fff", border: "none", fontWeight: 600 }}
-                onClick={() => onOpenNote(savedId)}
-              >
-                在笔记页打开 →
-              </button>
-              <button style={BTN_BASE} onClick={onClose}>关闭</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <label style={{ display: "block", color: "#6b7280", marginBottom: 4 }}>笔记标题</label>
-            <input
-              data-testid="chat-note-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              style={{ width: "100%", padding: "6px 8px", fontSize: 13, border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box", marginBottom: 8 }}
-            />
-            <label style={{ display: "block", color: "#6b7280", marginBottom: 4 }}>目标组（可选）</label>
-            <select
-              data-testid="chat-note-group"
-              value={groupId ?? ""}
-              onChange={(e) => setGroupId(e.target.value ? Number(e.target.value) : null)}
-              style={{ width: "100%", padding: "6px 8px", fontSize: 13, border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box", marginBottom: 8, background: "#fff" }}
+    /* 批 4 T5：自建遮罩 + 面板几何 + 手写关闭（原 `:67-84`）整段交给 `Modal`。
+       外观与键盘语义（遮罩点关 / ESC / 焦点陷阱 / 滚动锁）由原语持有，本组件只留业务。
+       `closeOnEsc` 默认 true：原实现**没有** ESC 路径（无 keydown 监听），迁移后新增了一条
+       "ESC 即关闭"，与遮罩点击同义（两条路径本已都不看 `busy`）—— 见报告「行为等价性」表。 */
+    <Modal open onClose={onClose} title="另存为笔记" size="s" testId="chat-note-dialog">
+      {savedId != null ? (
+        <>
+          <div data-testid="chat-note-saved" style={{ color: "#047857", marginBottom: 10 }}>
+            {/* 信息9（审查裸号）：去 `#id`——成功态以标题语义回显（REQ-277）；
+                title 恒非空（保存前置校验 + 默认值）——空时仅兜底不带书名号 */}
+            ✓ 已保存为笔记{title.trim() ? `《${title.trim()}》` : ""}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              data-testid="chat-note-open"
+              style={{ ...BTN_BASE, background: "#0d9488", color: "#fff", border: "none", fontWeight: 600 }}
+              onClick={() => onOpenNote(savedId)}
             >
-              <option value="">不归组（全部笔记）</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-            <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 10 }}>
-              共 {content.length} 字符 · 对话以提问引用 + AI 回答全文的完整形式保存
-            </div>
-            {status && (
-              <div data-testid="chat-note-error" style={{ color: "#dc2626", marginBottom: 8 }}>{status}</div>
-            )}
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button data-testid="chat-note-cancel" style={BTN_BASE} onClick={onClose} disabled={busy}>取消</button>
-              <button
-                data-testid="chat-note-save"
-                style={{ ...BTN_BASE, background: "#0d9488", color: "#fff", border: "none", fontWeight: 600 }}
-                onClick={() => void save()}
-                disabled={busy || !title.trim()}
-              >
-                {busy ? "保存中…" : "保存"}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </>
+              在笔记页打开 →
+            </button>
+            <button style={BTN_BASE} onClick={onClose}>关闭</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <label style={{ display: "block", color: "#6b7280", marginBottom: 4 }}>笔记标题</label>
+          <input
+            data-testid="chat-note-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            style={{ width: "100%", padding: "6px 8px", fontSize: 13, border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box", marginBottom: 8 }}
+          />
+          <label style={{ display: "block", color: "#6b7280", marginBottom: 4 }}>目标组（可选）</label>
+          <select
+            data-testid="chat-note-group"
+            value={groupId ?? ""}
+            onChange={(e) => setGroupId(e.target.value ? Number(e.target.value) : null)}
+            style={{ width: "100%", padding: "6px 8px", fontSize: 13, border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box", marginBottom: 8, background: "#fff" }}
+          >
+            <option value="">不归组（全部笔记）</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+          <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 10 }}>
+            共 {content.length} 字符 · 对话以提问引用 + AI 回答全文的完整形式保存
+          </div>
+          {status && (
+            <div data-testid="chat-note-error" style={{ color: "#dc2626", marginBottom: 8 }}>{status}</div>
+          )}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button data-testid="chat-note-cancel" style={BTN_BASE} onClick={onClose} disabled={busy}>取消</button>
+            <button
+              data-testid="chat-note-save"
+              style={{ ...BTN_BASE, background: "#0d9488", color: "#fff", border: "none", fontWeight: 600 }}
+              onClick={() => void save()}
+              disabled={busy || !title.trim()}
+            >
+              {busy ? "保存中…" : "保存"}
+            </button>
+          </div>
+        </>
+      )}
+    </Modal>
   );
 }

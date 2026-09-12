@@ -8,7 +8,7 @@
  *              （数据不可恢复后果透明可见）。
  */
 import { useCallback, useEffect, useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { NoteGroup } from "../types";
 
@@ -42,12 +42,8 @@ export default function GroupDeleteConfirm({ group, onClose, onDeleted }: Props)
   const [loadError, setLoadError] = useState("");
   const [status, setStatus] = useState("");
 
-  // ESC 关闭（模态弹层键盘可达性）
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [onClose]);
+  // ESC 关闭：原为自建 `window` 监听（`:45-50`），批 4 T5 交给 `Modal` 的 ESC 栈（ADR-033 §7）。
+  // `load` 的 useEffect 仍在（数据读取，不是弹层语义）。
 
   const load = useCallback(async () => {
     setLoadError("");
@@ -78,58 +74,18 @@ export default function GroupDeleteConfirm({ group, onClose, onDeleted }: Props)
   const hasCascade = impact != null && (impact.cards > 0 || impact.settlements > 0 || impact.contracts > 0);
 
   return (
-    <div
-      data-testid="group-delete-confirm-backdrop"
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: zIndex("modal"), display: "flex", alignItems: "center", justifyContent: "center" }}
-      onClick={onClose}
-    >
-      <div
-        data-testid="group-delete-confirm"
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: 380, maxWidth: "92vw", background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 12px 40px rgba(0,0,0,0.2)" }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <span style={{ fontWeight: 600, fontSize: 14, color: "#b91c1c" }}>🗑 删除「{group.name}」？</span>
-          <button onClick={onClose} style={{ marginLeft: "auto", cursor: "pointer", fontSize: 13, color: "#9ca3af" }}>✕</button>
-        </div>
-
-        {!impact ? (
-          <div data-testid="group-delete-loading" style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.8 }}>
-            {loadError ? (
-              <>
-                <span style={{ color: "#dc2626" }}>{loadError}</span>
-                <button
-                  data-testid="group-delete-retry"
-                  onClick={() => void load()}
-                  style={{ ...BTN, marginLeft: 8 }}
-                >
-                  重试
-                </button>
-              </>
-            ) : (
-              "正在统计影响面…"
-            )}
-          </div>
-        ) : (
-          <div data-testid="group-delete-impact" style={{ fontSize: 12, color: "#374151", lineHeight: 1.9 }}>
-            <div>📄 组内笔记：{impact.notes} 条 → 移入「全部笔记」不删除</div>
-            <div>⚡ 组内碎片：{impact.fragments} 条 → 移出归组不删除</div>
-            {impact.cards > 0 && <div style={{ color: "#b91c1c" }}>🎴 闪卡：{impact.cards} 张 → <b>将级联删除</b></div>}
-            {impact.settlements > 0 && <div style={{ color: "#b91c1c" }}>🧹 结算历史：{impact.settlements} 条 → <b>将级联删除</b></div>}
-            {impact.contracts > 0 && <div style={{ color: "#b91c1c" }}>📅 周契约：{impact.contracts} 份 → <b>将级联删除</b></div>}
-            {impact.systemRefs > 0 && <div style={{ color: "#b45309" }}>🕸 体系引用：{impact.systemRefs} 处 → 引用解除</div>}
-            {!hasCascade && <div style={{ color: "#0f766e" }}>无级联删除项——内容均保留，安全删除</div>}
-
-            {hasCascade && (
-              <label data-testid="group-delete-ack" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, padding: "8px 10px", background: "#fef2f2", borderRadius: 6, cursor: "pointer", color: "#b91c1c" }}>
-                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
-                我了解后果：闪卡/结算/周契约将不可恢复地删除
-              </label>
-            )}
-          </div>
-        )}
-
-        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+    /* 批 4 T5：自建遮罩 + 面板几何 + 手写标题/关闭（原 `:80-94`）交给 `Modal`。
+       档位 `s`(380) 与原面板逐字同宽；旧遮罩锚点 `group-delete-confirm-backdrop` 由 `Modal` 的
+       三段式取代 ⇒ 遮罩新锚点 = `group-delete-confirm-overlay`（全仓无测试引用旧锚点）。
+       本组件**仍是自定义确认框**（`impacts`/`ack` 语义内建），不并入 `ConfirmDialog` —— 见计划 T5 表。 */
+    <Modal
+      open
+      onClose={onClose}
+      title={`🗑 删除「${group.name}」？`}
+      size="s"
+      testId="group-delete-confirm"
+      footer={
+        <>
           <button data-testid="group-delete-cancel" onClick={onClose} style={BTN}>取消</button>
           <button
             data-testid="group-delete-submit"
@@ -139,9 +95,46 @@ export default function GroupDeleteConfirm({ group, onClose, onDeleted }: Props)
           >
             {busy ? "删除中…" : "确认删除"}
           </button>
+        </>
+      }
+    >
+      {!impact ? (
+        <div data-testid="group-delete-loading" style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.8 }}>
+          {loadError ? (
+            <>
+              <span style={{ color: "#dc2626" }}>{loadError}</span>
+              <button
+                data-testid="group-delete-retry"
+                onClick={() => void load()}
+                style={{ ...BTN, marginLeft: 8 }}
+              >
+                重试
+              </button>
+            </>
+          ) : (
+            "正在统计影响面…"
+          )}
         </div>
-        {status && impact && <p data-testid="group-delete-status" style={{ marginTop: 8, fontSize: 12, color: "#dc2626" }}>{status}</p>}
-      </div>
-    </div>
+      ) : (
+        <div data-testid="group-delete-impact" style={{ fontSize: 12, color: "#374151", lineHeight: 1.9 }}>
+          <div>📄 组内笔记：{impact.notes} 条 → 移入「全部笔记」不删除</div>
+          <div>⚡ 组内碎片：{impact.fragments} 条 → 移出归组不删除</div>
+          {impact.cards > 0 && <div style={{ color: "#b91c1c" }}>🎴 闪卡：{impact.cards} 张 → <b>将级联删除</b></div>}
+          {impact.settlements > 0 && <div style={{ color: "#b91c1c" }}>🧹 结算历史：{impact.settlements} 条 → <b>将级联删除</b></div>}
+          {impact.contracts > 0 && <div style={{ color: "#b91c1c" }}>📅 周契约：{impact.contracts} 份 → <b>将级联删除</b></div>}
+          {impact.systemRefs > 0 && <div style={{ color: "#b45309" }}>🕸 体系引用：{impact.systemRefs} 处 → 引用解除</div>}
+          {!hasCascade && <div style={{ color: "#0f766e" }}>无级联删除项——内容均保留，安全删除</div>}
+
+          {hasCascade && (
+            <label data-testid="group-delete-ack" style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, padding: "8px 10px", background: "#fef2f2", borderRadius: 6, cursor: "pointer", color: "#b91c1c" }}>
+              <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
+              我了解后果：闪卡/结算/周契约将不可恢复地删除
+            </label>
+          )}
+        </div>
+      )}
+
+      {status && impact && <p data-testid="group-delete-status" style={{ marginTop: 8, fontSize: 12, color: "#dc2626" }}>{status}</p>}
+    </Modal>
   );
 }

@@ -11,8 +11,8 @@
  *              ——组建成却 UI 不可见）；② 成功反馈经 onCreated 文案上抛父级承载
  *              （弹窗随即关闭，内部 setStatus 一帧即卸载——死代码）。
  */
-import { useEffect, useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { useState } from "react";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { DOMAIN_OPTIONS } from "../utils/domainOptions";
 import NoteColorPicker from "./NoteColorPicker";
@@ -42,12 +42,8 @@ export default function GroupCreateDialog({ onClose, onCreated }: Props) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ text: string; error: boolean } | null>(null);
 
-  // ESC 关闭（模态弹层键盘可达性——与 GroupDeleteConfirm 同款；审查补齐）
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [onClose]);
+  // ESC 关闭：原为自建 `window` 监听（`:45-50`），批 4 T5 交给 `Modal` 的 ESC 栈
+  // （原语是"最内层唯一响应"，且能挡住捕获相竞争者 —— ADR-033 §7）。行为等价：都是关闭本弹窗。
 
   const submit = async () => {
     const trimmed = name.trim();
@@ -79,57 +75,46 @@ export default function GroupCreateDialog({ onClose, onCreated }: Props) {
   };
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: zIndex("modal"), display: "flex", alignItems: "center", justifyContent: "center" }}
-      onClick={onClose}
-    >
-      <div
-        data-testid="group-create-dialog"
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: 340, maxWidth: "92vw", background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 12px 40px rgba(0,0,0,0.2)" }}
+    /* 批 4 T5：自建遮罩 + 面板几何 + 手写标题栏（原 `:82-94`）交给 `Modal`。
+       档位 `s`(380)，原面板 340 ⇒ **+40 px**（已登记）。原「✕ 关闭」钮（testid `group-create-cancel`，
+       全仓无测试引用）由 `Modal` 的关闭钮取代，新锚点 = `group-create-dialog-close`。 */
+    <Modal open onClose={onClose} title="📁 新建笔记组" size="s" testId="group-create-dialog">
+      <label style={label}>组名 *</label>
+      <input
+        data-testid="group-create-name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="如：化妆美妆、编程开发…"
+        style={input}
+      />
+      <label style={label}>领域标签 *（主题组粒度对齐领域——契约一）</label>
+      <select
+        data-testid="group-create-domain"
+        value={domainTag}
+        onChange={(e) => setDomainTag(e.target.value)}
+        style={input}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <span style={{ fontWeight: 600, fontSize: 14 }}>📁 新建笔记组</span>
-          <button data-testid="group-create-cancel" onClick={onClose} style={{ marginLeft: "auto", cursor: "pointer", fontSize: 13 }}>✕ 关闭</button>
-        </div>
-
-        <label style={label}>组名 *</label>
-        <input
-          data-testid="group-create-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="如：化妆美妆、编程开发…"
-          style={input}
-        />
-        <label style={label}>领域标签 *（主题组粒度对齐领域——契约一）</label>
-        <select
-          data-testid="group-create-domain"
-          value={domainTag}
-          onChange={(e) => setDomainTag(e.target.value)}
-          style={input}
-        >
-          <option value="">选择领域…</option>
-          {DOMAIN_OPTIONS.map(([v, labelText]) => <option key={v} value={v}>{labelText}</option>)}
-        </select>
-        <label style={label}>组颜色（可选）</label>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <NoteColorPicker value={color} onChange={setColor} />
-          {color && (
-            <span data-testid="group-create-color-set" style={{ fontSize: 11, color: "#6b7280" }}>
-              已选（点击色板可清除）
-            </span>
-          )}
-        </div>
-
-        <button data-testid="group-create-submit" onClick={() => void submit()} disabled={busy} style={{ ...submitBtn, opacity: busy ? 0.6 : 1 }}>
-          {busy ? "创建中…" : "创建"}
-        </button>
-        {status && (
-          <p data-testid="group-create-status" style={{ marginTop: 8, fontSize: 12, color: status.error ? "#dc2626" : "#0f766e" }}>
-            {status.text}
-          </p>
+        <option value="">选择领域…</option>
+        {DOMAIN_OPTIONS.map(([v, labelText]) => <option key={v} value={v}>{labelText}</option>)}
+      </select>
+      <label style={label}>组颜色（可选）</label>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <NoteColorPicker value={color} onChange={setColor} />
+        {color && (
+          <span data-testid="group-create-color-set" style={{ fontSize: 11, color: "#6b7280" }}>
+            已选（点击色板可清除）
+          </span>
         )}
       </div>
-    </div>
+
+      <button data-testid="group-create-submit" onClick={() => void submit()} disabled={busy} style={{ ...submitBtn, opacity: busy ? 0.6 : 1 }}>
+        {busy ? "创建中…" : "创建"}
+      </button>
+      {status && (
+        <p data-testid="group-create-status" style={{ marginTop: 8, fontSize: 12, color: status.error ? "#dc2626" : "#0f766e" }}>
+          {status.text}
+        </p>
+      )}
+    </Modal>
   );
 }

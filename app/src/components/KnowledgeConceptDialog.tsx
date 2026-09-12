@@ -9,7 +9,7 @@
  * @ai-context: 不预填内容（预填＝假燃料）——所有输入从空字符串开始。
  */
 import { useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 
 interface Props {
@@ -48,6 +48,8 @@ export default function KnowledgeConceptDialog({ systemId, onCreated, onClose }:
     }
   };
 
+  // 关闭意图（批 4 T5 起由 `Modal` 的 ESC / 遮罩 / 关闭钮三路共用）。原实现里 `canClose` 与
+  // 末尾的 `onClose()` 不可区分（除 `saving` 外两条分支同效）⇒ 行为仍逐字等价：`saving` 时拒绝关闭。
   const canClose = !saving && (!name.trim() && !essence.trim() && !boundary.trim() && !relation.trim());
 
   const doClose = () => {
@@ -58,88 +60,26 @@ export default function KnowledgeConceptDialog({ systemId, onCreated, onClose }:
   };
 
   return (
-    <div
-      onClick={doClose}
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
-        display: "flex", alignItems: "center", justifyContent: "center", zIndex: zIndex("modal"),
-      }}
-    >
-      <div
-        data-testid="concept-dialog"
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: 480, maxWidth: "92vw", background: "#fff", borderRadius: 10, border: "1px solid #e5e7eb", boxShadow: "0 10px 40px rgba(0,0,0,0.15)", overflow: "hidden" }}
-      >
-        {/* 头部 */}
-        <div style={{ display: "flex", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid #e5e7eb" }}>
-          <span style={{ fontWeight: 700, fontSize: 15, color: "#0f766e" }}>🧬 新建概念</span>
-          <button data-testid="concept-dialog-close" onClick={() => void doClose()} style={{ marginLeft: "auto", border: "none", background: "none", cursor: "pointer", fontSize: 14, color: "#9ca3af" }} title="关闭">
-            ✕
-          </button>
-        </div>
-
-        {/* 表单 */}
-        <div style={{ padding: "16px 18px" }}>
-          <p style={{ fontSize: 12, color: "#6b7280", margin: "0 0 12px", lineHeight: 1.6 }}>
-            概念是全库唯一身份的知识单元。用三问——本质、边界、联系——给它一个可复用的骨架。
-          </p>
-
-          <label style={label}>名称 *</label>
-          <input
-            data-testid="concept-dialog-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !saving) void save(); }}
-            placeholder="概念名（全局唯一）"
-            autoFocus
-            style={input}
-          />
-
-          <label style={label}>本质（它"是"什么）</label>
-          <textarea
-            data-testid="concept-dialog-essence"
-            value={essence}
-            onChange={(e) => setEssence(e.target.value)}
-            rows={2}
-            placeholder="用一句话描述它的本质"
-            style={textarea}
-          />
-
-          <label style={label}>边界（它"不是"什么）</label>
-          <textarea
-            data-testid="concept-dialog-boundary"
-            value={boundary}
-            onChange={(e) => setBoundary(e.target.value)}
-            rows={2}
-            placeholder="它和容易混淆的东西区别在哪"
-            style={textarea}
-          />
-
-          <label style={label}>联系（它和什么相关）</label>
-          <textarea
-            data-testid="concept-dialog-relation"
-            value={relation}
-            onChange={(e) => setRelation(e.target.value)}
-            rows={2}
-            placeholder="它关联哪些概念或领域"
-            style={textarea}
-          />
-
-          <p style={{ fontSize: 11, color: "#9ca3af", margin: "10px 0 0" }}>
-            新概念默认状态为「核心」，创建后可在右栏详情面板修改。
-          </p>
-
-          {error && (
-            <div data-testid="concept-dialog-error" style={{ fontSize: 12, color: "#dc2626", marginTop: 10, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "6px 10px", lineHeight: 1.5 }}>
-              {error}
-            </div>
-          )}
-        </div>
-
-        {/* 底部 */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 18px", borderTop: "1px solid #e5e7eb", background: "#fafafa" }}>
-          <span style={{ flex: 1 }} />
-          <button onClick={() => void doClose()} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" }}>
+    /* 批 4 T5：自建遮罩 + 面板几何 + 手写标题/关闭（原 `:61-79`）交给 `Modal`。
+       档位 `m`(520)，原面板 480 ⇒ **+40 px**（已登记）。
+       `onClose` 传的是 `doClose`（**不是**裸 `onClose`）：它保留原有的 `saving` 早退守卫 ——
+       迁移前 ESC **没有**路径（本组件无 keydown 监听），迁移后 ESC 与关闭钮同走 `doClose`，
+       `saving` 期间两条路径都拒绝关闭（比迁移前更强，见报告「行为等价性」）。
+       旧关闭钮 testid `concept-dialog-close` 由 `Modal` 契约的 `${testId}-close` 继承（值相同）。 */
+    <Modal
+      open
+      onClose={() => void doClose()}
+      title="🧬 新建概念"
+      size="m"
+      testId="concept-dialog"
+      footer={
+        <>
+          <button
+            onClick={() => void doClose()}
+            /* 不抽成模块级常量：原生按钮棘轮（T1，B4）判 `const *Btn*` 的**文件数只减不增**，
+               迁入底栏时新增一个 `cancelBtn` 会把这个文件变成第 56 个 ⇒ 棘轮红。样式就地保留。 */
+            style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" }}
+          >
             取消
           </button>
           <button
@@ -150,9 +90,64 @@ export default function KnowledgeConceptDialog({ systemId, onCreated, onClose }:
           >
             {saving ? "创建中…" : "✓ 创建概念"}
           </button>
+        </>
+      }
+    >
+      <p style={{ fontSize: 12, color: "#6b7280", margin: "0 0 12px", lineHeight: 1.6 }}>
+        概念是全库唯一身份的知识单元。用三问——本质、边界、联系——给它一个可复用的骨架。
+      </p>
+
+      <label style={label}>名称 *</label>
+      <input
+        data-testid="concept-dialog-name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter" && !saving) void save(); }}
+        placeholder="概念名（全局唯一）"
+        autoFocus
+        style={input}
+      />
+
+      <label style={label}>本质（它"是"什么）</label>
+      <textarea
+        data-testid="concept-dialog-essence"
+        value={essence}
+        onChange={(e) => setEssence(e.target.value)}
+        rows={2}
+        placeholder="用一句话描述它的本质"
+        style={textarea}
+      />
+
+      <label style={label}>边界（它"不是"什么）</label>
+      <textarea
+        data-testid="concept-dialog-boundary"
+        value={boundary}
+        onChange={(e) => setBoundary(e.target.value)}
+        rows={2}
+        placeholder="它和容易混淆的东西区别在哪"
+        style={textarea}
+      />
+
+      <label style={label}>联系（它和什么相关）</label>
+      <textarea
+        data-testid="concept-dialog-relation"
+        value={relation}
+        onChange={(e) => setRelation(e.target.value)}
+        rows={2}
+        placeholder="它关联哪些概念或领域"
+        style={textarea}
+      />
+
+      <p style={{ fontSize: 11, color: "#9ca3af", margin: "10px 0 0" }}>
+        新概念默认状态为「核心」，创建后可在右栏详情面板修改。
+      </p>
+
+      {error && (
+        <div data-testid="concept-dialog-error" style={{ fontSize: 12, color: "#dc2626", marginTop: 10, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "6px 10px", lineHeight: 1.5 }}>
+          {error}
         </div>
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 }
 

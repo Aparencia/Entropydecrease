@@ -9,7 +9,7 @@
  *              判定的唯一事实源在后端 goal_interview.rs）。
  */
 import { useEffect, useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { Goal, GoalPlanView, MilestoneDraft } from "../types/goals";
 import type { InterviewAnswers } from "../utils/goalInterview";
@@ -147,102 +147,105 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
   const quickMode = mode === "quick";
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: zIndex("modal") }}>
-      <div data-testid="interview-dialog" style={{ width: 520, maxHeight: "86vh", overflow: "auto", background: "#fff", borderRadius: 10, padding: 18, boxSizing: "border-box" }}>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
-          <span style={{ fontWeight: 700, fontSize: 15, color: "#1f2937" }}>
-            {quickMode ? "🎯 快速记一个目标" : "🎯 定一个学习目标"}
-          </span>
-          <button onClick={onClose} style={{ marginLeft: "auto", border: "none", background: "none", fontSize: 14, cursor: "pointer", color: "#9ca3af" }}>✕</button>
+    /* 批 4 T5：自建遮罩 + 面板几何 + 手写标题/关闭（原 `:150-157`）交给 `Modal`。
+       档位 `m`(520) 与原面板逐字同宽。头部文案随 mode 变（快速/访谈）⇒ 走 `title`；
+       `InterviewSteps` 内的 `autoFocus` 原样保留（表单首字段是业务，焦点陷阱是弹层语义，
+       `Modal` 的陷阱会先给首个可聚焦元素，两者共存）。
+       ⚠️ 嵌套：本组件在 step 4 会渲染 `GoalPlanApprovalDialog`（它现在是内层 `Modal`，
+       走 portal 到 `document.body`，靠 `ModalDepthContext` 判为内层 ⇒ ESC 只关内层）。 */
+    <Modal
+      open
+      onClose={onClose}
+      title={quickMode ? "🎯 快速记一个目标" : "🎯 定一个学习目标"}
+      size="m"
+      testId="interview-dialog"
+    >
+      {quickMode ? (
+        <div>
+          <Label>目标名称</Label>
+          <input
+            data-testid="quick-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="例如：学会 Python / 练听力 / 画水彩"
+            autoFocus
+            style={inputStyle}
+          />
+          <Label>期限</Label>
+          <select value={horizon} onChange={(e) => setHorizon(e.target.value)} style={{ ...inputStyle, width: 200 }}>
+            {HORIZON_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+          <p style={{ fontSize: 11, color: "#9ca3af", margin: "8px 0 0" }}>
+            判据走默认档（里程碑 + ≥1 组结算 + 近 90 天复习活跃）；可随时从详情页重新访谈。
+          </p>
         </div>
-
-        {quickMode ? (
-          <div>
-            <Label>目标名称</Label>
-            <input
-              data-testid="quick-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="例如：学会 Python / 练听力 / 画水彩"
-              autoFocus
-              style={inputStyle}
-            />
-            <Label>期限</Label>
-            <select value={horizon} onChange={(e) => setHorizon(e.target.value)} style={{ ...inputStyle, width: 200 }}>
-              {HORIZON_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-            </select>
-            <p style={{ fontSize: 11, color: "#9ca3af", margin: "8px 0 0" }}>
-              判据走默认档（里程碑 + ≥1 组结算 + 近 90 天复习活跃）；可随时从详情页重新访谈。
-            </p>
+      ) : (
+        <>
+          <Label>目标名称</Label>
+          <input
+            data-testid="interview-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="例如：学会 Python / 练听力 / 画水彩"
+            autoFocus
+            style={inputStyle}
+          />
+          {/* 折线指示（步骤 0-4） */}
+          <div style={{ fontSize: 11, color: "#9ca3af", margin: "10px 0" }}>
+            {["意图", "现状", "判据", "素材", "宣言"].map((t, i) => (
+              <span key={t} style={{ marginRight: 12, color: i <= step ? "#0f766e" : "#9ca3af", fontWeight: i === step ? 700 : 400 }}>
+                {i + 1}.{t}{i === 3 ? "" : " ›"}
+              </span>
+            ))}
           </div>
-        ) : (
-          <>
-            <Label>目标名称</Label>
-            <input
-              data-testid="interview-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="例如：学会 Python / 练听力 / 画水彩"
-              autoFocus
-              style={inputStyle}
-            />
-            {/* 折线指示（步骤 0-4） */}
-            <div style={{ fontSize: 11, color: "#9ca3af", margin: "10px 0" }}>
-              {["意图", "现状", "判据", "素材", "宣言"].map((t, i) => (
-                <span key={t} style={{ marginRight: 12, color: i <= step ? "#0f766e" : "#9ca3af", fontWeight: i === step ? 700 : 400 }}>
-                  {i + 1}.{t}{i === 3 ? "" : " ›"}
-                </span>
-              ))}
-            </div>
-            <div style={{ minHeight: 190 }}>
-              {step === 0 && <StepScenario a={a} setA={patch} />}
-              {step === 1 && <StepLevelDriver a={a} setA={patch} />}
-              {step === 2 && <StepCriteria a={a} setA={patch} />}
-              {step === 3 && <StepFeasibility a={a} setA={patch} groups={groups} />}
-              {step === 4 && (
-                <StepDeclaration
-                  name={name}
-                  declaration={declaration}
-                  drafts={drafts}
-                  onDraftChange={setDrafts}
-                />
-              )}
-            </div>
-          </>
+          <div style={{ minHeight: 190 }}>
+            {step === 0 && <StepScenario a={a} setA={patch} />}
+            {step === 1 && <StepLevelDriver a={a} setA={patch} />}
+            {step === 2 && <StepCriteria a={a} setA={patch} />}
+            {step === 3 && <StepFeasibility a={a} setA={patch} groups={groups} />}
+            {step === 4 && (
+              <StepDeclaration
+                name={name}
+                declaration={declaration}
+                drafts={drafts}
+                onDraftChange={setDrafts}
+              />
+            )}
+          </div>
+        </>
+      )}
+
+      {err && <p data-testid="dialog-error" style={{ fontSize: 11, color: "#dc2626", margin: "6px 0 0" }}>{err}</p>}
+
+      <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "flex-end", alignItems: "center" }}>
+        <span style={{ fontSize: 10, color: "#9ca3af", marginRight: "auto" }}>
+          {!quickMode && step === 4 && "确认后即创建——里程碑/判据可从详情页调整"}
+        </span>
+        {!quickMode && step > 0 && (
+          <button onClick={() => setStep((s) => s - 1)} style={ghostBtn}>上一步</button>
         )}
-
-        {err && <p data-testid="dialog-error" style={{ fontSize: 11, color: "#dc2626", margin: "6px 0 0" }}>{err}</p>}
-
-        <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "flex-end", alignItems: "center" }}>
-          <span style={{ fontSize: 10, color: "#9ca3af", marginRight: "auto" }}>
-            {!quickMode && step === 4 && "确认后即创建——里程碑/判据可从详情页调整"}
-          </span>
-          {!quickMode && step > 0 && (
-            <button onClick={() => setStep((s) => s - 1)} style={ghostBtn}>上一步</button>
-          )}
-          {!quickMode && (step === 1 || step === 3) && (
-            <button data-testid="skip-step" onClick={() => setStep((s) => s + 1)} style={ghostBtn}>跳过／以后想</button>
-          )}
-          {!quickMode && step === 4 && (
-            <button
-              data-testid="ai-plan-button"
-              onClick={() => void runAiPlan()}
-              disabled={aiPlanning}
-              style={{ ...ghostBtn, border: "1px solid #7c3aed", color: "#7c3aed" }}
-              title="AI 规划建议（默认关；未开启时失败仍按规则草案继续——本地可靠）"
-            >
-              {aiPlanning ? "✨ 规划中…" : "✨ 用 AI 规划"}
-            </button>
-          )}
-          {!quickMode && step < 4 && (
-            <button data-testid="next-step" onClick={next} style={primaryBtn}>下一步</button>
-          )}
-          {(quickMode || step === 4) && (
-            <button data-testid="confirm-create" onClick={() => void create()} disabled={saving || !name.trim()} style={primaryBtn}>
-              {saving ? "创建中…" : "✓ 确认创建"}
-            </button>
-          )}
-        </div>
+        {!quickMode && (step === 1 || step === 3) && (
+          <button data-testid="skip-step" onClick={() => setStep((s) => s + 1)} style={ghostBtn}>跳过／以后想</button>
+        )}
+        {!quickMode && step === 4 && (
+          <button
+            data-testid="ai-plan-button"
+            onClick={() => void runAiPlan()}
+            disabled={aiPlanning}
+            style={{ ...ghostBtn, border: "1px solid #7c3aed", color: "#7c3aed" }}
+            title="AI 规划建议（默认关；未开启时失败仍按规则草案继续——本地可靠）"
+          >
+            {aiPlanning ? "✨ 规划中…" : "✨ 用 AI 规划"}
+          </button>
+        )}
+        {!quickMode && step < 4 && (
+          <button data-testid="next-step" onClick={next} style={primaryBtn}>下一步</button>
+        )}
+        {(quickMode || step === 4) && (
+          <button data-testid="confirm-create" onClick={() => void create()} disabled={saving || !name.trim()} style={primaryBtn}>
+            {saving ? "创建中…" : "✓ 确认创建"}
+          </button>
+        )}
       </div>
       {/* v0.18.2：AI 规划确认流（建议制——确认后替换规则草案落库） */}
       {aiPlan && plannedGoalId != null && (
@@ -260,7 +263,7 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
           }}
         />
       )}
-    </div>
+    </Modal>
   );
 }
 

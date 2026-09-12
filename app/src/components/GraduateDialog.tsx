@@ -7,7 +7,7 @@
  * @ai-context: 未达标时按钮不可达（GoalDetail 禁用）；本对话框只管确认流。
  */
 import { useCallback, useEffect, useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { GraduationReport, GoalDetailView, GoalProgressView } from "../types/goals";
 
@@ -54,47 +54,55 @@ export default function GraduateDialog({ goalId, onClose, onGraduated }: Props) 
 
   const p = progress?.progress;
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: zIndex("modal") }}>
-      <div data-testid="graduate-dialog" style={{ width: 520, maxHeight: "86vh", overflow: "auto", background: "#fff", borderRadius: 10, padding: 18, boxSizing: "border-box" }}>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
-          <span style={{ fontWeight: 700, fontSize: 15 }}>🎓 毕业仪式</span>
-          <button onClick={onClose} style={{ marginLeft: "auto", border: "none", background: "none", fontSize: 14, cursor: "pointer", color: "#9ca3af" }}>✕</button>
-        </div>
-        <p style={{ fontSize: 12, color: "#6b7280", margin: "0 0 10px" }}>
-          毕业＝确认这一轮学习目标达成——报告快照永久保留（目标删除后仍可读）。
-        </p>
-
-        {report ? (
-          <div data-testid="graduate-result">
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#047857", marginBottom: 8 }}>🎉 已毕业——「{report.goalName}」</div>
-            <ReportBody report={report} />
-            <button onClick={onClose} style={primaryBtn}>完成</button>
-          </div>
+    /* 批 4 T5：自建遮罩 + 面板几何 + 手写标题/关闭（原 `:57-62`）交给 `Modal`。
+       档位 `m`(520) 与原面板逐字同宽；`size`/`testId` 值都不变（唯一改名的是关闭钮：
+       原 `:61` 无名 ⇒ 现为 `graduate-dialog-close`，无测试引用）。原实现无 ESC 路径，迁移后新增。 */
+    <Modal
+      open
+      onClose={onClose}
+      title="🎓 毕业仪式"
+      size="m"
+      testId="graduate-dialog"
+      footer={
+        report ? (
+          <button onClick={onClose} style={primaryBtn}>完成</button>
         ) : (
           <>
-            {/* 确认前：现算信号预览 */}
-            {detail && p && (
-              <div style={{ fontSize: 12, color: "#374151", background: "#fafaf9", padding: 10, borderRadius: 6, marginBottom: 8, lineHeight: 2 }}>
-                里程碑 {p.milestoneDone}/{p.milestoneTotal} · 组结算 {p.settlementsCount} 次 · 复习活跃 {p.reviewDays90} 天 · 弱项 {p.weakGroups.length} 组
-                <div style={{ fontSize: 11, color: "#9ca3af" }}>确认后将生成完整报告：里程碑明细/子组结算/复习统计/成果物清单（组·笔记·闪卡·概念）</div>
-              </div>
-            )}
-            <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 8 }}>
-              {detail?.criteria.map((c, i) => (
-                <div key={i} style={{ color: c.met ? "#047857" : "#9ca3af" }}>{c.met ? "✓" : "○"} {c.label}：{c.detail}</div>
-              ))}
-            </div>
-            {err && <p data-testid="graduate-error" style={{ fontSize: 11, color: "#dc2626" }}>{err}</p>}
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button onClick={onClose} style={ghostBtn}>再等等</button>
-              <button data-testid="confirm-graduate" onClick={() => void confirm()} disabled={saving} style={primaryBtn}>
-                {saving ? "毕业中…" : "🎓 确认毕业"}
-              </button>
-            </div>
+            <button onClick={onClose} style={ghostBtn}>再等等</button>
+            <button data-testid="confirm-graduate" onClick={() => void confirm()} disabled={saving} style={primaryBtn}>
+              {saving ? "毕业中…" : "🎓 确认毕业"}
+            </button>
           </>
-        )}
-      </div>
-    </div>
+        )
+      }
+    >
+      <p style={{ fontSize: 12, color: "#6b7280", margin: "0 0 10px" }}>
+        毕业＝确认这一轮学习目标达成——报告快照永久保留（目标删除后仍可读）。
+      </p>
+
+      {report ? (
+        <div data-testid="graduate-result">
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#047857", marginBottom: 8 }}>🎉 已毕业——「{report.goalName}」</div>
+          <ReportBody report={report} />
+        </div>
+      ) : (
+        <>
+          {/* 确认前：现算信号预览 */}
+          {detail && p && (
+            <div style={{ fontSize: 12, color: "#374151", background: "#fafaf9", padding: 10, borderRadius: 6, marginBottom: 8, lineHeight: 2 }}>
+              里程碑 {p.milestoneDone}/{p.milestoneTotal} · 组结算 {p.settlementsCount} 次 · 复习活跃 {p.reviewDays90} 天 · 弱项 {p.weakGroups.length} 组
+              <div style={{ fontSize: 11, color: "#9ca3af" }}>确认后将生成完整报告：里程碑明细/子组结算/复习统计/成果物清单（组·笔记·闪卡·概念）</div>
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 8 }}>
+            {detail?.criteria.map((c, i) => (
+              <div key={i} style={{ color: c.met ? "#047857" : "#9ca3af" }}>{c.met ? "✓" : "○"} {c.label}：{c.detail}</div>
+            ))}
+          </div>
+          {err && <p data-testid="graduate-error" style={{ fontSize: 11, color: "#dc2626" }}>{err}</p>}
+        </>
+      )}
+    </Modal>
   );
 }
 
