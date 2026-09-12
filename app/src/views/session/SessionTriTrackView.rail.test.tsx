@@ -13,6 +13,8 @@
  *   与 `data-degraded` 这类**结构事实**；真实播放 / seek 在本环境不可验证（不声称）。
  * 副作用：只挂 React 树；不写盘、不发请求、不真播放。
  */
+import { useState } from "react";
+import type { ReactElement } from "react";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionAudioState, SessionDetail } from "../../types/session";
@@ -54,6 +56,7 @@ interface Over {
   readonly playheadMs?: number | null;
   readonly detail?: SessionDetail;
 }
+/** 展示形态：`playheadMs` 是**静态注入值**（视图受控 ⇒ 点击不会自己动它） */
 function mountView(over: Over = {}) {
   const onSeekMs = vi.fn();
   const view = render(
@@ -65,6 +68,35 @@ function mountView(over: Over = {}) {
     />,
   );
   return { ...view, onSeekMs };
+}
+
+/**
+ * 受控夹具：**逐字镜像容器**（`SessionDetailPanel`）的回路 —— 点时间码 ⇒ 上报 ⇒ `setState`
+ * ⇒ 下一帧 `playheadMs` 回来。视图自身零状态 ⇒ 没有这个回路就没有位移（判据 I3/I4 的因）。
+ */
+function Controlled({ detail, audio, onSeek }: { readonly detail: SessionDetail; readonly audio: SessionAudioState | null | undefined; readonly onSeek: (ms: number) => void }): ReactElement {
+  const [ms, setMs] = useState<number | null>(null);
+  return (
+    <SessionTriTrackView
+      detail={detail}
+      audio={audio}
+      playheadMs={ms}
+      onSeekMs={(next) => {
+        onSeek(next);
+        setMs(next);
+      }}
+    />
+  );
+}
+function mountControlled(over: Over = {}) {
+  const onSeekMs = vi.fn();
+  const view = render(<Controlled detail={over.detail ?? detailOf()} audio={"audio" in over ? over.audio : OK} onSeek={onSeekMs} />);
+  return { ...view, onSeekMs };
+}
+/** 未接线形态：**完全不传** `onSeekMs`（宿主没接上上行口时的实际形态） */
+function mountUnwired(over: Over = {}) {
+  const view = render(<SessionTriTrackView detail={over.detail ?? detailOf()} audio={"audio" in over ? over.audio : OK} playheadMs={over.playheadMs ?? null} />);
+  return view;
 }
 function q(container: HTMLElement, sel: string): HTMLElement {
   const el = container.querySelector(sel);
@@ -115,9 +147,9 @@ describe("I2 总长真源 `totalMsOf`：三数组取大，且有 `durationMs` �
   });
 });
 
-describe("I3 时间码回跳：点时间码 ⇒ 上行请求**恰一次**且播放头滑到该段", () => {
-  it("点 9000ms 的时间码 ⇒ onSeekMs(9000) 恰 1 次 + 播放头 data-ms=9000；点另一段 ⇒ 逐字跟随", () => {
-    const { container, onSeekMs } = mountView({ audio: NO_AUDIO });
+describe("I3 时间码回跳：点时间码 ⇒ 上行请求**恰一次**，回传后播放头滑到该段", () => {
+  it("受控回路：点 9000 ⇒ onSeekMs(9000) 恰 1 次 + 播放头 data-ms=9000；再点 3725000 ⇒ 逐字跟随", () => {
+    const { container, onSeekMs } = mountControlled({ audio: NO_AUDIO });
     fireEvent.click(codeAt(container, 9_000));
     expect(onSeekMs.mock.calls.length, "点击没有（或重复）上报").toBe(1);
     expect(onSeekMs.mock.calls[0][0]).toBe(9_000);
@@ -126,19 +158,25 @@ describe("I3 时间码回跳：点时间码 ⇒ 上行请求**恰一次**且播�
     expect(container.querySelector(PLAYHEAD)?.getAttribute("data-ms")).toBe("3725000");
     // 反例守卫：不点 ⇒ 无播放头（位置不是常量、也不是「第一段」）
     cleanup();
-    const fresh = mountView({ audio: NO_AUDIO });
+    const fresh = mountControlled({ audio: NO_AUDIO });
     expect(fresh.container.querySelector(PLAYHEAD)).toBeNull();
     expect(fresh.onSeekMs.mock.calls.length).toBe(0);
   });
 });
 
-describe("I4 注入 `playheadMs` 优先于本地聚焦（T26 深链的先后次序）", () => {
-  it("注入 52500 后点 9000 的时间码 ⇒ 上行仍收到 9000，但播放头停在注入值", () => {
+describe("I4 受控语义：视图**不自持**播放头状态（单一真源在容器 —— T24 的槽位契约）", () => {
+  it("静态注入 52500：点 9000 的时间码只上报、播放头**不动**；未接线（不传 onSeekMs）⇒ 点击不产生播放头", () => {
     const { container, onSeekMs } = mountView({ audio: OK, playheadMs: 52_500 });
     expect(q(container, PLAYHEAD).dataset.ms).toBe("52500");
     fireEvent.click(codeAt(container, 9_000));
-    expect(onSeekMs.mock.calls[0][0]).toBe(9_000);
-    expect(q(container, PLAYHEAD).dataset.ms, "本地点击把注入的播放头覆盖掉了（深链会被旧聚焦吞掉）").toBe("52500");
+    expect(onSeekMs.mock.calls[0][0], "点击没有上报").toBe(9_000);
+    expect(q(container, PLAYHEAD).dataset.ms, "视图自持了第二份播放头状态（受控契约被破坏）").toBe("52500");
+    // 未接线：宿主没给出上行口 ⇒ 点击不产生任何位移（也不抛错）
+    cleanup();
+    const unwired = mountUnwired({ audio: NO_AUDIO });
+    fireEvent.click(codeAt(unwired.container, 9_000));
+    expect(unwired.container.querySelector(PLAYHEAD), "视图自己动起来了（第二份真源）").toBeNull();
+    expect(unwired.container.querySelector(RAIL), "未接线把时间轨也带走了").not.toBeNull();
   });
 });
 
@@ -149,13 +187,13 @@ describe("I5 音频槽在视图侧的落点与降级可用性（无音频 ⇒ �
     expect(withAudio.container.querySelectorAll('[data-kind="error"]')).toHaveLength(0);
     cleanup();
 
-    const noAudio = mountView({ audio: NO_AUDIO });
+    const noAudio = mountControlled({ audio: NO_AUDIO });
     const root = q(noAudio.container, RAIL);
     expect(root.getAttribute("data-degraded"), "无音频没有进降级态").toBe("true");
     expect(noAudio.container.querySelector('[data-testid="session-timerail-viewport"]'), "降级把时间轨带走了").not.toBeNull();
     expect(noAudio.container.querySelectorAll('[data-kind="error"]')).toHaveLength(1);
     expect(noAudio.container.querySelector("audio"), "无音频却渲染了媒体元素").toBeNull();
-    // 降级下「时间轨仍可用」的可判部分：点时间码照旧驱动播放头
+    // 降级下「时间轨仍可用」的可判部分：点时间码照旧驱动播放头（受控回路）
     fireEvent.click(codeAt(noAudio.container, 9_000));
     expect(q(noAudio.container, PLAYHEAD).dataset.ms).toBe("9000");
   });

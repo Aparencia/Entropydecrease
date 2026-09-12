@@ -7,10 +7,8 @@
  *   （C17① ⇒ 批 5 笔记侧只交付原文 + 卡片流两种形式）。故本件是「双通道 + 画面的文字面」。
  * @ai-context 依赖方向（规格 §7.1 / C14②）：本件是**纯展示视图** —— 它的第一条判据是
  *   「**不 invoke**」。三条轨与时间轨的**原始数据与一切派生**都从 props 来；本件
- *   **零 `@tauri-apps` import、零 `invoke`、零取数、零 I/O**。批 6 T25 起多出两样**纯本地**的
- *   东西（都不取数、不写盘、不发请求）：① 一个 `useState` = 用户点时间码后的聚焦 ms
- *   （降级时它就是「当前聚焦段」指示器的位置）；② 子件 `TimeRail` 的 `useEffect`
- *   （元素级滚动把播放头送到目标位置）。
+ *   **零 `@tauri-apps` import、零 `invoke`、零 `useState`、零取数、零 I/O**（唯一的副作用是
+ *   把点击上报给注入的 `onSeekMs`，与 `viewKey`/`onViewKeyChange` 同一种**受控**形态）。
  * @ai-context 对齐口径（计划 Task 7 Step 1 写死）：三条轨共用**同一条 ms 轴**，逐轨按 ms 升序；
  *   同一 ms 时 DOM 顺序固定 **转写 → 画面 → OCR**（判据用 `compareDocumentPosition` 钉住）。
  *   轨的时间锚 = `segments.start_ms` / `screens.first_seen_ms` / `ocr_blocks.timestamp_ms`。
@@ -27,7 +25,11 @@
  *   ④ 零交互 ⇒ 0 个 `<button>`（`nativeButton.ratchet` 域含 `views/**`）。
  * @ai-context **批 6 T25：时间轨 + 播放头 + 优雅降级（R5.5 #5 的承载面）**。本件在三条轨**之上**
  *   加一条共享的横向时间轨（`TimeRail`；总长的真源见 `totalMsOf`），播放头位置 = 注入槽
- *   `playheadMs`，**否则**退化为用户点过的聚焦段（本地 `activeMs`）。
+ *   `playheadMs`（**唯一真源在容器**）。
+ *   🔴 **播放头是受控的**：本件**不自持**第二份播放头状态（T24 的槽位契约逐字「容器负责
+ *   `setState` + 播放头动效，**视图自身零副作用**」）⇒ 用户点时间码只经 `onSeekMs` 上报，
+ *   位置随下一帧的 `playheadMs` 回来。降级时的「当前聚焦段」指示器因此也由**容器**驱动
+ *   —— 不传 `onSeekMs` 的宿主点时间码不会有任何位移（判据 I3 钉住这一点）。
  *   🔴 **音频与可播 URL 一律由容器注入**（`SessionViewSlot.audio`）：本件不取数、不拼 URL
  *   —— `views/**` 是零 Tauri 边（A3③）。🔴 **播放只许 `<audio src>`**：`fetch()` 整取音频会把
  *   约 115 MB/小时读进内存（R5.5-b 约束 2）。🔴 **只有已 finalize 的 WAV 可播**（约束 3）
@@ -41,15 +43,14 @@
  * @ai-context 与「印样」视图的边界（计划 Task 8 Step 1 的逐字要求在这里登记）：**本件不渲染图片**。
  *   配图需要容器注入的 `imageUrl()` 槽（本件不接该槽），且「一屏一段区间 + 配图」是印样视图的形态；
  *   三轨对齐只需要「时间 + 这一条是什么」⇒ 画面轨只出 `title`/`body` 文本与区间时间码。
- * 副作用：无（纯函数式渲染；无 I/O、无订阅、无定时器、无全局单例）。T25 增：一次用户点击后的
- *   `setState`（聚焦 ms）+ 子件 `TimeRail` 的一次元素级滚动写入。
+ * 副作用：无（纯函数式渲染；无 I/O、无订阅、无定时器、无本地 state、无全局单例）。T25 增：
+ *   子件 `TimeRail` 的一次元素级滚动写入（DOM 属性，随 `playheadMs` 变化）。
  * 边界：① `detail` 三个数组**都空** ⇒ 整块换成 `EmptyState`（根 `data-testid` 仍在，形态可判）
  *   —— 此时**不出时间轨**（刻度的三个来源全空 ⇒ 轨上无内容可指）；
  *   ② 单轨为空时该轨**照常渲染**（列头在、列内 0 条）—— 「三轨对齐」的语义是「三轨同框」，
  *   缺一条轨不等于整块没内容，故**不用**整块空态顶掉（否则用户看不到"哪一轨是空的"）；
  *   ③ 本件不做虚拟滚动（数据量由容器与产品上限决定；长列表的滚动/密度手感见批 6）。
  */
-import { useState } from "react";
 import type { CSSProperties, ReactElement } from "react";
 import { Button, EmptyState, Text } from "../../ui/primitives";
 import { fmtMs } from "../../utils/fmt";
@@ -221,12 +222,9 @@ function TriTrackItem({ item, onSeek }: { readonly item: AlignedItem; readonly o
 
 /**
  * 渲染会话三轨对齐视图 + 时间轨（T25）。数据全来自 props（`detail` + 三个注入槽）
- * ⇒ 本件不取数；唯一的本地状态是「用户点过的聚焦段」。
+ * ⇒ 本件不取数、**不自持播放头状态**（受控：点击只上报，位置随 `playheadMs` 回来）。
  */
 export default function SessionTriTrackView({ detail, audio, playheadMs, onSeekMs }: Slot): ReactElement {
-  // 「当前聚焦段」（T25 Step 3 的 `activeMs`）：由用户输入驱动。**注入的 `playheadMs` 优先**
-  //   —— 容器（T26 的深链）一旦给出目标，它就必须赢过本地点击，否则深链会被旧聚焦吞掉。
-  const [activeMs, setActiveMs] = useState<number | null>(null);
   const lanes = lanesOf(detail);
   const empty = lanes.every((lane) => lane.items.length === 0);
 
@@ -242,16 +240,15 @@ export default function SessionTriTrackView({ detail, audio, playheadMs, onSeekM
     );
   }
 
-  /** 时间码点击：本地立即定位（无容器也看得见）**并**经唯一上行口请求容器同步 */
+  /** 时间码点击：**只**经唯一上行口请求容器定位（视图自持状态 = 第二份真源，禁止） */
   const seek = (ms: number): void => {
-    setActiveMs(ms);
     onSeekMs?.(ms);
   };
 
   return (
     <div style={ROOT_STYLE} data-testid="session-tritrack-view">
       {/* R5.5 #5 的承载面：共享时间轴尺 + 播放头 + `<audio>` 属性契约 + 降级提示行 */}
-      <TimeRail totalMs={totalMsOf(detail, audio)} playheadMs={playheadMs ?? activeMs} audio={audio} onSeekMs={onSeekMs} />
+      <TimeRail totalMs={totalMsOf(detail, audio)} playheadMs={playheadMs ?? null} audio={audio} onSeekMs={onSeekMs} />
       <div style={TRACKS_STYLE}>
         {lanes.map((lane) => (
           <div key={lane.track} style={COLUMN_STYLE}>
