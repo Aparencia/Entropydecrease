@@ -12,10 +12,13 @@
  *              React 托管 DOM（surroundContents 与虚拟 DOM 协调冲突）。
  * @ai-context: M5 修复——标题行号索引渲染前 useMemo 一次预计算（Map + 出现
  *              序号消歧同名标题），替代每个标题 O(n) findIndex + as string 断言。
+ * @ai-context: 批 6 T26——`[[ts:ms]]` 的 ms 不再只进 title：新增**可选** `onOpenSessionAt` 把它逐字
+ *              传出（缺省时与今天逐字相同；title 一字未改）。前置缺陷见 `noteUrlTransform`：
+ *              `react-markdown@10.1.0` 的默认 URL 消毒把它清成空串 ⇒ 回链芯片此前从未渲染。
  */
 import { isValidElement, cloneElement, useMemo, useRef } from "react";
 import type { ReactElement, ReactNode } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -42,6 +45,11 @@ interface Props {
   searchQuery: string;
   onTaskToggle: (newContent: string) => void;
   onOpenSession?: (sessionId: number) => void;
+  /** `[[ts:ms]]` 回链的**带毫秒**分支（批 6 T26 · R5.5 顺带④）：跳会话**并**把目标毫秒带出去。
+   *  @ai-context 两参而不是 `onSeekMs(ms)`：ms 只在**知道哪条会话**时才有意义 ⇒ 会话 id 由本件补；
+   *  缺省 ⇒ 退回既有 `onOpenSession(sessionId)`（两分支**互斥**，都调会重复导航；既有 6 条判据不动）。
+   *  边界：定位精度受音频对齐的块粒度 **±200 ms** 限制（不得声称毫秒级定位）。 */
+  onOpenSessionAt?: (sessionId: number, ms: number) => void;
   onImageOpen: (src: string, title?: string) => void;
   /**
    * **只许追加、不许替换**的 remark 插件槽（C8）。
@@ -54,6 +62,21 @@ interface Props {
    */
   remarkPluginsExtra?: readonly RemarkPlugin[];
 }
+
+/**
+ * `[[ts:ms]]` 回链的**内部锚点**语法 + URL 消毒的唯一出口（批 6 T26 实测）。
+ *
+ * @ai-context 为什么必须显式放行：href 到 hast 阶段是**百分号编码**的 `%5B%5Bts:52500%5D%5D`，
+ *   而 `react-markdown@10.1.0` 的 `defaultUrlTransform` 把无协议 URL 一律清空 ⇒ 回链芯片此前
+ *   **根本没渲染**（落成 `<a href="">⏱ 00:52</a>`，下面的 `tsMatch` 永不命中；比 R5.5 顺带④ 记的还坏）。
+ *   安全面零放松：只放行这一种形态（解码回规范形），其余全交回默认消毒器；该 href 仅用于识别，最终渲染成 `<span>`。
+ */
+const TS_HREF_RE = /^\[\[ts:(\d+)\]\]$/;
+const TS_HREF_ENCODED_RE = /^%5B%5Bts:(\d+)%5D%5D$/i;
+const noteUrlTransform = (url: string): string => {
+  const m = TS_HREF_ENCODED_RE.exec(url);
+  return m ? `[[ts:${m[1]}]]` : defaultUrlTransform(url);
+};
 
 /** 递归展平 React 子节点为纯文本（ReactNode 收窄——替代 as string 断言） */
 function flattenText(node: ReactNode): string {
@@ -113,7 +136,7 @@ function highlightNode(node: ReactNode, query: string): ReactNode {
   return walk(node, "hl");
 }
 
-export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSession, onImageOpen, remarkPluginsExtra }: Props) {
+export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSession, onOpenSessionAt, onImageOpen, remarkPluginsExtra }: Props) {
   // H1：任务行索引（源文本中每个任务行的行号，按出现顺序）
   // 正则与 remark-gfm 清单语法对齐：-/*/+ 无序 + 有序列表（\d{1,9}[.)]），
   // 勾选框大小写均认（[x]/[X]）——否则渲染序号与索引数组错位会写错行
@@ -180,6 +203,9 @@ export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSe
       // 存量笔记内容零数据变更自动修复；`\` 与两空格强断行语义保留）
       remarkPlugins={[remarkGfm, remarkMath, remarkMarkHighlight, remarkBreaks, ...(remarkPluginsExtra ?? [])]}
       rehypePlugins={[rehypeKatex]}
+      // 批 6 T26：放行内部 `[[ts:ms]]` 锚点（默认消毒器会清空它 ⇒ 回链芯片曾整条不可达；
+      // 见 `noteUrlTransform`）。**不是**放松消毒：其余 URL 仍走 `defaultUrlTransform`。
+      urlTransform={noteUrlTransform}
       components={{
         // v0.14 B：==文本== 荧光笔（remark 插件产出 mdast mark 节点 + hName/hProperties）
         // v0.16.1：多色——className 由插件注入（note-mark[-{colorId}]，样式见 note-mark.css）；
@@ -210,7 +236,7 @@ export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSe
         li: ({ node, children, ...props }) => <li {...props}>{hl(children)}</li>,
         // 时间戳回链渲染（P1/A5 预览预备；L6：parseInt 补 radix 10）
         a: ({ node, href, children, ...props }) => {
-          const tsMatch = href?.match(/^\[\[ts:(\d+)\]\]$/);
+          const tsMatch = href?.match(TS_HREF_RE);
           if (tsMatch) {
             const ms = parseInt(tsMatch[1], 10);
             const sec = Math.floor(ms / 1000);
@@ -220,7 +246,10 @@ export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSe
               <span
                 style={{ cursor: "pointer", color: "#0d9488", borderBottom: "1px dashed #14b8a6", background: "#f0fdfa", borderRadius: 3, padding: "0 4px" }}
                 onClick={() => {
-                  if (note.session_id) onOpenSession?.(note.session_id);
+                  if (!note.session_id) return;
+                  // T26：带 ms 的分支优先（ms 逐字传出，不截断）；缺省退回既有单参回调
+                  if (onOpenSessionAt) onOpenSessionAt(note.session_id, ms);
+                  else onOpenSession?.(note.session_id);
                 }}
                 title={`⏱ 跳转到会话 ${Math.floor(ms / 60000)}:${secStr} 处 —— 点击查看视频对应片段`}
               >

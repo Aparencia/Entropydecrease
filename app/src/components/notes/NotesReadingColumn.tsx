@@ -103,6 +103,8 @@ interface Props {
   onTagClick: (tag: string) => void;
   /** 来源会话反跳（缺省=不可跳） */
   onOpenSession?: (sessionId: number) => void;
+  /** 批 6 T26：`[[ts:ms]]` 回链的带毫秒分支（透传给 `NoteReadingView`；缺省 ⇒ 退回 `onOpenSession`） */
+  onOpenSessionAt?: (sessionId: number, ms: number) => void;
   /** 图片放大预览入口（阅读态与编辑态共用同一遮罩） */
   onImageOpen: (src: string, title?: string) => void;
   /** 空组清理留痕上抛（移组触发，父层 toast） */
@@ -114,7 +116,7 @@ interface Props {
 export default function NotesReadingColumn({
   selected, editing, setEditing, readerSearch, noteColors, groups, editorRef, outlineCol,
   onChanged, onError, onCreateSystem, onOpenAi, onOpenModelCard, onSelectionAction,
-  onPinToggle, onDelete, onTaskToggle, onTagClick, onOpenSession, onImageOpen, onCleanNotice,
+  onPinToggle, onDelete, onTaskToggle, onTagClick, onOpenSession, onOpenSessionAt, onImageOpen, onCleanNotice,
   views,
 }: Props) {
   // H3：辅助面板插槽——VersionPanel（知识补充已迁移至编辑态 🤖 AI 菜单——
@@ -168,6 +170,7 @@ export default function NotesReadingColumn({
   const isDefault = viewKey === defaultKey;
   const LazyView = isDefault ? null : lazyOf.get(viewKey) ?? null;
   /** 非默认视图的槽（数据全在这里，视图自身零取数 —— C14②）；空态 ⇒ `null`（连卡片流都不挂） */
+  // ⚠️ T26：`onOpenSessionAt` **不进** NoteViewSlot（该槽类型属批 6 T24 的规范面，本任务不改）⇒ 卡片流视图的时间码回链仍无 ms，已登记为残余
   const slot: NoteViewSlot | null = selected
     ? { note: selected, onTaskToggle, onOpenSession, onImageOpen }
     : null;
@@ -230,6 +233,7 @@ export default function NotesReadingColumn({
       onDelete={() => void onDelete(selected.id)}
       onTagClick={onTagClick}
       onOpenSession={(id) => onOpenSession?.(id)}
+      onOpenSessionAt={onOpenSessionAt}
       onTaskToggle={onTaskToggle}
       onImageOpen={(src, title) => onImageOpen(src, title)}
       // 批 8（REQ-317）：阅读态选区行动类（转问题/模型卡预填）

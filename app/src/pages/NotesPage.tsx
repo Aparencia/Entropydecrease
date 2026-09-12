@@ -47,7 +47,13 @@ interface Props {
    *  该组（groupId=null 保留为全量语义，当前无调用方——组侧栏全量按钮已随
    *  无被动提醒裁决移除）；消费在 ReviewPage，本页只透传 */
   onOpenReview?: (groupId: number | null, name: string) => void;
-  onOpenSessions?: (sessionId: number) => void;
+  /**
+   * 会话深链入口（App 注入 `goSessions`）。批 6 T26：第二实参 = `[[ts:ms]]` 回链的目标毫秒。
+   * ⚠️ 今天的生产实现（`App.tsx` 的 `goSessions`）只读第一个实参 ⇒ **「到会话页后跳到该毫秒」那一跳
+   * 本任务不交付**（需改 `App.tsx` + `SessionsPage.tsx` + `SessionDetailPanel.tsx`，三者都在本任务禁改面内）；
+   * 本件只保证 ms **离开笔记页**、交给深链入口（见 task-26-report 的 STOP 记录）。
+   */
+  onOpenSessions?: (sessionId: number, ms?: number) => void;
   /** 打开体系页并选中体系（v0.13.7 触点① 组行徽标） */
   onOpenSystem?: (systemId: number) => void;
   /** TD-2026-09-05-A：空体系引导——跳体系页并打开建体系向导 */
@@ -264,6 +270,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
         onTaskToggle={handleTaskToggle}
         onTagClick={(t) => { list.setTagFilter(t); list.setKeyword(""); setView("notes"); }}
         onOpenSession={onOpenSessions}
+        onOpenSessionAt={onOpenSessions}
         onImageOpen={(src, title) => setPreviewImg({ src, title })}
         onCleanNotice={notifyCleanNotice}
         views={viewsFor("note")}

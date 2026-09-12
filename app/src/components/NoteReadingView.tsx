@@ -59,6 +59,8 @@ interface Props {
   onDelete: () => void;
   onTagClick: (tag: string) => void;
   onOpenSession: (sessionId: number) => void;
+  /** 批 6 T26：`[[ts:ms]]` 回链的**带毫秒**分支（缺省 ⇒ `NoteMarkdown` 退回既有 `onOpenSession`） */
+  onOpenSessionAt?: (sessionId: number, ms: number) => void;
   onTaskToggle: (newContent: string) => void;
   onImageOpen: (src: string, title?: string) => void;
   /** 批 8（REQ-317）：正文选区菜单行动类动作上抛（转问题/模型卡预填——
@@ -70,7 +72,7 @@ export default function NoteReadingView({
   note, editing, editor, auxPanels, headerExtra,
   outlineFolded = false, outlineWidth = columnSpec("notes-outline").default,
   onOutlineResize, onOutlineReset, externalSearch = null, onToggleOutline,
-  onEdit, onPinToggle, onDelete, onTagClick, onOpenSession, onTaskToggle, onImageOpen,
+  onEdit, onPinToggle, onDelete, onTagClick, onOpenSession, onOpenSessionAt, onTaskToggle, onImageOpen,
   onSelectionAction,
 }: Props) {
   // A2：搜索高亮（M6：匹配集合=渲染产物只读查询，计数经此状态驱动）
@@ -316,6 +318,7 @@ export default function NoteReadingView({
                 searchQuery={searchActive ? searchQuery : ""}
                 onTaskToggle={onTaskToggle}
                 onOpenSession={onOpenSession}
+                onOpenSessionAt={onOpenSessionAt}
                 onImageOpen={onImageOpen}
               />
             </div>

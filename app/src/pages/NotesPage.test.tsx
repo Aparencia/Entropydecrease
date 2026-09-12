@@ -118,3 +118,57 @@ describe("NotesPage 编辑完成即时刷新", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: "ESC 新标题" })).toBeTruthy());
   });
 });
+
+/**
+ * 批 6 T26 —— 笔记侧链路的**末端**判据：`[[ts:ms]]` 回链的 ms 必须**离开笔记页**
+ * （`NotesPage` → `NotesReadingColumn` → `NoteReadingView` → `NoteMarkdown`）。
+ *
+ * @ai-context 这条判据的牙口覆盖**整条链**：任一跳把 ms 丢掉（只传 sessionId）都会在这里红。
+ *             ⚠️ 诚实边界：它**不**证明「到会话页后播放头跳到该毫秒」—— 那一跳要改
+ *             `App.tsx` / `SessionsPage.tsx` / `SessionDetailPanel.tsx`（全在本任务禁改面内）⇒ 未交付，
+ *             见 `.superpowers/sdd/2026-09-12-frontend-redesign-batch6-motion/task-26-report.md`。
+ */
+describe("NotesPage [[ts:ms]] 带上毫秒（批 6 T26）", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    confirmMock.mockReset();
+    invokeMock.mockImplementation(async (cmd: string) => {
+      switch (cmd) {
+        case "list_notes":
+          return [{ ...baseNote("带时间码"), content: "开头 [⏱ 00:05]([[ts:5000]]) 结尾" }];
+        case "list_note_groups":
+        case "list_fragments":
+        case "note_versions_list":
+        case "note_versions_usage":
+        case "list_knowledge_systems":
+        case "list_knowledge_links":
+        case "list_tag_colors":
+        case "list_links_by_target":
+          return [];
+        case "get_feature_flags":
+          return { feedCapture: true };
+        default:
+          return null;
+      }
+    });
+  });
+
+  afterEach(() => cleanup());
+
+  it("点回链 ⇒ onOpenSessions 收到 (sessionId, ms)", async () => {
+    const onOpenSessions = vi.fn();
+    const { container } = render(<NotesPage onOpenSessions={onOpenSessions} />);
+    // 选中笔记 ⇒ 右栏进入阅读态（回链芯片由 NoteMarkdown 渲染）
+    fireEvent.click(await screen.findByText("带时间码"));
+
+    const chip = await waitFor(() => {
+      const el = container.querySelector<HTMLElement>('span[title*="跳转到会话"]');
+      expect(el, "回链芯片未渲染（阅读栏未进入阅读态？）").toBeTruthy();
+      return el as HTMLElement;
+    });
+    fireEvent.click(chip);
+
+    expect(onOpenSessions).toHaveBeenCalledTimes(1);
+    expect(onOpenSessions).toHaveBeenCalledWith(42, 5000);
+  });
+});
