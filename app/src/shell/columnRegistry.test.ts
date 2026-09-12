@@ -117,6 +117,32 @@ describe("列注册表（规格 §6.2）", () => {
     expect(columnsOf("action")).toHaveLength(1);
   });
 
+  it("④ 八处可折叠行的 autoFoldBelow 与规格 §6.2 逐行一致（行↔档位的映射不许错配）", () => {
+    // Why 单列这一条：只判「值 ∈ BREAKPOINTS」判不出「这一行用错了档位」
+    // （把 notes-list 从 threeCol 写成 twoCol，值仍是合法断点 ⇒ 静默错配）。
+    // 期望值写 `BREAKPOINTS.<kind>`——档位数字本身由 breakpoints.test.ts 的三条逐字锚点冻结，
+    // 本条的职责是**行与档位的对应关系**，不是再冻结一次数字。
+    const want: Record<string, number> = {
+      "classroom-left": BREAKPOINTS.twoCol,
+      "sessions-list": BREAKPOINTS.twoCol,
+      "notes-groups": BREAKPOINTS.threeCol,
+      "notes-list": BREAKPOINTS.threeCol,
+      "notes-outline": BREAKPOINTS.outlineCol,
+      "chat-sidebar": BREAKPOINTS.twoCol,
+      "knowledge-left": BREAKPOINTS.twoCol,
+      "goals-left": BREAKPOINTS.twoCol,
+    };
+    const got = Object.fromEntries(
+      COLUMN_SPECS.map((c: ColumnSpec) => c)
+        .filter((c) => c.autoFoldBelow != null)
+        .map((c) => [c.key, c.autoFoldBelow]),
+    );
+    expect(got, "可折叠行的档位映射与规格 §6.2 不一致").toEqual(want);
+    // 阴性样本：§6.2 写「不折叠」的详情列与四条单列行不得混进来
+    expect(got["knowledge-detail"]).toBeUndefined();
+    expect(got["settings-main"]).toBeUndefined();
+  });
+
   it("① 与规格 §6.2 的九个数字逐字一致（抽样锚点，防整表被改错）", () => {
     expect(columnSpec("classroom-left").default).toBe(320);
     expect(columnSpec("notes-groups").default).toBe(240);
