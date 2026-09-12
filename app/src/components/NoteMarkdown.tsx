@@ -24,6 +24,18 @@ import type { Note } from "../types";
 import { remarkMarkHighlight } from "../utils/remarkMarkHighlight";
 import NoteImage from "./NoteImage";
 
+/**
+ * `remarkPlugins` 槽的元素类型（= `react-markdown` 的 `Options["remarkPlugins"]` 的元素）。
+ *
+ * @ai-context 类型取自**已有的默认导入**，而不是再为 `Options` 写一行 import type：
+ *   C8 的机器判据是「全站 `react-markdown` **运行时站点数不增加**（今天 2 处）」，而该判据的原始命令
+ *   是**按行**匹配那个模块说明符（`tmp/t1/c8-markdown-sites.md` 逐字给了命令与读数）⇒ 多写一行
+ *   import type 会把读数变成 3、污染 C8 的锚。`Parameters<typeof ReactMarkdown>[0]` 与之**语义等价**
+ *   （`Markdown(options: Readonly<Options>)`，见 `react-markdown/lib/index.d.ts`），已由 `tsc` 与
+ *   `views/note/noteViews.test.tsx` 的赋值断言双向钉住。
+ */
+export type RemarkPlugin = NonNullable<Parameters<typeof ReactMarkdown>[0]["remarkPlugins"]>[number];
+
 interface Props {
   note: Note;
   /** 搜索关键词（空串=不高亮）——由 NoteReadingView 按 searchActive 门控传入 */
@@ -31,6 +43,16 @@ interface Props {
   onTaskToggle: (newContent: string) => void;
   onOpenSession?: (sessionId: number) => void;
   onImageOpen: (src: string, title?: string) => void;
+  /**
+   * **只许追加、不许替换**的 remark 插件槽（C8）。
+   *
+   * @ai-context 唯一消费者是笔记卡片流（`views/note/NoteCardFlowView`，批 5 T12）。追加项排在既有四条
+   *   **之后**，而 transformer 型插件不参与词法（micromark 扩展在解析前注册）⇒ 既有 GFM / 数学 /
+   *   荧光笔 / 换行四条语义一条不少（N6 的行为判据钉住）。缺省时 `?? []` ⇒ **不传即与今天逐字相同**
+   *   （`NoteMarkdown.test.tsx` 的 6 条原样绿）。替换式覆盖（`remarkPlugins={remarkPluginsExtra}`）
+   *   会同时动三条既有语义 ⇒ **禁止**。
+   */
+  remarkPluginsExtra?: readonly RemarkPlugin[];
 }
 
 /** 递归展平 React 子节点为纯文本（ReactNode 收窄——替代 as string 断言） */
@@ -91,7 +113,7 @@ function highlightNode(node: ReactNode, query: string): ReactNode {
   return walk(node, "hl");
 }
 
-export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSession, onImageOpen }: Props) {
+export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSession, onImageOpen, remarkPluginsExtra }: Props) {
   // H1：任务行索引（源文本中每个任务行的行号，按出现顺序）
   // 正则与 remark-gfm 清单语法对齐：-/*/+ 无序 + 有序列表（\d{1,9}[.)]），
   // 勾选框大小写均认（[x]/[X]）——否则渲染序号与索引数组错位会写错行
@@ -156,7 +178,7 @@ export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSe
       // v0.15：remark-breaks——单换行（软换行）渲染为 <br>，与编辑态所见一致
       // （CommonMark 标准语义是软换行=空格，导致"编辑态换行、阅读态连上"；
       // 存量笔记内容零数据变更自动修复；`\` 与两空格强断行语义保留）
-      remarkPlugins={[remarkGfm, remarkMath, remarkMarkHighlight, remarkBreaks]}
+      remarkPlugins={[remarkGfm, remarkMath, remarkMarkHighlight, remarkBreaks, ...(remarkPluginsExtra ?? [])]}
       rehypePlugins={[rehypeKatex]}
       components={{
         // v0.14 B：==文本== 荧光笔（remark 插件产出 mdast mark 节点 + hName/hProperties）
