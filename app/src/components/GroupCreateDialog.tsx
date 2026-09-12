@@ -78,7 +78,7 @@ export default function GroupCreateDialog({ onClose, onCreated }: Props) {
     /* 批 4 T5：自建遮罩 + 面板几何 + 手写标题栏（原 `:82-94`）交给 `Modal`。
        档位 `s`(380)，原面板 340 ⇒ **+40 px**（已登记）。原「✕ 关闭」钮（testid `group-create-cancel`，
        全仓无测试引用）由 `Modal` 的关闭钮取代，新锚点 = `group-create-dialog-close`。 */
-    <Modal open onClose={onClose} title="📁 新建笔记组" size="s" testId="group-create-dialog">
+    <Modal open onClose={onClose} title="新建笔记组" size="s" testId="group-create-dialog">
       <label style={label}>组名 *</label>
       <input
         data-testid="group-create-name"

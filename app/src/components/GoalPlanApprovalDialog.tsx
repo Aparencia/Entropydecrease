@@ -83,7 +83,7 @@ export default function GoalPlanApprovalDialog({ view, onConfirm, onClose, onUse
     <Modal
       open
       onClose={onClose}
-      title="✨ AI 规划建议（草案——确认后落库）"
+      title="AI 规划建议（草案——确认后落库）"
       size="l"
       testId="plan-approval"
       footer={

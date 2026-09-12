@@ -70,7 +70,7 @@ export default function ModelCardFromNoteDialog({ noteId, noteTitle, onClose, on
   );
 
   return (
-    <Modal open onClose={onClose} title="🧠 提炼模型卡草稿" size="m" testId="model-card-from-note" footer={footer}>
+    <Modal open onClose={onClose} title="提炼模型卡草稿" size="m" testId="model-card-from-note" footer={footer}>
       <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 10 }}>来源：{noteTitle.slice(0, 24)}</div>
       {msg && <div style={{ fontSize: 12, color: "#047857", marginBottom: 8 }}>{msg}</div>}
       {err && <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 8 }}>{err}</div>}

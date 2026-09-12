@@ -77,8 +77,8 @@ export default function KnowledgeModelDialog({ systemId, onCreated, onClose }: P
   );
 
   return (
-    <Modal open onClose={doClose} title="⚙ 新建模型" size="m" testId="model-dialog" footer={footer}>
-      {/* 自绘头部（标题 + `model-dialog-close`）已删：标题文本「⚙ 新建模型」交给 `Modal` 的 head；
+    <Modal open onClose={doClose} title="新建模型" size="m" testId="model-dialog" footer={footer}>
+      {/* 自绘头部（标题 + `model-dialog-close`）已删：标题文本「新建模型」交给 `Modal` 的 head；
           关闭路径收敛到 `Modal` 的 `onClose={doClose}`（ESC / 点遮罩 / 关闭钮三处同语义，
           与原遮罩 `onClick={doClose}` 逐字同一函数）。 */}
       <div style={{ padding: "16px 18px" }}>

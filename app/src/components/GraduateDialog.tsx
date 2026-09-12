@@ -60,7 +60,7 @@ export default function GraduateDialog({ goalId, onClose, onGraduated }: Props) 
     <Modal
       open
       onClose={onClose}
-      title="🎓 毕业仪式"
+      title="毕业仪式"
       size="m"
       testId="graduate-dialog"
       footer={

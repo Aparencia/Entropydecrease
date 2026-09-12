@@ -69,7 +69,7 @@ export default function KnowledgeConceptDialog({ systemId, onCreated, onClose }:
     <Modal
       open
       onClose={() => void doClose()}
-      title="🧬 新建概念"
+      title="新建概念"
       size="m"
       testId="concept-dialog"
       footer={

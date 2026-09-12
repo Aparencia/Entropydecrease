@@ -55,9 +55,9 @@ export default function ModelCardCreateDialog({ groupId, groupName, onClose, onC
   };
 
   return (
-    <Modal open onClose={onClose} title={`🧠 概念卡 · ${groupName}`} size="s" testId="model-card-dialog">
+    <Modal open onClose={onClose} title={`概念卡 · ${groupName}`} size="s" testId="model-card-dialog">
       {/* 自绘头部（标题 + `model-card-cancel`「✕ 关闭」）已删：标题文本交给 `Modal` 的 head
-          （逐字同一个 `🧠 概念卡 · ${groupName}`），关闭路径收敛到 `Modal` 的 `-close` 钮 +
+          （逐字同一个 `概念卡 · ${groupName}`），关闭路径收敛到 `Modal` 的 `-close` 钮 +
           点遮罩 + ESC（三处同走 `onClose`，与原遮罩 `onClick={onClose}` 同语义）。 */}
       <label style={label}>概念名 *</label>
       <input data-testid="model-card-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="卡住你的词/概念" style={input} />

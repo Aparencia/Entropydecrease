@@ -130,7 +130,7 @@ export default function NoteAiDialog({
     <Modal
       open
       onClose={handleClose}
-      title="🤖 AI 能力"
+      title="AI 能力"
       size="m"
       testId="note-ai-dialog"
       // 原 `onClick` 只在 menu 分支关（选完能力后误点背景不该关掉精修/补充面板）

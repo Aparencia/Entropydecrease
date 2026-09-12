@@ -177,8 +177,8 @@ export default function RefineLaunchDialog({
   );
 
   return (
-    <Modal open onClose={onClose} title="✨ AI 精修" size="l" testId="refine-launch-dialog" footer={footer}>
-      {/* 自绘头部（标题 + 目标位）已删：标题文本「✨ AI 精修」交给 `Modal` 的 head；
+    <Modal open onClose={onClose} title="AI 精修" size="l" testId="refine-launch-dialog" footer={footer}>
+      {/* 自绘头部（标题 + 目标位）已删：标题文本「AI 精修」交给 `Modal` 的 head；
           目标位（来源会话 / 当前笔记）保留为正文首行 */}
       <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 10 }}>{isNote ? "目标：当前笔记" : "目标：来源会话"}</div>
 

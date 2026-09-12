@@ -95,7 +95,7 @@ export default function TaskLaunchDialog({ kind, sessions, notes, initialTargetI
   };
 
   return (
-    <Modal open onClose={onClose} title={isRefine ? "✨ 发起 AI 精修" : "📚 发起 AI 知识补充"} size="s" testId="task-launch-dialog">
+    <Modal open onClose={onClose} title={isRefine ? "发起 AI 精修" : "发起 AI 知识补充"} size="s" testId="task-launch-dialog">
       {/* 自绘遮罩（`task-launch-backdrop`）+ 居中几何（`top/left/transform`）已删：遮罩、居中、
           点遮罩关闭与 ESC 全部收敛到 `Modal`（`onClose` 逐字同一个回调）。
           面板原 360px ⇒ `s` 档（380，计划 Task 6 的映射）。 */}

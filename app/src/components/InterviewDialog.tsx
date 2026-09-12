@@ -156,7 +156,7 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
     <Modal
       open
       onClose={onClose}
-      title={quickMode ? "🎯 快速记一个目标" : "🎯 定一个学习目标"}
+      title={quickMode ? "快速记一个目标" : "定一个学习目标"}
       size="m"
       testId="interview-dialog"
     >
