@@ -26,6 +26,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { animatedProps, installMatchMediaStub } from "../test/motionHarness";
+import { gsap } from "../motion/engine";
 import { ANIMATABLE_PROPERTIES } from "../motion/shift";
 import { DURATION_TOKENS } from "../ui/tokens.gen";
 import { flipDurationSec, flipSelector, useColumnFlip, type ColumnFlip } from "./useColumnFlip";
@@ -205,5 +206,25 @@ describe("T33 · 列折叠 Flip（路径 B：`data-flip-id` 跨元素配对）",
     const tiers = ["eco", "standard", "rich"] as const;
     expect(tiers.map((t) => flipDurationSec(t))).toEqual([null, ms("card") / 1000, ms("reveal") / 1000]);
     expect(tiers.map((t) => flipDurationSec(t))).toEqual([null, 0.22, 0.5]);
+  });
+
+  it("C6 中断（R8.2 **双断言**）：第二次折叠接管后，句柄换成**新**时间线，且**旧时间线已从 globalTimeline 摘除**（收尸）", async () => {
+    render(<Harness />);
+    await flush();
+    fireEvent.click(screen.getByTestId("toggle")); // 展开 → 折叠
+    await flush();
+    const first = handle?.current?.timeline ?? null;
+    expect(first, "第一次折叠没建时间线（本判据的前提）").not.toBeNull();
+    // 前提自证（仪器看得见时间线）：新时间线在场上时确实挂在 globalTimeline 上
+    expect(gsap.globalTimeline.getChildren().includes(first as never), "仪器看不到时间线 ⇒ 下面的「已摘除」会假绿").toBe(true);
+
+    fireEvent.click(screen.getByTestId("toggle")); // 折叠 → 展开：下一个输入接管，**不排队**
+    await flush();
+    const second = handle?.current?.timeline ?? null;
+    expect(second === first, "旧时间线仍是句柄里那条 ⇒ 没有接管").toBe(false);
+    expect(
+      gsap.globalTimeline.getChildren().includes(first as never),
+      "旧时间线仍挂在 globalTimeline ⇒ 没被收尸（下一个输入接管失败；M6 变异体正是这一条）",
+    ).toBe(false);
   });
 });
