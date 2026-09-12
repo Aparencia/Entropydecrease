@@ -1,4 +1,4 @@
-﻿/**
+/**
  * KnowledgeModelDialog — 新建模型独立弹窗（v0.13.x）。
  *
  * @ai-context: 从模型列表「＋ 添加模型」按钮打开，独立于右栏详情面板——与概念弹窗
@@ -8,7 +8,7 @@
  * @ai-context: 不预填内容（预填＝假燃料）——所有输入从空字符串开始。
  */
 import { useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { isImeComposing, Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 
 interface Props {
@@ -59,111 +59,94 @@ export default function KnowledgeModelDialog({ systemId, onCreated, onClose }: P
     onClose();
   };
 
-  return (
-    <div
-      onClick={doClose}
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
-        display: "flex", alignItems: "center", justifyContent: "center", zIndex: zIndex("modal"),
-      }}
-    >
-      <div
-        data-testid="model-dialog"
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: 520, maxWidth: "92vw", background: "#fff", borderRadius: 10, border: "1px solid #e5e7eb", boxShadow: "0 10px 40px rgba(0,0,0,0.15)", overflow: "hidden" }}
+  /** 页脚行动区（`Modal` 的 `footer` 槽）：原自绘底栏的 `flex-end` 由 `.ed-modal-foot` 承载 */
+  const footer = (
+    <>
+      <button onClick={() => void doClose()} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" }}>
+        取消
+      </button>
+      <button
+        data-testid="model-dialog-save"
+        onClick={() => void save()}
+        disabled={saving}
+        style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e" }}
       >
-        {/* 头部 */}
-        <div style={{ display: "flex", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid #e5e7eb" }}>
-          <span style={{ fontWeight: 700, fontSize: 15, color: "#0f766e" }}>⚙ 新建模型</span>
-          <button data-testid="model-dialog-close" onClick={() => void doClose()} style={{ marginLeft: "auto", border: "none", background: "none", cursor: "pointer", fontSize: 14, color: "#9ca3af" }} title="关闭">
-            ✕
-          </button>
-        </div>
+        {saving ? "创建中…" : "✓ 创建模型"}
+      </button>
+    </>
+  );
 
-        {/* 表单 */}
-        <div style={{ padding: "16px 18px" }}>
-          <p style={{ fontSize: 12, color: "#6b7280", margin: "0 0 12px", lineHeight: 1.6 }}>
-            模型是跨学科的可验证断言——写下它的主张、成立条件和失效条件，让它经得起检验。
-          </p>
+  return (
+    <Modal open onClose={doClose} title="⚙ 新建模型" size="m" testId="model-dialog" footer={footer}>
+      {/* 自绘头部（标题 + `model-dialog-close`）已删：标题文本「⚙ 新建模型」交给 `Modal` 的 head；
+          关闭路径收敛到 `Modal` 的 `onClose={doClose}`（ESC / 点遮罩 / 关闭钮三处同语义，
+          与原遮罩 `onClick={doClose}` 逐字同一函数）。 */}
+      <div style={{ padding: "16px 18px" }}>
+        <p style={{ fontSize: 12, color: "#6b7280", margin: "0 0 12px", lineHeight: 1.6 }}>
+          模型是跨学科的可验证断言——写下它的主张、成立条件和失效条件，让它经得起检验。
+        </p>
 
-          <label style={label}>名称 *</label>
-          <input
-            data-testid="model-dialog-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !saving) void save(); }}
-            placeholder="模型名称"
-            autoFocus
-            style={input}
-          />
+        <label style={label}>名称 *</label>
+        <input
+          data-testid="model-dialog-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !isImeComposing(e) && !saving) void save(); }}
+          placeholder="模型名称"
+          autoFocus
+          style={input}
+        />
 
-          <label style={label}>学科 *（逗号分隔）</label>
-          <input
-            data-testid="model-dialog-disciplines"
-            value={disciplines}
-            onChange={(e) => setDisciplines(e.target.value)}
-            placeholder="编程, 学习方法"
-            style={input}
-          />
+        <label style={label}>学科 *（逗号分隔）</label>
+        <input
+          data-testid="model-dialog-disciplines"
+          value={disciplines}
+          onChange={(e) => setDisciplines(e.target.value)}
+          placeholder="编程, 学习方法"
+          style={input}
+        />
 
-          <label style={label}>主张（claim）</label>
-          <textarea
-            data-testid="model-dialog-claim"
-            value={claim}
-            onChange={(e) => setClaim(e.target.value)}
-            rows={2}
-            placeholder="这个模型主张什么"
-            style={textarea}
-          />
+        <label style={label}>主张（claim）</label>
+        <textarea
+          data-testid="model-dialog-claim"
+          value={claim}
+          onChange={(e) => setClaim(e.target.value)}
+          rows={2}
+          placeholder="这个模型主张什么"
+          style={textarea}
+        />
 
-          <label style={label}>成立条件</label>
-          <textarea
-            data-testid="model-dialog-valid"
-            value={validWhen}
-            onChange={(e) => setValidWhen(e.target.value)}
-            rows={2}
-            placeholder="在什么条件下成立"
-            style={textarea}
-          />
+        <label style={label}>成立条件</label>
+        <textarea
+          data-testid="model-dialog-valid"
+          value={validWhen}
+          onChange={(e) => setValidWhen(e.target.value)}
+          rows={2}
+          placeholder="在什么条件下成立"
+          style={textarea}
+        />
 
-          <label style={label}>失效条件</label>
-          <textarea
-            data-testid="model-dialog-invalid"
-            value={invalidWhen}
-            onChange={(e) => setInvalidWhen(e.target.value)}
-            rows={2}
-            placeholder="在什么条件下失效"
-            style={textarea}
-          />
+        <label style={label}>失效条件</label>
+        <textarea
+          data-testid="model-dialog-invalid"
+          value={invalidWhen}
+          onChange={(e) => setInvalidWhen(e.target.value)}
+          rows={2}
+          placeholder="在什么条件下失效"
+          style={textarea}
+        />
 
-          <p style={{ fontSize: 11, color: "#9ca3af", margin: "10px 0 0" }}>
-            新模型默认状态为「active」，创建后可在右栏详情面板修改。
-          </p>
+        <p style={{ fontSize: 11, color: "#9ca3af", margin: "10px 0 0" }}>
+          新模型默认状态为「active」，创建后可在右栏详情面板修改。
+        </p>
 
-          {error && (
-            <div data-testid="model-dialog-error" style={{ fontSize: 12, color: "#dc2626", marginTop: 10, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "6px 10px", lineHeight: 1.5 }}>
-              {error}
-            </div>
-          )}
-        </div>
-
-        {/* 底部 */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 18px", borderTop: "1px solid #e5e7eb", background: "#fafafa" }}>
-          <span style={{ flex: 1 }} />
-          <button onClick={() => void doClose()} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" }}>
-            取消
-          </button>
-          <button
-            data-testid="model-dialog-save"
-            onClick={() => void save()}
-            disabled={saving}
-            style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e" }}
-          >
-            {saving ? "创建中…" : "✓ 创建模型"}
-          </button>
-        </div>
+        {error && (
+          <div data-testid="model-dialog-error" style={{ fontSize: 12, color: "#dc2626", marginTop: 10, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "6px 10px", lineHeight: 1.5 }}>
+            {error}
+          </div>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }
 

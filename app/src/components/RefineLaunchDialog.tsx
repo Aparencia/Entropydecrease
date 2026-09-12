@@ -8,9 +8,13 @@
  * @ai-context: 记忆：选择变化即存 localStorage（refineStrategy.ts——
  *              下次打开恢复上次选择）；确认启动后任务轮询由调用方接管
  *              （onStarted 回传 taskId）。
+ * @ai-context: 批 4 T6 迁移：遮罩/居中/面板几何（原 680px 面板）交给 `Modal`
+ *              （barrel 导入，B5），档位 `l`(720) —— 见计划 Task 6 的「680 → l(+40)」。
+ *              开合态仍由父层持有（`AiRefineCard` 的 `showLaunch` / `NoteAiDialog`
+ *              的 `kind` 分支）⇒ `open` 恒为 `true`，本组件每次由父层条件挂载。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiSettingsView, BalanceView, RefineEstimateView, RefineStrategyMeta } from "../types";
 import {
@@ -157,141 +161,133 @@ export default function RefineLaunchDialog({
     setSettings(settings ? { ...settings, authorized: true } : settings);
   };
 
-  return (
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,.45)", zIndex: zIndex("modal"),
-        display: "flex", alignItems: "center", justifyContent: "center" }}
-      onClick={onClose}
-    >
-      <div
-        style={{ width: 680, maxWidth: "92vw", maxHeight: "86vh", overflowY: "auto",
-          background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 8px 30px rgba(0,0,0,.2)" }}
-        onClick={(e) => e.stopPropagation()}
+  /** 页脚行动区：原自绘底栏两枚按钮逐字搬进 `Modal` 的 footer 槽 */
+  const footer = (
+    <>
+      <button style={btn} onClick={onClose}>取消</button>
+      <button
+        style={{ ...btn, background: "#4f46e5", color: "#fff", border: "none",
+          opacity: selectable && !starting ? 1 : .5 }}
+        disabled={!selectable || starting}
+        onClick={() => void confirm()}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <span style={{ fontWeight: 600, fontSize: 14 }}>✨ AI 精修</span>
-          <span style={{ fontSize: 11, color: "#6b7280" }}>{isNote ? "目标：当前笔记" : "目标：来源会话"}</span>
+        {starting ? "启动中…" : "确认并精修 →"}
+      </button>
+    </>
+  );
+
+  return (
+    <Modal open onClose={onClose} title="✨ AI 精修" size="l" testId="refine-launch-dialog" footer={footer}>
+      {/* 自绘头部（标题 + 目标位）已删：标题文本「✨ AI 精修」交给 `Modal` 的 head；
+          目标位（来源会话 / 当前笔记）保留为正文首行 */}
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 10 }}>{isNote ? "目标：当前笔记" : "目标：来源会话"}</div>
+
+      {/* 授权卡（首次：上传说明 + 同意）——审查 B11：文案按画面理解生效态条件化，
+          开启时明确"关键帧将随本次上传"（不再声称图像永不出本机） */}
+      {!settings?.authorized && (
+        <div style={{ border: "1px solid #f59e0b", background: "#fffbeb", borderRadius: 8, padding: 10, marginBottom: 10, fontSize: 12 }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>首次使用需授权</div>
+          {effectiveVision ? (
+            <>
+              精修将上传<strong>转写文本、笔记内容与关键帧图片</strong>至 AI 服务（画面理解已开启——关键帧仅本次随请求上云，不落云端存储）。
+            </>
+          ) : (
+            <>
+              精修将上传<strong>转写文本、笔记内容与最小上下文</strong>至 AI 服务；本地优先铁律：<strong>音视频/图像永不出本机</strong>。
+            </>
+          )}
+          是否同意？
+          <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
+            <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }} onClick={() => void consent()}>同意并继续</button>
+            <button style={btn} onClick={onClose}>暂不</button>
+          </div>
         </div>
+      )}
 
-        {/* 授权卡（首次：上传说明 + 同意）——审查 B11：文案按画面理解生效态条件化，
-            开启时明确"关键帧将随本次上传"（不再声称图像永不出本机） */}
-        {!settings?.authorized && (
-          <div style={{ border: "1px solid #f59e0b", background: "#fffbeb", borderRadius: 8, padding: 10, marginBottom: 10, fontSize: 12 }}>
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>首次使用需授权</div>
-            {effectiveVision ? (
-              <>
-                精修将上传<strong>转写文本、笔记内容与关键帧图片</strong>至 AI 服务（画面理解已开启——关键帧仅本次随请求上云，不落云端存储）。
-              </>
-            ) : (
-              <>
-                精修将上传<strong>转写文本、笔记内容与最小上下文</strong>至 AI 服务；本地优先铁律：<strong>音视频/图像永不出本机</strong>。
-              </>
-            )}
-            是否同意？
-            <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
-              <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }} onClick={() => void consent()}>同意并继续</button>
-              <button style={btn} onClick={onClose}>暂不</button>
-            </div>
-          </div>
-        )}
+      {/* 策略选区 */}
+      {selectable && (
+        <RefineStrategyPicker meta={meta} value={draft!} onChange={handleDraftChange} />
+      )}
 
-        {/* 策略选区 */}
-        {selectable && (
-          <RefineStrategyPicker meta={meta} value={draft!} onChange={handleDraftChange} />
-        )}
-
-        {/* 提示词预览（只读·实时·同代码路径） */}
-        <div style={{ marginTop: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-            <span style={{ fontSize: 11, color: "#6b7280" }}>提示词预览（随选择实时更新）</span>
-            <button
-              style={{ ...btn, padding: "2px 8px", fontSize: 11 }}
-              onClick={() => { void navigator.clipboard.writeText(preview).catch(() => undefined); }}
-            >
-              📋 复制
-            </button>
-          </div>
-          <textarea
-            readOnly
-            value={preview}
-            placeholder={previewErr || "提示词组装中…"}
-            style={{ width: "100%", height: 110, fontSize: 11, fontFamily: "monospace",
-              border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, color: "#374151",
-              background: "#f9fafb", resize: "none" }}
-          />
-        </div>
-
-        {/* REQ-284（v0.19.7）：画面理解开关——仅会话级精修（视频会话关键帧语境）
-            显示；笔记级精修（纯文本语境）隐藏。checkbox 初值=全局；勾选变化=本次
-            覆写；「设为默认」显式写回全局（单向同步，不双向自动）。 */}
-        {!isNote && (
-          <div style={{ marginTop: 8, border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
-              <input
-                data-testid="vision-refine-toggle"
-                type="checkbox"
-                checked={effectiveVision}
-                disabled={starting}
-                onChange={(e) => { setVisionOverride(e.target.checked); setVisionSavedNote(""); }}
-              />
-              画面理解（上传关键帧给 AI）
-            </label>
-            <span style={{ fontSize: 11, color: "#6b7280" }}>
-              {visionOverride != null
-                ? `本次：${effectiveVision ? "开" : "关"}（全局默认：${settings?.visionRefineEnabled ? "开" : "关"}）`
-                : `跟随全局默认（${settings?.visionRefineEnabled ? "开" : "关"}）——勾选即本次覆写`}
-            </span>
-            {effectiveVision && (
-              <span style={{ fontSize: 10, color: "#b45309" }}>⚠ 开启会显著增加耗时与费用</span>
-            )}
-            <button
-              data-testid="vision-set-default"
-              onClick={() => void saveVisionAsDefault()}
-              style={{ marginLeft: "auto", fontSize: 11, border: "none", background: "none", color: "#4f46e5", cursor: "pointer", textDecoration: "underline" }}
-              title="把当前生效值写回全局设置（AI 服务面板可随时修改）"
-            >
-              设为默认
-            </button>
-            {visionSavedNote && (
-              <span data-testid="vision-saved-note" style={{ width: "100%", fontSize: 11, color: visionSavedNote.startsWith("已") ? "#047857" : "#dc2626" }}>
-                {visionSavedNote}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* 成本确认行 */}
-        {est && (
-          <div style={{ marginTop: 8, fontSize: 12, color: "#374151" }}>
-            预估 token：<strong>{est.estTokens}</strong> · 预估费用：<strong>¥{est.estCostYuan.toFixed(4)}</strong>
-            {est.pricePer1m === 0 && <span style={{ color: "#0d9488" }}>（当前模型免费档 ¥0）</span>}
-            {balance && (
-              <span style={{ marginLeft: 8 }}>
-                余额 <strong>¥{balance.balance.totalBalance.toFixed(2)}</strong>
-                {balance.lowBalanceWarning && <span style={{ color: "#dc2626", marginLeft: 4 }}>⚠️ {balance.lowBalanceWarning}</span>}
-              </span>
-            )}
-            <label style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-              记住此选择，下次不再确认
-            </label>
-          </div>
-        )}
-        {!est && <div style={{ marginTop: 8, fontSize: 11, color: "#9ca3af" }}>成本预估加载中…（无预估则无法启动，请重试）</div>}
-        {msg && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 6 }}>{msg}</div>}
-
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-          <button style={btn} onClick={onClose}>取消</button>
+      {/* 提示词预览（只读·实时·同代码路径） */}
+      <div style={{ marginTop: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+          <span style={{ fontSize: 11, color: "#6b7280" }}>提示词预览（随选择实时更新）</span>
           <button
-            style={{ ...btn, background: "#4f46e5", color: "#fff", border: "none",
-              opacity: selectable && !starting ? 1 : .5 }}
-            disabled={!selectable || starting}
-            onClick={() => void confirm()}
+            style={{ ...btn, padding: "2px 8px", fontSize: 11 }}
+            onClick={() => { void navigator.clipboard.writeText(preview).catch(() => undefined); }}
           >
-            {starting ? "启动中…" : "确认并精修 →"}
+            📋 复制
           </button>
         </div>
+        <textarea
+          readOnly
+          value={preview}
+          placeholder={previewErr || "提示词组装中…"}
+          style={{ width: "100%", height: 110, fontSize: 11, fontFamily: "monospace",
+            border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, color: "#374151",
+            background: "#f9fafb", resize: "none" }}
+        />
       </div>
-    </div>
+
+      {/* REQ-284（v0.19.7）：画面理解开关——仅会话级精修（视频会话关键帧语境）
+          显示；笔记级精修（纯文本语境）隐藏。checkbox 初值=全局；勾选变化=本次
+          覆写；「设为默认」显式写回全局（单向同步，不双向自动）。 */}
+      {!isNote && (
+        <div style={{ marginTop: 8, border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
+            <input
+              data-testid="vision-refine-toggle"
+              type="checkbox"
+              checked={effectiveVision}
+              disabled={starting}
+              onChange={(e) => { setVisionOverride(e.target.checked); setVisionSavedNote(""); }}
+            />
+            画面理解（上传关键帧给 AI）
+          </label>
+          <span style={{ fontSize: 11, color: "#6b7280" }}>
+            {visionOverride != null
+              ? `本次：${effectiveVision ? "开" : "关"}（全局默认：${settings?.visionRefineEnabled ? "开" : "关"}）`
+              : `跟随全局默认（${settings?.visionRefineEnabled ? "开" : "关"}）——勾选即本次覆写`}
+          </span>
+          {effectiveVision && (
+            <span style={{ fontSize: 10, color: "#b45309" }}>⚠ 开启会显著增加耗时与费用</span>
+          )}
+          <button
+            data-testid="vision-set-default"
+            onClick={() => void saveVisionAsDefault()}
+            style={{ marginLeft: "auto", fontSize: 11, border: "none", background: "none", color: "#4f46e5", cursor: "pointer", textDecoration: "underline" }}
+            title="把当前生效值写回全局设置（AI 服务面板可随时修改）"
+          >
+            设为默认
+          </button>
+          {visionSavedNote && (
+            <span data-testid="vision-saved-note" style={{ width: "100%", fontSize: 11, color: visionSavedNote.startsWith("已") ? "#047857" : "#dc2626" }}>
+              {visionSavedNote}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* 成本确认行 */}
+      {est && (
+        <div style={{ marginTop: 8, fontSize: 12, color: "#374151" }}>
+          预估 token：<strong>{est.estTokens}</strong> · 预估费用：<strong>¥{est.estCostYuan.toFixed(4)}</strong>
+          {est.pricePer1m === 0 && <span style={{ color: "#0d9488" }}>（当前模型免费档 ¥0）</span>}
+          {balance && (
+            <span style={{ marginLeft: 8 }}>
+              余额 <strong>¥{balance.balance.totalBalance.toFixed(2)}</strong>
+              {balance.lowBalanceWarning && <span style={{ color: "#dc2626", marginLeft: 4 }}>⚠️ {balance.lowBalanceWarning}</span>}
+            </span>
+          )}
+          <label style={{ marginLeft: 10, display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+            记住此选择，下次不再确认
+          </label>
+        </div>
+      )}
+      {!est && <div style={{ marginTop: 8, fontSize: 11, color: "#9ca3af" }}>成本预估加载中…（无预估则无法启动，请重试）</div>}
+      {msg && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 6 }}>{msg}</div>}
+    </Modal>
   );
 }

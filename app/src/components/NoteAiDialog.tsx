@@ -9,9 +9,14 @@
  *              （noteMode——对比/采纳/重生成闭环，与 AiRefineCard 会话级同
  *              状态机）；重生成沿用本次策略档位（overrideFromInfo——首版与
  *              重生成同档位，不回退全局默认）。
+ * @ai-context: 批 4 T6 迁移：遮罩/居中/面板几何交给 `Modal`（barrel 导入，B5）。
+ *              两个面板宽分支（menu 460 / 其余 520）按计划**同用 `m` 档**（520，
+ *              取大者——避免同一组件里宽度跳档）。`kind === "menu"` 才允许「点遮罩
+ *              关闭」这一点逐字保留（见下方 `closeOnOverlay`）；`handleClose` 的
+ *              busy 门（`running || showWorkbench` 时不关）现在是**唯一的**关闭门。
  */
 import { useCallback, useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { useAiTaskPolling } from "../hooks/useAiTaskPolling";
 import type { AiRefineResult, AiTaskState } from "../types";
@@ -24,10 +29,6 @@ const menuBtn: React.CSSProperties = {
   display: "block", width: "100%", textAlign: "left",
   padding: "10px 12px", cursor: "pointer", fontSize: 13, borderRadius: 8,
   border: "1px solid #e5e7eb", background: "#fff", color: "#374151", marginBottom: 6,
-};
-
-const smallBtn: React.CSSProperties = {
-  padding: "4px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6,
 };
 
 export default function NoteAiDialog({
@@ -116,27 +117,33 @@ export default function NoteAiDialog({
     onClose();
   }, [running, showWorkbench, stopPolling, onClose]);
 
+  /** 头行右侧状态位（原面板头的 `smallBtn` 自定义关闭钮已删——关闭由 `Modal` 的 `-close` 承载） */
+  const statusHint = (
+    <span style={{ fontSize: 11, color: "#9ca3af" }}>
+      {/* 信息9（审查裸号）：本对话框未传标题上下文（仅 noteId/content）——
+          中性「当前笔记」不裸显 #id（REQ-277 口径） */}
+      当前笔记
+    </span>
+  );
+
   return (
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,.45)", zIndex: zIndex("modal"),
-        display: "flex", alignItems: "center", justifyContent: "center" }}
-      onClick={() => { if (kind === "menu") handleClose(); }}
+    <Modal
+      open
+      onClose={handleClose}
+      title="🤖 AI 能力"
+      size="m"
+      testId="note-ai-dialog"
+      // 原 `onClick` 只在 menu 分支关（选完能力后误点背景不该关掉精修/补充面板）
+      closeOnOverlay={kind === "menu"}
     >
-      <div
-        style={{ width: kind === "menu" ? 460 : 520, maxWidth: "92vw", maxHeight: "90vh", overflowY: "auto",
-          background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 8px 30px rgba(0,0,0,.2)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+      {/* 原面板的 `maxHeight: "90vh"` + `overflowY: "auto"` —— `Modal` 自己给的是 85vh，
+          这里保留调用点的 90vh 上限（内容超高时仍在面板内滚，不外溢到遮罩） */}
+      <div style={{ maxHeight: "90vh", overflowY: "auto" }}>
         {kind === "menu" && (
           <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <span style={{ fontWeight: 600, fontSize: 14, color: "#374151" }}>🤖 AI 能力</span>
-              <span style={{ fontSize: 11, color: "#9ca3af" }}>
-                {/* 信息9（审查裸号）：本对话框未传标题上下文（仅 noteId/content）——
-                    中性「当前笔记」不裸显 #id（REQ-277 口径） */}
-                当前笔记
-              </span>
-              <button style={{ ...smallBtn, border: "1px solid #d1d5db", background: "#fff" }} onClick={handleClose}>✕</button>
+              {statusHint}
             </div>
             <button style={{ ...menuBtn, background: "#f5f3ff", border: "1px solid #c7d2fe" }} onClick={() => setKind("refine")}>
               <span style={{ fontWeight: 600 }}>✨ AI 精修</span>
@@ -176,7 +183,7 @@ export default function NoteAiDialog({
             {msg && (
               <div style={{ marginTop: 8, fontSize: 12, color: "#dc2626" }}>
                 {msg}
-                <button style={{ ...smallBtn, marginLeft: 8, border: "1px solid #d1d5db" }} onClick={handleClose}>关闭</button>
+                <button style={{ padding: "4px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6, marginLeft: 8, border: "1px solid #d1d5db" }} onClick={handleClose}>关闭</button>
               </div>
             )}
             {showWorkbench && result && (
@@ -210,6 +217,6 @@ export default function NoteAiDialog({
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }

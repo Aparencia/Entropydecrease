@@ -9,7 +9,7 @@
  *              勾选需求在笔记页 EnrichPanel 完整呈现）。
  */
 import { useEffect, useMemo, useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { AiSettingsView, AiTaskState, RefineEstimateView } from "../types";
@@ -95,54 +95,44 @@ export default function TaskLaunchDialog({ kind, sessions, notes, initialTargetI
   };
 
   return (
-    <>
-      <div onClick={onClose} data-testid="task-launch-backdrop" style={{ position: "fixed", inset: 0, zIndex: zIndex("modal"), background: "rgba(0,0,0,0.18)" }} />
-      <div
-        data-testid="task-launch-dialog"
-        style={{
-          position: "fixed", zIndex: zIndex("modal"), top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-          width: 360, background: "#fff", borderRadius: 10, border: "1px solid #e5e7eb",
-          boxShadow: "0 12px 32px rgba(0,0,0,0.18)", padding: 14, fontSize: 12.5,
-        }}
+    <Modal open onClose={onClose} title={isRefine ? "✨ 发起 AI 精修" : "📚 发起 AI 知识补充"} size="s" testId="task-launch-dialog">
+      {/* 自绘遮罩（`task-launch-backdrop`）+ 居中几何（`top/left/transform`）已删：遮罩、居中、
+          点遮罩关闭与 ESC 全部收敛到 `Modal`（`onClose` 逐字同一个回调）。
+          面板原 360px ⇒ `s` 档（380，计划 Task 6 的映射）。 */}
+      <label style={{ display: "block", color: "#6b7280", marginBottom: 4 }}>
+        {isRefine ? "选择会话（转写内容 → 精修成笔记）" : "选择笔记（正文 → 补充外部知识）"}
+      </label>
+      <select
+        data-testid="task-launch-target"
+        value={targetId ?? ""}
+        onChange={(e) => setTargetId(e.target.value ? Number(e.target.value) : null)}
+        style={{ width: "100%", padding: "6px 8px", fontSize: 13, border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box", marginBottom: 8, background: "#fff" }}
       >
-        <div style={{ fontWeight: 700, fontSize: 14, color: "#111827", marginBottom: 10 }}>
-          {isRefine ? "✨ 发起 AI 精修" : "📚 发起 AI 知识补充"}
+        <option value="">选择…</option>
+        {rows.map((r) => (
+          // REQ-277：缺标题语义占位（未命名会话/笔记）——不带裸 # 数字
+          <option key={r.id} value={r.id}>
+            {refLabel(isRefine ? "session" : "note", r.title, isRefine ? "未命名会话" : "未命名笔记")}
+          </option>
+        ))}
+      </select>
+      {isRefine && (
+        <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>
+          补充默认九子项（深度 d1~d3 + 广度 b1~b6）
         </div>
-        <label style={{ display: "block", color: "#6b7280", marginBottom: 4 }}>
-          {isRefine ? "选择会话（转写内容 → 精修成笔记）" : "选择笔记（正文 → 补充外部知识）"}
-        </label>
-        <select
-          data-testid="task-launch-target"
-          value={targetId ?? ""}
-          onChange={(e) => setTargetId(e.target.value ? Number(e.target.value) : null)}
-          style={{ width: "100%", padding: "6px 8px", fontSize: 13, border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box", marginBottom: 8, background: "#fff" }}
+      )}
+      {status && <div data-testid="task-launch-error" style={{ color: "#dc2626", marginBottom: 8 }}>{status}</div>}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button data-testid="task-launch-cancel" style={BTN} onClick={onClose} disabled={busy}>取消</button>
+        <button
+          data-testid="task-launch-start"
+          style={{ ...BTN, background: "#0d9488", color: "#fff", border: "none", fontWeight: 600 }}
+          onClick={() => void launch()}
+          disabled={busy || targetId == null}
         >
-          <option value="">选择…</option>
-          {rows.map((r) => (
-            // REQ-277：缺标题语义占位（未命名会话/笔记）——不带裸 # 数字
-            <option key={r.id} value={r.id}>
-              {refLabel(isRefine ? "session" : "note", r.title, isRefine ? "未命名会话" : "未命名笔记")}
-            </option>
-          ))}
-        </select>
-        {isRefine && (
-          <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>
-            补充默认九子项（深度 d1~d3 + 广度 b1~b6）
-          </div>
-        )}
-        {status && <div data-testid="task-launch-error" style={{ color: "#dc2626", marginBottom: 8 }}>{status}</div>}
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button data-testid="task-launch-cancel" style={BTN} onClick={onClose} disabled={busy}>取消</button>
-          <button
-            data-testid="task-launch-start"
-            style={{ ...BTN, background: "#0d9488", color: "#fff", border: "none", fontWeight: 600 }}
-            onClick={() => void launch()}
-            disabled={busy || targetId == null}
-          >
-            {busy ? "启动中…" : "启动任务"}
-          </button>
-        </div>
+          {busy ? "启动中…" : "启动任务"}
+        </button>
       </div>
-    </>
+    </Modal>
   );
 }

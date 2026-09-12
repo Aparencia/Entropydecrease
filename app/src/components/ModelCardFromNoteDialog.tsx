@@ -5,10 +5,14 @@
  *              防双轨）：组内 kind=model 卡，front=归一化概念名，定义行=可选
  *              笔记摘录草稿（应用案例留空——复习面/卡编辑完善）；笔记未归组
  *              → 后端引导先归组（组=唯一容器）。
+ * @ai-context: 批 4 T6 迁移：遮罩/居中/面板几何交给 `Modal`（barrel 导入，B5）；
+ *              开合态仍由父层持有（`ModelCardDialogSlot` 的 `dialog == null → null`
+ *              门控）⇒ `open` 恒为 `true`，本组件每次由父层条件挂载。
  */
 import { useEffect, useRef, useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
+import type { CSSProperties } from "react";
 
 interface Props {
   noteId: number;
@@ -20,23 +24,7 @@ interface Props {
   initialExcerpt?: string;
 }
 
-const overlayStyle: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,.45)",
-  zIndex: zIndex("modal"),
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-const cardStyle: React.CSSProperties = {
-  background: "#fff",
-  borderRadius: 12,
-  width: 460,
-  padding: 16,
-  fontSize: 13,
-};
-const btn: React.CSSProperties = { padding: "5px 12px", cursor: "pointer", fontSize: 12, borderRadius: 6, border: "1px solid #e5e7eb", background: "#fff", color: "#374151" };
+const btn: CSSProperties = { padding: "5px 12px", cursor: "pointer", fontSize: 12, borderRadius: 6, border: "1px solid #e5e7eb", background: "#fff", color: "#374151" };
 
 export default function ModelCardFromNoteDialog({ noteId, noteTitle, onClose, onCreated, initialExcerpt = "" }: Props) {
   const [name, setName] = useState("");
@@ -71,34 +59,33 @@ export default function ModelCardFromNoteDialog({ noteId, noteTitle, onClose, on
     }
   };
 
+  /** 页脚行动区：原「取消」在面板头右侧、「创建草稿」在内容右下角 —— 两枚都搬进 `Modal` 的 footer 槽 */
+  const footer = (
+    <>
+      <button style={btn} onClick={onClose} disabled={created}>取消</button>
+      <button style={btn} disabled={busy || created} onClick={() => void create()}>
+        {created ? "已创建，即将关闭…" : "创建草稿"}
+      </button>
+    </>
+  );
+
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={cardStyle} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
-          <h3 style={{ margin: 0, fontSize: 15 }}>🧠 提炼模型卡草稿</h3>
-          <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>来源：{noteTitle.slice(0, 24)}</span>
-          <button style={{ ...btn, marginLeft: "auto" }} onClick={onClose} disabled={created}>取消</button>
+    <Modal open onClose={onClose} title="🧠 提炼模型卡草稿" size="m" testId="model-card-from-note" footer={footer}>
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 10 }}>来源：{noteTitle.slice(0, 24)}</div>
+      {msg && <div style={{ fontSize: 12, color: "#047857", marginBottom: 8 }}>{msg}</div>}
+      {err && <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 8 }}>{err}</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div>
+          <div style={{ fontSize: 12, color: "#374151", marginBottom: 2 }}>概念名（front）</div>
+          <input value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="如：安全边际" style={{ width: "100%", boxSizing: "border-box", fontSize: 13, border: "1px solid #e5e7eb", borderRadius: 4, padding: "4px 6px" }} />
         </div>
-        {msg && <div style={{ fontSize: 12, color: "#047857", marginBottom: 8 }}>{msg}</div>}
-        {err && <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 8 }}>{err}</div>}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div>
-            <div style={{ fontSize: 12, color: "#374151", marginBottom: 2 }}>概念名（front）</div>
-            <input value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="如：安全边际" style={{ width: "100%", boxSizing: "border-box", fontSize: 13, border: "1px solid #e5e7eb", borderRadius: 4, padding: "4px 6px" }} />
+        <div>
+          <div style={{ fontSize: 12, color: "#374151", marginBottom: 2 }}>
+            定义草稿（可空——应用案例留空，后续完善）
           </div>
-          <div>
-            <div style={{ fontSize: 12, color: "#374151", marginBottom: 2 }}>
-              定义草稿（可空——应用案例留空，后续完善）
-            </div>
-            <textarea value={excerpt} onChange={(e) => setExcerpt(e.target.value)} rows={4} placeholder="粘贴笔记中的模型表述（≤200 字）…" style={{ width: "100%", boxSizing: "border-box", fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 4, padding: "4px 6px", resize: "vertical" }} />
-          </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
-            <button style={btn} disabled={busy || created} onClick={() => void create()}>
-              {created ? "已创建，即将关闭…" : "创建草稿"}
-            </button>
-          </div>
+          <textarea value={excerpt} onChange={(e) => setExcerpt(e.target.value)} rows={4} placeholder="粘贴笔记中的模型表述（≤200 字）…" style={{ width: "100%", boxSizing: "border-box", fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 4, padding: "4px 6px", resize: "vertical" }} />
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -9,7 +9,7 @@
  *              全部可空；card 背面由后端按卡面契约 compose（§三），前端只提交字段。
  */
 import { useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { Flashcard } from "../types";
 
@@ -55,35 +55,24 @@ export default function ModelCardCreateDialog({ groupId, groupName, onClose, onC
   };
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: zIndex("modal"), display: "flex", alignItems: "center", justifyContent: "center" }}
-      onClick={onClose}
-    >
-      <div
-        data-testid="model-card-dialog"
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: 380, maxWidth: "92vw", background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 12px 40px rgba(0,0,0,0.2)" }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-          <span style={{ fontWeight: 600, fontSize: 14 }}>🧠 概念卡 · {groupName}</span>
-          <button data-testid="model-card-cancel" onClick={onClose} style={{ marginLeft: "auto", cursor: "pointer", fontSize: 13 }}>✕ 关闭</button>
-        </div>
+    <Modal open onClose={onClose} title={`🧠 概念卡 · ${groupName}`} size="s" testId="model-card-dialog">
+      {/* 自绘头部（标题 + `model-card-cancel`「✕ 关闭」）已删：标题文本交给 `Modal` 的 head
+          （逐字同一个 `🧠 概念卡 · ${groupName}`），关闭路径收敛到 `Modal` 的 `-close` 钮 +
+          点遮罩 + ESC（三处同走 `onClose`，与原遮罩 `onClick={onClose}` 同语义）。 */}
+      <label style={label}>概念名 *</label>
+      <input data-testid="model-card-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="卡住你的词/概念" style={input} />
+      <label style={label}>本质（它"是"什么）</label>
+      <textarea data-testid="model-card-essence" value={essence} onChange={(e) => setEssence(e.target.value)} rows={2} style={textarea} />
+      <label style={label}>边界（它"不是"什么）</label>
+      <textarea data-testid="model-card-boundary" value={boundary} onChange={(e) => setBoundary(e.target.value)} rows={2} style={textarea} />
+      <label style={label}>联系（它和什么相关）</label>
+      <textarea data-testid="model-card-relation" value={relation} onChange={(e) => setRelation(e.target.value)} rows={2} style={textarea} />
 
-        <label style={label}>概念名 *</label>
-        <input data-testid="model-card-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="卡住你的词/概念" style={input} />
-        <label style={label}>本质（它"是"什么）</label>
-        <textarea data-testid="model-card-essence" value={essence} onChange={(e) => setEssence(e.target.value)} rows={2} style={textarea} />
-        <label style={label}>边界（它"不是"什么）</label>
-        <textarea data-testid="model-card-boundary" value={boundary} onChange={(e) => setBoundary(e.target.value)} rows={2} style={textarea} />
-        <label style={label}>联系（它和什么相关）</label>
-        <textarea data-testid="model-card-relation" value={relation} onChange={(e) => setRelation(e.target.value)} rows={2} style={textarea} />
-
-        <button data-testid="model-card-submit" onClick={() => void submit()} disabled={busy} style={{ ...submitBtn, opacity: busy ? 0.6 : 1 }}>
-          {busy ? "创建中…" : "创建概念卡"}
-        </button>
-        {status && <p data-testid="model-card-status" style={{ marginTop: 8, fontSize: 12, color: status.error ? "#dc2626" : "#0f766e" }}>{status.text}</p>}
-      </div>
-    </div>
+      <button data-testid="model-card-submit" onClick={() => void submit()} disabled={busy} style={{ ...submitBtn, opacity: busy ? 0.6 : 1 }}>
+        {busy ? "创建中…" : "创建概念卡"}
+      </button>
+      {status && <p data-testid="model-card-status" style={{ marginTop: 8, fontSize: 12, color: status.error ? "#dc2626" : "#0f766e" }}>{status.text}</p>}
+    </Modal>
   );
 }
 

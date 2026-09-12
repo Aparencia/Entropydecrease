@@ -13,7 +13,7 @@
  *              application 且 conceptId 提供时默认带上 conceptIds=[conceptId]（挂概念）。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   KnowledgeConcept, KnowledgeDecision, KnowledgeModel, KnowledgeNode,
@@ -156,60 +156,65 @@ export default function KnowledgeDecisionForm({ mode, systemId, conceptId, onSav
 
   const meta = MODE_BADGE[mode];
 
+  /**
+   * 页脚行动区（`Modal` 的 `footer` 槽）。
+   * @ai-context 原实现是面板内的自绘底栏 `display:flex; justify-content:flex-end` + 一个 `<span style={{flex:1}}/>`
+   *   占位撑开；`Modal` 的 `.ed-modal-foot` 本身就是 `justify-content:flex-end` ⇒ 删占位、语义不变。
+   *   两个 testid（`decision-form-cancel` / `form-submit`）逐字保留（既有测试锚点）。
+   */
+  const footer = (
+    <>
+      <button data-testid="decision-form-cancel" onClick={onClose} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" }}>取消</button>
+      <button data-testid="form-submit" onClick={() => void submit()} disabled={saving} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e" }}>{saving ? "保存中…" : "保存"}</button>
+    </>
+  );
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: zIndex("modal") }} onClick={onClose}>
-      <div data-testid="decision-form" onClick={(e) => e.stopPropagation()} style={{ width: 520, maxWidth: "94vw", background: "#fff", borderRadius: 10, border: "1px solid #e5e7eb", boxShadow: "0 10px 40px rgba(0,0,0,0.15)", overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #e5e7eb" }}>
-          <span style={{ fontWeight: 700, fontSize: 15, color: "#0f766e" }}>{meta.badge} {meta.title}</span>
-          <button data-testid="decision-form-close" onClick={onClose} style={{ marginLeft: "auto", border: "none", background: "none", cursor: "pointer", fontSize: 14, color: "#9ca3af" }} title="关闭">✕</button>
+    <Modal open onClose={onClose} title={meta.title} size="m" testId="decision-form" footer={footer}>
+      {/* 面板头（自绘头部 + `decision-form-close` 已删）：标题文本由 `Modal` 的 head 承载（`title={meta.title}`，
+          逐字同一个 `MODE_BADGE[mode].title`）⇒ 无障碍名与既有测试的 `textContent` 断言都指向 `meta.title`。
+          模式徽标（🧭/🛠）是 Meta 头之外的视觉件，原样保留（视觉件，不进无障碍名）。 */}
+      <div style={{ fontWeight: 700, fontSize: 15, color: "#0f766e", marginBottom: 8 }}>{meta.badge}</div>
+
+      <div>
+        {/* ── 四行法 ── */}
+        <Field label="决策内容 / 应用动作 *" testid="form-content" value={content} onChange={setContent} placeholder="一句话写下你判断/做了什么（不预填，写你自己的）。" />
+        <Field label="预期结果" testid="form-expectation" value={expectation} onChange={setExpectation} placeholder="记下你当时预期会发生什么。" />
+        <Field label="实际结果" testid="form-actual" value={actual} onChange={setActual} placeholder="后来实际发生了什么（允许失败——真实记录）。" />
+        <Field label="反思：如果重来改变什么" testid="form-reflection" value={reflection} onChange={setReflection} placeholder="重来一次，你会改变什么？" />
+
+        {/* ── 引用选择器 ── */}
+        <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>🔗 引用（必填）</div>
+          {mode === "application" && conceptId != null && (
+            <span data-testid="ref-badge-concept" style={{ fontSize: 11, padding: "1px 8px", borderRadius: 8, background: "#ecfdf5", color: "#047857", marginBottom: 6, display: "inline-block" }}>已挂概念 #{conceptId}</span>
+          )}
+
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", margin: "8px 0 4px" }}>体系实体</div>
+          <select data-testid="form-system-select" value={entitySystemId} onChange={(e) => toggleEntitySystem(Number(e.target.value))} style={{ width: "100%", fontSize: 12, padding: "5px 6px", border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box" }}>
+            {systemOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+          <RefCheckboxList title="概念" items={concepts.map((c) => ({ id: c.id, label: c.name }))} checked={(id) => refs.conceptIds.includes(id)} onToggle={(id) => toggleIn("conceptIds", id)} dataPrefix="ref-concept" />
+          <RefCheckboxList title="节点" items={nodes.map((n) => ({ id: n.id, label: n.text }))} checked={(id) => refs.nodeIds.includes(id)} onToggle={(id) => toggleIn("nodeIds", id)} dataPrefix="ref-node" />
+          <RefCheckboxList title="模型" items={models.map((m) => ({ id: m.id, label: m.name }))} checked={(id) => refs.modelIds.includes(id)} onToggle={(id) => toggleIn("modelIds", id)} dataPrefix="ref-model" />
+
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", margin: "10px 0 4px" }}>证据</div>
+          <select data-testid="ref-group-select" value={groupId ?? ""} onChange={(e) => toggleGroup(Number(e.target.value))} style={{ width: "100%", fontSize: 12, padding: "5px 6px", border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box" }}>
+            <option value="">选择笔记组…</option>
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+          {groupId != null && (
+            <>
+              <RefCheckboxList title="笔记" items={groupNotes.map((n) => ({ id: n.id, label: n.title }))} checked={(id) => refs.noteId === id} onToggle={(id) => toggleSingle("noteId", id)} dataPrefix="ref-note" />
+              <RefCheckboxList title="闪卡" items={groupCards.map((c) => ({ id: c.id, label: c.front }))} checked={(id) => refs.cardId === id} onToggle={(id) => toggleSingle("cardId", id)} dataPrefix="ref-card" />
+            </>
+          )}
+          <RefCheckboxList title="碎片" items={fragments.map((f) => ({ id: f.id, label: f.text }))} checked={(id) => refs.fragmentId === id} onToggle={(id) => toggleSingle("fragmentId", id)} dataPrefix="ref-fragment" />
         </div>
 
-        <div style={{ padding: "12px 16px", maxHeight: "70vh", overflowY: "auto" }}>
-          {/* ── 四行法 ── */}
-          <Field label="决策内容 / 应用动作 *" testid="form-content" value={content} onChange={setContent} placeholder="一句话写下你判断/做了什么（不预填，写你自己的）。" />
-          <Field label="预期结果" testid="form-expectation" value={expectation} onChange={setExpectation} placeholder="记下你当时预期会发生什么。" />
-          <Field label="实际结果" testid="form-actual" value={actual} onChange={setActual} placeholder="后来实际发生了什么（允许失败——真实记录）。" />
-          <Field label="反思：如果重来改变什么" testid="form-reflection" value={reflection} onChange={setReflection} placeholder="重来一次，你会改变什么？" />
-
-          {/* ── 引用选择器 ── */}
-          <div style={{ marginTop: 12, borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>🔗 引用（必填）</div>
-            {mode === "application" && conceptId != null && (
-              <span data-testid="ref-badge-concept" style={{ fontSize: 11, padding: "1px 8px", borderRadius: 8, background: "#ecfdf5", color: "#047857", marginBottom: 6, display: "inline-block" }}>已挂概念 #{conceptId}</span>
-            )}
-
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", margin: "8px 0 4px" }}>体系实体</div>
-            <select data-testid="form-system-select" value={entitySystemId} onChange={(e) => toggleEntitySystem(Number(e.target.value))} style={{ width: "100%", fontSize: 12, padding: "5px 6px", border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box" }}>
-              {systemOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-            </select>
-            <RefCheckboxList title="概念" items={concepts.map((c) => ({ id: c.id, label: c.name }))} checked={(id) => refs.conceptIds.includes(id)} onToggle={(id) => toggleIn("conceptIds", id)} dataPrefix="ref-concept" />
-            <RefCheckboxList title="节点" items={nodes.map((n) => ({ id: n.id, label: n.text }))} checked={(id) => refs.nodeIds.includes(id)} onToggle={(id) => toggleIn("nodeIds", id)} dataPrefix="ref-node" />
-            <RefCheckboxList title="模型" items={models.map((m) => ({ id: m.id, label: m.name }))} checked={(id) => refs.modelIds.includes(id)} onToggle={(id) => toggleIn("modelIds", id)} dataPrefix="ref-model" />
-
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", margin: "10px 0 4px" }}>证据</div>
-            <select data-testid="ref-group-select" value={groupId ?? ""} onChange={(e) => toggleGroup(Number(e.target.value))} style={{ width: "100%", fontSize: 12, padding: "5px 6px", border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box" }}>
-              <option value="">选择笔记组…</option>
-              {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
-            {groupId != null && (
-              <>
-                <RefCheckboxList title="笔记" items={groupNotes.map((n) => ({ id: n.id, label: n.title }))} checked={(id) => refs.noteId === id} onToggle={(id) => toggleSingle("noteId", id)} dataPrefix="ref-note" />
-                <RefCheckboxList title="闪卡" items={groupCards.map((c) => ({ id: c.id, label: c.front }))} checked={(id) => refs.cardId === id} onToggle={(id) => toggleSingle("cardId", id)} dataPrefix="ref-card" />
-              </>
-            )}
-            <RefCheckboxList title="碎片" items={fragments.map((f) => ({ id: f.id, label: f.text }))} checked={(id) => refs.fragmentId === id} onToggle={(id) => toggleSingle("fragmentId", id)} dataPrefix="ref-fragment" />
-          </div>
-
-          {err && <div data-testid="form-error" style={{ fontSize: 12, color: "#dc2626", marginTop: 10, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "6px 10px", lineHeight: 1.5 }}>{err}</div>}
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderTop: "1px solid #e5e7eb", background: "#fafafa" }}>
-          <span style={{ flex: 1 }} />
-          <button data-testid="decision-form-cancel" onClick={onClose} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" }}>取消</button>
-          <button data-testid="form-submit" onClick={() => void submit()} disabled={saving} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e" }}>{saving ? "保存中…" : "保存"}</button>
-        </div>
+        {err && <div data-testid="form-error" style={{ fontSize: 12, color: "#dc2626", marginTop: 10, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "6px 10px", lineHeight: 1.5 }}>{err}</div>}
       </div>
-    </div>
+    </Modal>
   );
 }
 
