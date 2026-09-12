@@ -7,6 +7,9 @@
  * 灰字」。判据取「文件 → 行数」而非「逐行原文」（与 `zIndex.guard` 刻意不同）：逐行 key 会在拆件 /
  * 行号漂移时把命中变成新增 ⇒ 假红。
  *
+ * ★ 牙齿（评审 M-1 的结清）：③ 用「迁移面(0) ∪ 残留面(1)」钉死冻结表每一格 + `TOTAL == RESIDUAL.length`
+ *   独立校验和 ⇒「总数 + 某一残留格同时抬高」不再自洽。
+ *
  * ★ 扫描口径（与 `tmp/scan-callsites.mjs` / T1 的 loading 类**同源**）
  *   ① 域 = `app/src/**` 的 `.ts`/`.tsx` 减 `*.test.ts(x)` 减 `ui/primitives/**` 减 `ui/icons/**`；
  *   ② 先剥注释（抹等长空白保行号）；字符串/模板只跳过不抹内容 —— 判据读的正是可见文案；
@@ -211,7 +214,7 @@ describe("加载态棘轮（B11）：基线随迁移只降不升（冻结 18 →
     );
   });
 
-  it("③ 基线自洽：冻结总数 == 逐文件之和（只手改总数 ⇒ 这里红）", () => {
+  it("③ 基线自洽：表被完全钉死（键集 == 迁移面 ∪ 残留面 · 总数 == 残留条目数）", () => {
     const sum = Object.values(FROZEN_LOADING_TEXT_BY_FILE).reduce((a, b) => a + b, 0);
     expect(sum, "冻结总数与逐文件之和不等（改基线必须两处同改，且只许往小改）").toBe(FROZEN_LOADING_TEXT_TOTAL);
     // 实测**低于**冻结是允许的（别的单元先迁走 / 本棘轮尚未收紧）：棘轮只保证"不升"。
@@ -219,9 +222,13 @@ describe("加载态棘轮（B11）：基线随迁移只降不升（冻结 18 →
     expect(TOTAL, `实测总数 ${TOTAL} 已超过冻结 ${FROZEN_LOADING_TEXT_TOTAL}（迁移后请把基线一起收紧）`).toBeLessThanOrEqual(
       FROZEN_LOADING_TEXT_TOTAL,
     );
-    for (const f of MIGRATED_FILES) {
-      expect(FROZEN_LOADING_TEXT_BY_FILE[f], `${f} 在迁移面里，上限必须是 0`).toBe(0);
-    }
+    // ★ 表的**每一格**都被两张声明表钉死（T13–T15 评审 M-1 的洞：原来只钉迁移面 ⇒「总数 + 某个残留格
+    // 同时 +1」全绿）。三种 kind 的允许残留数一律是 1 处/文件（见 loadingBaseline 的键语义：0=已承载）。
+    const expected: Record<string, number> = {};
+    for (const f of MIGRATED_FILES) expected[f] = 0;
+    for (const r of RESIDUAL) expected[r.file] = 1;
+    expect(FROZEN_LOADING_TEXT_BY_FILE, "冻结表 ≠ 迁移面(0) ∪ 残留面(1)：多余键 / 漏键 / 某格上限被手改").toEqual(expected);
+    expect(FROZEN_LOADING_TEXT_TOTAL, "冻结总数 ≠ 残留条目数（残留面每条恰 1 处 ⇒ 两者必须相等）").toBe(RESIDUAL.length);
   });
 
   it("④ 残留声明自洽：每条带合法分类与非空理由，且声明键集 == 冻结表里值 > 0 的键集", () => {
