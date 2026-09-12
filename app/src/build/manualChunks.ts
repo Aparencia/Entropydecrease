@@ -12,11 +12,13 @@
  *              只吞前两者，把画布栈**漏回 rollup 默认算法**。两者都让懒加载边界**静默失效**
  *              （构建照样成功、gzip 照样降一点，但批 6 的 GSAP 独立 chunk 承诺当场落空）。
  *              这是批 1 六例「裸 includes 判活」教训在构建配置上的镜像。
- * @ai-context: 为什么 GSAP 现在就在表里（而依赖还没装）：规格 §13 风险表要求
- *              「GSAP 独立 chunk 懒加载」。本函数用**包名精确匹配**表达这条承诺，
- *              因此 gsap 未安装时规则**天然惰性**（没有任何模块 id 会解析出包名 `gsap`），
- *              装了之后**零改动自动生效**。切不可改写成对象形式
- *              `{ "vendor-gsap": ["gsap"] }` —— 那会在 gsap 未安装时**直接让构建失败**。
+ * @ai-context: 为什么 GSAP 早就在表里（🔴 T14 更正过时标签：批 6 T3 的 `864f4881` 已装上
+ *              `gsap@3.15.0` + `@gsap/react@2.1.2` ⇒ **`vendor-gsap` 槽位已生效**，不再是「批 6 预留」）：
+ *              规格 §13 风险表要求「GSAP 独立 chunk 懒加载」。本函数用**包名精确匹配**表达这条承诺
+ *              —— 批 2 编制时依赖尚未安装，规则**天然惰性**（没有任何模块 id 会解析出包名 `gsap`）；
+ *              装上之后**零改动自动生效**（正是本表当初的写法换来的）。仍不可改写成对象形式
+ *              `{ "vendor-gsap": ["gsap"] }`：本表的键集与钉值由 `manualChunks.test.ts` 逐条守住
+ *              （`:272` 的 G8 判据 =「装上了、且仍落 `vendor-gsap`」），对象形式表达不了这份表。
  * @ai-context: 分组还可能**成环**（不只是「搬字节」）：`vendor-md` 与 `vendor-katex` 互相静态
  *              import 时被 vite 判为循环 chunk 并熔成不可分簇 ⇒ 懒加载边界静默失效。断环只能靠
  *              **方向**：md 侧不得反向依赖 katex。⚠️ 移动模块时**必须连它自己的依赖一起挪**
@@ -41,7 +43,7 @@ export type VendorGroup =
  *  （评审 Minor-2 —— 28/49 条无钉值时，把 `bail` 挪进 `vendor-katex` 不会变红）。
  *  生产代码不得 import 它（分组只能经 `vendorGroupOf` / `manualChunks` 表达）。 */
 export const EXACT: Readonly<Record<string, VendorGroup>> = {
-  // 批 6 预留（本批不安装；规则惰性，见文件头注释）
+  // 批 6 已安装（T3 的 `864f4881` 装上 gsap@3.15.0 / @gsap/react@2.1.2）⇒ 本槽位**已生效**，见文件头注释
   gsap: "vendor-gsap",
   "@gsap/react": "vendor-gsap",
   // React 运行时：必须同组，避免出现两份 React 实例
