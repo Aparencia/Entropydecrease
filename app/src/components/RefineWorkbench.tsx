@@ -438,7 +438,7 @@ export default function RefineWorkbench({
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
             <div
-              style={{ border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff", padding: 6, fontSize: 11, fontFamily: "monospace", lineHeight: 1.7 }}
+              style={{ border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff", padding: 6, fontSize: 11, fontFamily: "monospace", lineHeight: 1.7 }}
               dangerouslySetInnerHTML={{ __html: diffHtml }}
             />
           </div>

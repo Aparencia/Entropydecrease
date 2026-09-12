@@ -173,7 +173,7 @@ export default function GroupSidebarRow({
       {colorPickerOpen && (
         <div
           data-testid={`group-color-picker-${group.id}`}
-          style={{ position: "absolute", top: "100%", left: 8, zIndex: zIndex("popover"), background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 8, boxShadow: "var(--ed-shadow-1)" }}
+          style={{ position: "absolute", top: "100%", left: 8, zIndex: zIndex("popover"), background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, boxShadow: "var(--ed-shadow-1)" }}
         >
           <NoteColorPicker
             value={group.color ?? null}
