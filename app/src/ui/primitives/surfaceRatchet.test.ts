@@ -37,6 +37,7 @@ import {
   FROZEN_SHADOW_BY_FILE, FROZEN_SHADOW_TOTAL, FROZEN_SURFACE_TAG_TOTAL,
   RADIUS_OUTLIER_ANCHOR, SHADOW_ANCHOR, SHADOW_RESIDUAL, type ShadowResidualKind,
 } from "./surfaceBaseline";
+import { BORDER_RESIDUAL, RADIUS_RESIDUAL, SURFACE_RESIDUAL_WHY } from "./surfaceResidual";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** `app/src` —— 基线的键就是相对这个目录的正斜杠路径。 */
@@ -231,6 +232,32 @@ describe("⑧ 阴影残留声明自洽（照 loadingBaseline 的 RESIDUAL 范式
     }
     // 阳性对照：仪器在豁免文件上读得出命中（否则上面那条只是空扫）
     expect(COUNTS.shadow.get(SHADOW_RESIDUAL[0].file) ?? 0).toBeGreaterThan(0);
+  });
+});
+
+/* ───────── ⑩ 边框/圆角残留登记：逐条理由 + 防「僵尸豁免」（与 ⑧ 同范式；T17-B 新增） ───────── */
+const RESIDUAL_FAMILIES = [
+  { key: "border", label: "边框族", rows: BORDER_RESIDUAL, frozen: FROZEN_BORDER_BY_FILE },
+  { key: "radius", label: "圆角族", rows: RADIUS_RESIDUAL, frozen: FROZEN_RADIUS_OUTLIER_BY_FILE },
+] as const;
+
+describe.each(RESIDUAL_FAMILIES)("⑩ $label残留登记自洽（T17-B）", ({ key, rows, frozen }) => {
+  it("分类合法 · 理由非空 · 文件在冻结表里 · 防僵尸：声明的残留此刻仍须命中 ≥ count", () => {
+    const counts = COUNTS[key];
+    const bad: string[] = [];
+    for (const r of rows) {
+      const why = SURFACE_RESIDUAL_WHY[r.kind];
+      if (!why || why.trim().length < 12) bad.push(`${r.file}: 类别 ${r.kind} 没有非空理由（豁免必须带理由，不许静默）`);
+      if (!(r.file in frozen)) bad.push(`${r.file}: 不在冻结表里（登记了不存在的文件）`);
+      if (r.count < 1) bad.push(`${r.file}: count=${r.count}（残留处数必须 ≥ 1）`);
+      if ((counts.get(r.file) ?? 0) < r.count) bad.push(`${r.file}: 声明残留 ${r.count} 处，实测只剩 ${counts.get(r.file) ?? 0} ⇒ 僵尸豁免（迁走了却还挂着）`);
+    }
+    expect(bad, `残留登记表有误：\n${bad.join("\n")}`).toEqual([]);
+    expect(new Set(rows.map((r) => r.kind)).size, "一条都没分类 ⇒ 登记是空枚举").toBeGreaterThan(0);
+    expect(rows.length, "登记表空了 ⇒ 本组判据空真").toBeGreaterThan(0);
+    expect(Object.values(SURFACE_RESIDUAL_WHY).filter((w) => w.trim().length >= 12).length, "理由表里有类别缺非空理由").toBe(
+      Object.keys(SURFACE_RESIDUAL_WHY).length,
+    );
   });
 });
 
