@@ -142,11 +142,66 @@ describe("RefineWorkbench 行级染色与差异视图（批 3 / 问题11）", ()
     const addedRow = screen.getByText("精修内容");
     expect(addedRow.style.color).toBe("rgb(4, 120, 87)");
     expect(addedRow.style.backgroundColor).toBe("rgb(236, 253, 245)");
-    // Assert：unchanged 标题行不染色（左栏无徽标污染文本——右侧标题带徽标
-    // 其 textContent 为「标题修改」，精确匹配仅命中左栏行）
-    expect(screen.getByText("标题").style.backgroundColor).toBe("");
-    // Assert：章节徽标与统计保留（差异显示不替代既有章节级标注）
-    expect(screen.getByText("修改")).toBeTruthy();
+    // Assert：unchanged 标题行不染色。⚠️ 必须**按栏定位**：修掉装饰徽标的插入位缺陷后，
+    // 右栏同名标题的直接文本节点也是「标题」，裸 `getByText("标题")` 会同时命中两栏
+    // （旧断言之所以绿，正是因为缺陷把右栏文本节点污染成「标题<」——判据本身依赖缺陷）。
+    const leftPane = screen.getByText("📄 规则版").nextElementSibling as HTMLElement;
+    expect(leftPane.querySelector("h2")?.style.backgroundColor).toBe("");
+    // Assert：章节徽标保留（差异显示不替代既有章节级标注），且**落在标题节点内部**、
+    // 标题文本逐字无损 —— T7「游离 `<` / `/h3>`」回归判据。旧判据只断言
+    // `getByText("修改")`：徽标被塞进 `<` 与 `/` 之间时该 span 照样命中 ⇒ 无法失败。
+    const rightPane = screen.getByText("✨ 精修版").nextElementSibling as HTMLElement;
+    const badgeHeading = screen.getByText("修改").closest("h2,h3,h4");
+    expect(badgeHeading).not.toBeNull();
+    expect(badgeHeading?.textContent).toBe("标题修改");
+    expect(badgeHeading?.querySelectorAll("span").length).toBe(1);
+    // Assert：栏内无闭合标签残片（错位插入会把 `</h2>` 拆成游离文本 `<` + `/h2>`）
+    expect(rightPane.textContent).not.toContain("<");
+    expect(rightPane.textContent).not.toContain("/h");
+  });
+
+  it("`##` 级标题（渲染为 <h3>）的徽标同在标题内——T7 实测「逻辑<修改/h3>」回归", async () => {
+    // Arrange：T7 真渲染截图里的最小复现（`##` 级中文标题 + modified 章节）。
+    // 旧实现的插入点是「标题匹配串末端 − 2」⇒ 落在闭合标签的 `<` 与 `/` 之间。
+    const h3Stub: WorkbenchData = {
+      ruleMarkdown: "## 一、底妆的底层逻辑\n旧：拍开粉底",
+      refinedMarkdown: "## 一、底妆的底层逻辑\n新：少量多次按压",
+      sections: [{
+        heading: "一、底妆的底层逻辑",
+        status: "modified",
+        removed_lines: ["旧：拍开粉底"],
+        added_lines: ["新：少量多次按压"],
+      }],
+      stats: { added: 1, removed: 1, unchanged: 0 },
+      meta: { costYuan: null, model: "test-model", slices: 1, mergedFrom: null },
+    };
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "diff_markdown_ops") {
+        return {
+          ops: [
+            { unchanged: "## 一、底妆的底层逻辑" },
+            { removed: "旧：拍开粉底" },
+            { added: "新：少量多次按压" },
+          ],
+          added: 1,
+          removed: 1,
+        };
+      }
+      if (cmd === "diff_markdown_sections") return h3Stub.sections;
+      return h3Stub;
+    });
+    // Act
+    render(<RefineWorkbench sessionId={5} onClose={vi.fn()} />);
+    // Assert：徽标挂进 `<h3>` 内部，标题文本 = 标题 + 徽标（错位时是「…逻辑<修改/h3>」）
+    const badge = await screen.findByText("修改");
+    const heading = badge.closest("h3");
+    expect(heading).not.toBeNull();
+    expect(heading?.textContent).toBe("一、底妆的底层逻辑修改");
+    // Assert：右栏（精修版）整栏无标签残片——游离 `<` 与 `/h3>` 是缺陷的直接表象
+    const rightPane = screen.getByText("✨ 精修版").nextElementSibling as HTMLElement;
+    expect(rightPane.textContent).toContain("一、底妆的底层逻辑修改");
+    expect(rightPane.textContent).not.toContain("<");
+    expect(rightPane.textContent).not.toContain("/h3");
   });
 
   it("差异视图切换：单列三态（−删除线红 / +新增绿 / 灰共有），可切回并排", async () => {

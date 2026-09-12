@@ -69,7 +69,16 @@ const PANE_MAX_H = "calc(85vh - 200px)";
  * 字节一致——组件内不再持有第二份逐行渲染实现）。
  */
 
-/** 按 sections 插入 diff 徽标 */
+/**
+ * 按 sections 在章节标题**末尾、闭合标签之前**插入 diff 徽标。
+ *
+ * @ai-context: 徽标是章节级标注（新增/已删除/修改），必须落在标题元素**内部**——
+ *              插入位算错 1 个字符就会塞进 `<` 与 `/` 之间，渲染出游离的 `<` 与 `/h3>`
+ *              文本（T7 真渲染截图实测 `逻辑<修改/h3>`）。故插入点由 `searchPattern`
+ *              末尾的闭合标签长度反推，不做裸算术（`- 2` 这类常数是缺陷源）。
+ * @ai-context: 边界：`sections` 里的 heading 在 md 中不存在（后端分组与文本漂移）时
+ *              `indexOf` 返回 -1 ⇒ 跳过该徽标、正文照常渲染（不抛错、不静默插错位置）。
+ */
 function decorateRefined(md: string, sections: WorkbenchData["sections"]): string {
   let result = md;
   for (const sec of sections) {
@@ -79,10 +88,12 @@ function decorateRefined(md: string, sections: WorkbenchData["sections"]): strin
       : sec.status === "removed"
         ? `<span style="display:inline-block;font-size:10px;background:#fef2f2;color:#b91c1c;border-radius:4px;padding:0 6px;margin-left:6px">已删除</span>`
         : `<span style="display:inline-block;font-size:10px;background:#fffbeb;color:#b45309;border-radius:4px;padding:0 6px;margin-left:6px">修改</span>`;
-    const searchPattern = `>${escapeHtml(sec.heading)}</h`;
+    const closing = "</h";
+    const searchPattern = `>${escapeHtml(sec.heading)}${closing}`;
     const idx = result.indexOf(searchPattern);
     if (idx >= 0) {
-      const insertAt = idx + searchPattern.length - 2;
+      // 插入点 = 闭合标签 `<` 之前（`searchPattern` 以 `</h` 结尾 ⇒ 末端 3 字符是闭合标签）
+      const insertAt = idx + searchPattern.length - closing.length;
       result = result.slice(0, insertAt) + badge + result.slice(insertAt);
     }
   }
