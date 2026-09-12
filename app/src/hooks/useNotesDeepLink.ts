@@ -15,9 +15,13 @@
  *              NoteListView 渲染——既有跨组件查询，勿改成 ref）；③ 注入
  *              readerSearch（App 侧 key 递增 ⇒ 同笔记可重触发）；④ focusGroupId
  *              仅过滤**不展开**（三栏下列表常驻）。
- * @ai-context: 边界——清空责任在 App（本页无 onFocus*Consumed 回调）：effect 只由
- *              prop 值变化触发，同值重设不重跑；定时器登记入 ref 以便卸载统一清理
- *              （cleanup 读 effect 建立时的**快照**，勿改成读 .current 最新值）。
+ * @ai-context: 边界——消费后由本 hook 调用 `onConsumed`（App 侧清空 `focusNoteId`/
+ *              `focusNoteSearch`/`focusGroupId`，**批 5 C6 起本页有该回调**）⇒ 值不再粘滞：
+ *              同目标**再次跳转**能重新触发（旧形态下 prop 无变化 ⇒ effect 不重跑）；
+ *              effect 只由 prop 值变化触发，同值重设不重跑（`onConsumed` 身份也在 deps：
+ *              App 侧内联箭头 ⇒ 父重渲染会重跑一次，seq 序号使在飞的旧响应自动作废）；
+ *              定时器登记入 ref 以便卸载统一清理（cleanup 读 effect 建立时的**快照**，
+ *              勿改成读 .current 最新值）。
  */
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -37,10 +41,12 @@ interface Options {
   /** 中部视图切换（"notes"=笔记列表；inbox=收件箱——深链一律切回 notes） */
   setView: (v: "notes" | "inbox") => void;
   setGroupFilter: (id: number | null) => void;
+  /** 批 5 C6：消费完成回调（三个字段共用——App 侧清空 focusNoteId/focusNoteSearch/focusGroupId） */
+  onConsumed?: () => void;
 }
 
 export function useNotesDeepLink({
-  focusNoteId, focusNoteSearch, focusGroupId, notesApi, setSelected, setEditing, setView, setGroupFilter,
+  focusNoteId, focusNoteSearch, focusGroupId, notesApi, setSelected, setEditing, setView, setGroupFilter, onConsumed,
 }: Options) {
   // v0.19.1：阅读态命中词搜索请求（来自引用跳转；key 递增可重触发）
   const [readerSearch, setReaderSearch] = useState<{ noteId: number; search: string; key: number } | null>(null);
@@ -83,15 +89,20 @@ export function useNotesDeepLink({
           );
         }
         if (focusNoteSearch) setReaderSearch({ ...focusNoteSearch });
+        // 批 5 C6：消费完成 ⇒ 回调 App 复位（目标找不到也算已消费——列表已按深链重载）
+        onConsumed?.();
       } catch (e) {
         if (!disposed) {
           if (focusNoteSearch) setReaderSearch({ ...focusNoteSearch });
           notesApi.setStatus(`加载失败: ${e}`);
+          // 批 5 C6：失败路径同样复位——否则陈旧值卡死同目标重试（同值 setState 无 prop 变化）
+          onConsumed?.();
         }
       }
     })();
+    // ⚠️ 丢弃分支（disposed / seq 过期）**故意不复位**：复位触发的父重渲染会让本 effect 的 cleanup 把正在跑的那一次取消掉（StrictMode 双调用下目标永不选中）。
     return () => { disposed = true; };
-  }, [focusNoteId, focusNoteSearch]);
+  }, [focusNoteId, focusNoteSearch, onConsumed]);
 
   // v0.14 C2：图谱组节点直达——仅过滤（三栏下列表常驻；不触发展开）
   useEffect(() => {
@@ -100,7 +111,9 @@ export function useNotesDeepLink({
     setView("notes");
     notesApi.setKeyword("");
     notesApi.setTagFilter(null);
-  }, [focusGroupId]);
+    // 批 5 C6：三字段共用同一复位回调（App 侧清空 focusGroupId——组过滤态留在本页 state）
+    onConsumed?.();
+  }, [focusGroupId, onConsumed]);
 
   return { readerSearch };
 }

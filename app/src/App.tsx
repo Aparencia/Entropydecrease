@@ -443,6 +443,8 @@ function MainShell() {
           {/* v0.7.1：active 驱动列表刷新（display:none 挂载不刷新根治）+ 查看笔记跨页直达 */}
           <SessionsPage
             focusSessionId={focusSessionId}
+            // 批 5 C6：深链消费后复位（同会话再次跳转才能重新触发——旧形态固定值粘滞）
+            onFocusSessionConsumed={() => setFocusSessionId(null)}
             // v0.16.1：工作台深链 / 精修启动 → AI 对话页（focus 消费后即清空）
             focusRefineTaskId={focusRefineTaskId}
             onFocusRefineTaskConsumed={() => setFocusRefineTaskId(null)}
@@ -458,6 +460,8 @@ function MainShell() {
             focusNoteId={focusNoteId}
             focusNoteSearch={focusNoteSearch}
             focusGroupId={focusGroupId}
+            // 批 5 C6：三个 focus* 共用一个复位回调（消费即清——复位后同目标再次跳转仍触发）
+            onFocusNoteConsumed={() => { setFocusNoteId(null); setFocusNoteSearch(null); setFocusGroupId(null); }}
             // v0.20.10（批 5）：ⓘ「复习本组」深链 → 复习页组预选（T12：入口收敛为 goReviewGroup）
             onOpenReview={goReviewGroup}
             onOpenSystem={goSystem}
@@ -503,6 +507,8 @@ function MainShell() {
               v0.13.7：focusSystemId 跨页直达（组行徽标/结算简报 → 自动选中体系） */}
           <KnowledgePage
             focusSystemId={focusSystemId}
+            // 批 5 C6：深链消费后复位（同体系再次跳转才能重新触发）
+            onFocusSystemConsumed={() => setFocusSystemId(null)}
             createSystemSignal={createSystemSignal}
             onOpenNote={(id) => { setFocusNoteId(id); setPage("notes"); }}
             onOpenGroup={goGroup}

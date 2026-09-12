@@ -50,6 +50,8 @@ const MIDDLE_TABS: { key: MiddleView; label: string }[] = [
 interface Props {
   /** 跨页直达目标体系（v0.13.7：组行徽标/结算简报 → 体系页自动选中） */
   focusSystemId?: number | null;
+  /** 批 5 C6：focusSystemId 消费完成回调（App 清空——复位后同体系再次跳转才会重新触发） */
+  onFocusSystemConsumed?: () => void;
   /** 图谱双击笔记节点 → 笔记页定位（v0.14 C2） */
   onOpenNote?: (noteId: number) => void;
   /** 图谱双击组节点 → 笔记页过滤该组 */
@@ -58,7 +60,7 @@ interface Props {
   createSystemSignal?: number;
 }
 
-export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup, createSystemSignal }: Props) {
+export default function KnowledgePage({ focusSystemId, onFocusSystemConsumed, onOpenNote, onOpenGroup, createSystemSignal }: Props) {
   // v0.15：左列可拖拽/记忆/窄窗折叠（默认 260=历史值）；详情面板宽度由父层持有
   // 批 3 T8：两行规格来自 `columnRegistry`（体系列 autoFoldBelow 1100；详情列不折叠）
   const leftCol = useColumnLayout("knowledge-left", columnSpec("knowledge-left"));
@@ -144,10 +146,11 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup, 
   }, [createSystemSignal]);
 
   // v0.13.7：跨页直达目标体系（与 NotesPage focusNoteId 同模式——仅 focusSystemId
-  // 变化时跟随；空态无体系时该值无意义，由既有选中/创建逻辑接管）
+  // 变化时跟随；空态无体系时该值无意义，由既有选中/创建逻辑接管）；
+  // 批 5 C6：消费后回调 App 清空（复位后同体系再次跳转才会重新触发）
   useEffect(() => {
-    if (focusSystemId != null) setSelectedSystemId(focusSystemId);
-  }, [focusSystemId]);
+    if (focusSystemId != null) { setSelectedSystemId(focusSystemId); onFocusSystemConsumed?.(); }
+  }, [focusSystemId, onFocusSystemConsumed]);
 
   useEffect(() => {
     if (selectedSystemId != null) void loadSystemDetail(selectedSystemId);

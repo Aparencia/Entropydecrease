@@ -20,9 +20,8 @@ import ColumnResizer from "../components/ColumnResizer";
 import ColumnBar from "../components/ColumnBar";
 import { useColumnLayout } from "../hooks/useColumnLayout";
 import { useDbRefresh } from "../hooks/useDbRefresh";
-// 批 4 T10：页级 toast 的自绘实现（页内 useState + window.setTimeout + 固定定位 JSX + 内联三档配色）
-// 整段删除，改用 `useTransientToast`（它自己也已把渲染交给 L1 的 `Toast` 原语）——
-// 14 个 `showToast` 调用点的签名与文案一字未改（见 T10 报告的逐处对拍）。
+// 批 4 T10：页级 toast 的自绘实现（页内 useState + window.setTimeout + 固定定位 JSX + 内联三档配色）整段删除，
+// 改用 `useTransientToast`（渲染已归 L1 `Toast` 原语）——14 个 `showToast` 调用点签名与文案一字未改（见 T10 报告）。
 import { useTransientToast } from "../hooks/useTransientToast";
 import type { BatchNoteResult, BatchSessionDeleteResult, CourseGroup, SessionDetail, SessionListItem } from "../types";
 // 批 3 T8：列规格（宽/夹取/阈值 1100）改从 `shell/columnRegistry` 取——页面不再自建规格
@@ -32,6 +31,8 @@ import { Text } from "../ui/primitives";
 
 interface Props {
   focusSessionId?: number | null;
+  /** 批 5 C6：focusSessionId 消费完成回调（App 清空——复位后同会话再次跳转才会重新触发） */
+  onFocusSessionConsumed?: () => void;
   /** v0.16.1：工作台深链任务 id（对话页任务视图 → 会话页自动展开精修工作台） */
   focusRefineTaskId?: number | null;
   /** v0.16.1：focusRefineTaskId 消费完成回调（App 清空——防陈旧值跨导航复触发） */
@@ -44,7 +45,7 @@ interface Props {
   onOpenNote: (noteId: number) => void;
 }
 
-export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocusRefineTaskConsumed, onRefineTaskStarted, active, onOpenNote }: Props) {
+export default function SessionsPage({ focusSessionId, onFocusSessionConsumed, focusRefineTaskId, onFocusRefineTaskConsumed, onRefineTaskStarted, active, onOpenNote }: Props) {
   // v0.15：左栏列状态（可拖拽 + 记忆 + 窄窗折叠；规格 §6.2 两列页阈值 1100）
   // 批 3 T8：规格来自 `columnRegistry`，执行仍由 hook 完成
   const listCol = useColumnLayout("sessions-list", columnSpec("sessions-list"));
@@ -138,11 +139,11 @@ export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocu
     [showToast],
   );
 
-  // 2026-08 A4：跨页直达——课堂助手融合完成跳转后自动打开目标会话详情
-  // （依赖补齐：openDetail 为稳定 useCallback——补入依赖数组消除隐式依赖）
+  // 2026-08 A4 / 批 5 C6：跨页直达自动打开目标会话详情，消费后回调 App 复位 focusSessionId
+  // （复位才能让**同会话的再次跳转**重新触发：固定值不产生 prop 变化 ⇒ effect 不重跑）
   useEffect(() => {
-    if (focusSessionId) void openDetail(focusSessionId);
-  }, [focusSessionId, openDetail]);
+    if (focusSessionId) { void openDetail(focusSessionId); onFocusSessionConsumed?.(); }
+  }, [focusSessionId, openDetail, onFocusSessionConsumed]);
 
   // 融合事件（REQ-031 异步化）+ v0.7.1 会话完成事件驱动列表刷新
   useEffect(() => {
@@ -269,8 +270,7 @@ export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocu
     if (detail?.session.id === id) void openDetail(id);
   };
 
-  // id → 条目映射（批量可转化判定用；覆盖列表与课程分组两个数据源）
-  // （映射实际位于 SessionListPanel.runBatchConvert——本层只收可转化 id 集合）
+  // id → 条目映射（批量可转化判定用，覆盖列表与课程分组两个数据源）实际位于 SessionListPanel.runBatchConvert——本层只收可转化 id 集合
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - var(--ed-nav-h))", minHeight: 0 }}>

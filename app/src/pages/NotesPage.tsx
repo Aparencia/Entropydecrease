@@ -30,8 +30,7 @@ import { useNotesPageEditing } from "../hooks/useNotesPageEditing";
 import { useNotesBatchActions } from "../hooks/useNotesBatchActions";
 import { useNotesListData } from "../hooks/useNotesListData";
 import { useNotesDeepLink } from "../hooks/useNotesDeepLink";
-// 批 3 T8：列规格（组列/列表列/大纲列三行的宽·夹取·阈值）改从 `shell/columnRegistry` 取
-// ——页面不再自建规格；断点值（t5 曾在此写 breakpointFor）现在住在注册表里
+// 批 3 T8：列规格（组列/列表列/大纲列三行的宽·夹取·阈值）改从 `shell/columnRegistry` 取——页面不再自建规格；断点值（t5 曾在此写 breakpointFor）现在住在注册表里
 import { columnSpec } from "../shell/columnRegistry";
 import { viewsFor } from "../views/registry";
 
@@ -42,6 +41,8 @@ interface Props {
   focusNoteSearch?: { noteId: number; search: string; key: number } | null;
   /** v0.14 C2：图谱双击组节点 → 过滤该组（变化时跟随，同 focusNoteId 模式） */
   focusGroupId?: number | null;
+  /** 批 5 C6：三个 focus* 共用的消费复位回调（App 清空三者；复位后同目标再次跳转才会重新触发） */
+  onFocusNoteConsumed?: () => void;
   /** v0.20.10（批 5）：复习域页深链——ⓘ「复习本组」→ App 转顶层复习页并预选
    *  该组（groupId=null 保留为全量语义，当前无调用方——组侧栏全量按钮已随
    *  无被动提醒裁决移除）；消费在 ReviewPage，本页只透传 */
@@ -56,7 +57,7 @@ interface Props {
 /** 中部视图：notes=笔记列表（组过滤/搜索/标签）；inbox=收件箱碎片列表 */
 type MiddleView = "notes" | "inbox";
 
-export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, onOpenReview, onOpenSessions, onOpenSystem, onCreateSystem }: Props) {
+export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, onFocusNoteConsumed, onOpenReview, onOpenSessions, onOpenSystem, onCreateSystem }: Props) {
   // ── 页面态（选中 / 中部形态 / 组过滤 / 覆盖层）──
   const [selected, setSelected] = useState<Note | null>(null);
   // v0.11.0：组过滤（null=全部；仅过滤——不触发展开）
@@ -99,8 +100,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   // A6：注意力跟踪
   useNoteAttention(selected?.id ?? null, selected?.title ?? "");
 
-  // v0.19.1 / v0.14 C2：跨页深链（focusNoteId ∪ focusNoteSearch 合并一次重载 + 组直达）
-  // ——见 useNotesDeepLink（两入口共用一次 effect / 序号比对 / 定时器登记全在该文件）
+  // v0.19.1 / v0.14 C2：跨页深链（focusNoteId ∪ focusNoteSearch 合并一次重载 + 组直达）——见 useNotesDeepLink（两入口共用一次 effect / 序号比对 / 定时器登记全在该文件）
   const { readerSearch } = useNotesDeepLink({
     focusNoteId,
     focusNoteSearch,
@@ -110,6 +110,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
     setEditing,
     setView,
     setGroupFilter,
+    onConsumed: onFocusNoteConsumed,
   });
 
   // ── 操作 ──
