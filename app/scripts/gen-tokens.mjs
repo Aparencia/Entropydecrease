@@ -163,6 +163,18 @@ export const SCALE_SOURCE = {
    * 与 §6.3「采集态 58px LIVE 仪表」**不同**：那是相变态的另一根高度，属批 6。
    */
   navHeight: 56,
+  /**
+   * 采集态顶栏高度（规格 §6.3 逐字「采集态 **58px** LIVE 仪表」）—— 批 6 T17；裁决 R4.1。
+   *
+   * Why 与 `navHeight` **并列**而不是把 56 改成 58：`src/shell/navHeight.consumption.test.ts:130-146`
+   * 把域内每个 `var(--ed-nav-h, <N>px)` 的兜底字面量**硬绑**本真源的 `navHeight` ⇒ 改 56 会让那条判据
+   * **无处成立**（它的三条判据都靠「兜底 == 真源」这一个等式活着）。⇒ 采集态走**另一根**高度
+   * `--ed-nav-h-live`，既有判据**零改动**（R4.1 逐字）。消费点（T18 的 `LiveBar`，58px 条）写
+   * `var(--ed-nav-h-live, 58px)`：那三条正则（`FALLBACK_PX` / `FALLBACK_ANY` / `TOKEN_DECL`）都要求
+   * `--ed-nav-h` 之后**紧跟逗号或冒号**，本 token 名中间夹着 `-live` ⇒ 对本 token 天然免疫（已逐字复核）。
+   * ⚠️ 落点顺序：`tokens.css` 里 `--ed-nav-h` **必须排在** `--ed-nav-h-live` **之前**（`TOKEN_DECL` 取首个匹配）。
+   */
+  navHeightLive: 58,
 };
 
 const CSS_HEADER = `/*
@@ -215,6 +227,10 @@ ${SHADOW_TOKENS.map((t) => `  --ed-${t.name}: ${t.light}; /* ${t.usage} */`).joi
 
   /* 壳层纵向基准（规格 §1 决策 16）：顶栏高度 —— 页面用 calc(100vh - var(--ed-nav-h)) 消费 */
   --ed-nav-h: ${SCALE_SOURCE.navHeight}px;
+
+  /* 相变态：采集态顶栏 58px（规格 §6.3 的 LIVE 仪表条）—— ⚠️ 必须排在 --ed-nav-h 之后
+     （navHeight.consumption.test.ts 的 TOKEN_DECL 取首个匹配） */
+  --ed-nav-h-live: ${SCALE_SOURCE.navHeightLive}px;
 
   /* 动效：9 个时长（规格 §8.4，逐字迁自 primitives/motion.css 的临时接缝）+ 3 个缓动（全站唯一曲线 + 双基调两条） */
 ${DURATION_TOKENS.map((t) => `  --ed-dur-${t.name}: ${t.ms}ms;`).join("\n")}
@@ -285,6 +301,7 @@ export const SCALE_TOKENS = {
   iconGrid: ${SCALE_SOURCE.iconGrid},
   iconStroke: ${SCALE_SOURCE.iconStroke},
   navHeight: ${SCALE_SOURCE.navHeight},
+  navHeightLive: ${SCALE_SOURCE.navHeightLive},
   iconSizes: ${JSON.stringify(SCALE_SOURCE.iconSizes)},
 } as const;
 

@@ -54,6 +54,7 @@ export const SCALE_TOKENS = {
   iconGrid: 24,
   iconStroke: 1.75,
   navHeight: 56,
+  navHeightLive: 58,
   iconSizes: [16,20,24],
 } as const;
 

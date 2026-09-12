@@ -73,6 +73,10 @@
   /* 壳层纵向基准（规格 §1 决策 16）：顶栏高度 —— 页面用 calc(100vh - var(--ed-nav-h)) 消费 */
   --ed-nav-h: 56px;
 
+  /* 相变态：采集态顶栏 58px（规格 §6.3 的 LIVE 仪表条）—— ⚠️ 必须排在 --ed-nav-h 之后
+     （navHeight.consumption.test.ts 的 TOKEN_DECL 取首个匹配） */
+  --ed-nav-h-live: 58px;
+
   /* 动效：9 个时长（规格 §8.4，逐字迁自 primitives/motion.css 的临时接缝）+ 3 个缓动（全站唯一曲线 + 双基调两条） */
   --ed-dur-micro: 120ms;
   --ed-dur-overlay-in: 200ms;
