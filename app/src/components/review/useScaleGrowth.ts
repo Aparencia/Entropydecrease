@@ -33,9 +33,11 @@ import { useEffect, useRef, type RefObject } from "react";
 import { DURATION_TOKENS, type DurationTokenName } from "../../ui/tokens.gen";
 import { useMotionIntensity, type MotionIntensity } from "../../motion/intensity";
 import { toneEase } from "../../motion/tone";
-// 🔴 **只取类型**：`controls.ts` 内部有静态 `import { gsap } from "./engine"` ⇒ 它只许经 `await import()`
-// **到达**（R41.3 / §三十四 #23；判据 = `engine.guard.test.ts` 的闭包交集）。`import type` 不进产物、也不
-// 建静态边（守卫的正则显式排除它）⇒ 下面的动态 import 是唯一运行时入口。
+// 🔴 **只取类型**：`controls.ts` 自己静态 `import { gsap } from "./engine"` ⇒ **不许从「首屏静态可达」的
+// 模块静态引入它**（旧措辞「它只许经 `await import()` 到达」**过宽**，R60.1 更正 R41.3 的适用范围；
+// **惰性视图 / 注册表驱动静态引入是安全的**）。本件在惰性链上（`ReviewSessionPanel` ← `ReviewPage`
+// 经 `shell/navRegistry.ts:27` 的 `lazy()`，T35c 实测）⇒ 今天仍只取类型（`import type` 不进产物、也不建
+// 静态边 —— 守卫的正则显式排除它）+ 下面的动态 `import()` 作唯一运行时入口（**形态不变**）。
 import type { Controllable } from "../../motion/controls";
 import { TICK_DAY_MAX_PX, TICK_NONE_PX, tickHeight } from "./DueScale";
 

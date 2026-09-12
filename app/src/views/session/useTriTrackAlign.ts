@@ -28,10 +28,12 @@
  *   `startControllable(el, {…, duration: 0}, {paused: true})` → `seek(0)` → `interrupt()`
  *   （kill **不还原**已写出的值）。
  *
- * 🔴 `controls.ts` **只许经 `await import()` 到达**（R41.3 / §三十四 #23）：它内部静态
- *   `import "./engine"`（见 `motion/controls.ts` 的文件头「使用纪律」）⇒ 静态引入它会把 GSAP 拉进
- *   **首屏静态闭包**（`engine.guard.test.ts` 的闭包交集判据会红，不是静默洞）。`import type` 不进
- *   产物、也不建静态边（那条守卫的正则显式排除 `import type`）。
+ * 🔴 `controls.ts` **不许被「首屏静态可达」的模块静态引入**（**惰性视图 / 注册表驱动静态引入它是
+ *   安全的**；旧措辞「只许经 `await import()` 到达」**过宽**，R60.1 更正 R41.3 的适用范围）：它内部静态
+ *   `import "./engine"`（见 `motion/controls.ts` 的文件头「使用纪律」）⇒ 静态引用它的**首屏**模块会把 GSAP
+ *   拉进**首屏静态闭包**（`engine.guard.test.ts` 的闭包交集判据会红，不是静默洞）。🔴 本件**不在**该闭包内：
+ *   `SessionTriTrackView.tsx` 经 `views/registry.ts:104` + `SessionViewHost.tsx:98` 的 `lazy()` 惰性到达
+ *   ⇒ 静态引入它是安全的；今天仍只取类型（`import type` 不建边）+ 动态 `import()`（**形态不变**）。
  *
  * 🔴 三档（R35.4：出口**不**内置档位分支 ⇒ 波 C 每条动效自己消费）：`useMotionIntensity()` 读
  *   `data-motion`，**档位变化时重新取值**；`eco` = §8.5「编排层直接跳终态」（**不建编排 timeline**）·
@@ -56,7 +58,8 @@ import { SHIFT_MAX_PX, clampShift } from "../../motion/shift";
 import { toneEase } from "../../motion/tone";
 import { DURATION_TOKENS } from "../../ui/tokens.gen";
 import type { DurationTokenName } from "../../ui/tokens.gen";
-// 🔴 **只取类型**：`controls.ts` 只许经 `await import()` **到达**（见文件头；判据 = `engine.guard.test.ts`）。
+// 🔴 **只取类型**：`controls.ts` 不许被「首屏静态可达」的模块静态引入（R60.1；**惰性视图静态引入它是安全的**
+// —— 本件在惰性链上，见文件头；判据 = `engine.guard.test.ts` 的闭包交集）。
 import type { Controllable } from "../../motion/controls";
 
 /** 三轨的轨名 —— **`data-track` 锚的唯一字面量来源**（转写轨在首位 = 时间基）。 */

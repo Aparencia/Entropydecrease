@@ -14,8 +14,10 @@
  * 🔴 **起始态被持有**（R5.3）：`freeze` 是 React **state**（波形按它渲染），**不是** tween 的进度读回 ——
  *   中途反向时新时间线**从当前持有值接着走**（不回起点、不跳终值）；每帧由 `onUpdate` 从**已写进 DOM 的**
  *   墨度反解回持有值。🔴 **可中断**：先 `interrupt()` 收尸在飞的旧时间线、再起新的（不排队）。
- * 🔴 `controls.ts` **只许经 `await import()` 到达**（R41.3 / §三十四 #23）：它静态 `import "./engine"` ⇒
- *   静态引入会把 GSAP 拉进首屏静态闭包（`engine.guard.test.ts` 的闭包交集会红）；`import type` 不建边。
+ * 🔴 `controls.ts` **不许被「首屏静态可达」的模块静态引入**（R60.1 更正 R41.3 的适用范围；**惰性视图 /
+ *   注册表驱动静态引入是安全的**）。它静态 `import "./engine"` ⇒ 而本件**在**首屏静态闭包内
+ *   （`shell/LiveBar.tsx:44` 静态引入本件；T35c 用 `engine.guard.test.ts` 的仪器实测 89 文件闭包含本件）
+ *   ⇒ 本件**静态取值**引入它会让那条闭包交集判据当场红；故只取类型（`import type` 不建边）+ 动态 `import()`。
  * 🔴 **唯一 GSAP 目标**（= 墨度层）：出口的 `interrupt()` 只 kill 它那**一个** target（`controls.ts` 头部
  *   逐字：多目标会留下够不着的孤儿 tween）⇒ 波形走 React 重渲染（32 个 div、一个 220/500ms 窗口）。
  * 🔴 三档（R35.4：出口**不**内置档位分支）：`eco` = §8.5「编排层直接跳终态」（不建 timeline）·
@@ -34,7 +36,9 @@ import type { DurationTokenName } from "../ui/tokens.gen";
 import { useMotionIntensity } from "../motion/intensity";
 import type { MotionIntensity } from "../motion/intensity";
 import { toneEase } from "../motion/tone";
-// 🔴 **只取类型**：`controls.ts` 只许经 `await import()` **到达**（见文件头；判据 = `engine.guard.test.ts`）。
+// 🔴 **只取类型**：`controls.ts` **不许被「首屏静态可达」的模块静态引入**（R60.1；**惰性视图静态引入它
+// 是安全的** —— 但见文件头：**本件在该闭包内** ⇒ 本件的静态取值边会红；判据 = 闭包交集）。`import type`
+// 不建边 ⇒ 运行时入口只有下面的动态 `import()`（**形态不变**）。
 import type { Controllable } from "../motion/controls";
 import type { ShellPhase } from "./shellPhase";
 

@@ -52,7 +52,9 @@ import { SHIFT_MAX_PX, clampShift } from "../../motion/shift";
 import { toneEase } from "../../motion/tone";
 import { DURATION_TOKENS } from "../../ui/tokens.gen";
 import type { DurationTokenName } from "../../ui/tokens.gen";
-// 🔴 **只取类型**：`controls.ts` 只许经 `await import()` **到达**（见文件头；判据 = `engine.guard.test.ts`）。
+// 🔴 **只取类型**：`controls.ts` **不许被「首屏静态可达」的模块静态引入**（旧措辞「只许经 `await import()`
+// 到达」**过宽**，R60.1 更正 R41.3 的适用范围；**惰性视图 / 注册表驱动静态引入是安全的**）。本件正是
+// 后者：`SessionRawView` 经 `SessionViewHost.tsx:98` 的 `lazy()` 惰性到达（T35c 实测；判据 = 闭包交集）。
 import type { Controllable } from "../../motion/controls";
 
 /** 段落锚点选择器 —— 视图侧只写 `data-seg-id`（R8.5 的结构锚点；本件不碰类名）。 */

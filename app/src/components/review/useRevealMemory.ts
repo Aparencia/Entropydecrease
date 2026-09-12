@@ -56,8 +56,11 @@ import { SHIFT_MAX_PX } from "../../motion/shift";
 import { toneEase } from "../../motion/tone";
 import type { TextTone } from "../../ui/primitives/Text";
 // 🔴 **只取类型**（`import type` 不进产物、也不建静态边 —— `engine.guard.test.ts` 的遍历正则显式排除它）：
-// `controls.ts` 内部有静态 `import { gsap } from "./engine"` ⇒ 它**只许经 `await import()` 到达**（R41.3 /
-// §三十四 #23；判据 = 闭包交集）。静态引入它会把 engine 拉进首屏静态闭包，`vendor-gsap` 懒 chunk 承诺落空。
+// `controls.ts` 自己静态 `import { gsap } from "./engine"` ⇒ **不许从「首屏静态可达」的模块静态引入
+// 它**（旧措辞「只许经 `await import()` 到达」**过宽**，R60.1 更正 R41.3 的适用范围；**惰性视图 /
+// 注册表驱动静态引入是安全的**）。本件在惰性链上（`ReviewSessionPanel` ← `ReviewPage` 经
+// `shell/navRegistry.ts:27` 的 `lazy()`）⇒ 今天仍只取类型 + 动态 `import()`（**形态不变**；首屏模块
+// 一旦静态取值引入它，`engine.guard.test.ts` 的闭包交集会红 —— 不是静默洞）。
 import type { Controllable, startControllable } from "../../motion/controls";
 
 /** 出口的 vars 类型别名（`gsap.TweenVars` 的同义表达 —— 不必 import gsap 命名空间）。 */
