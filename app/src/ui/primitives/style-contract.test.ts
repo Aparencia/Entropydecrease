@@ -240,8 +240,7 @@ describe("退场时长三方对拍：组件常量 == 组件 CSS 兜底字面量 
  * 为什么不进 `CONTRACTS`：那张表判的是「**取值联合** ↔ CSS 档位」（`Record<U, string>` 提供编译期
  * 双向约束）；`ViewSwitcher` 的类名**不是**从联合派生的 —— 它是 R-2 的**复用**（容器 + 段两类，基类
  * `ed-btn` 的规则属 `Button.css`）。塞进 `CONTRACTS` 就要把「12」这条既有数字改掉，正是 R-2 禁止的。
- * 类名空间的理由（段控件本质是成组的按钮 · 复用换来 0 处既有断言改动 · 诚实代价）写在
- * `ViewSwitcher.tsx` 与 `ViewSwitcher.css` 的文件头。
+ * 类名空间的理由（段控件本质是成组的按钮 · 复用换来 0 处既有断言改动 · 诚实代价）写在两个文件头。
  */
 const VIEW_SWITCHER_CLASSES: readonly string[] = ["ed-btn-group", "ed-btn--segment"];
 
@@ -250,14 +249,21 @@ describe("批 5（C14①）ViewSwitcher：类名枚举 ↔ CSS 规则 · 零行�
   // **先剥注释**：文件头大段解释类名空间与"为什么不写行内样式"，不剥会把解释算成产出/犯规
   const clean = stripComments(src);
   const css = stripComments(read("ViewSwitcher.css"));
-  /** tsx 里出现的全部 `.ed-*` 名字（剥注释后）—— 它必须与枚举块**双向相等** */
-  const produced: readonly string[] = [...new Set([...clean.matchAll(/\bed-[A-Za-z0-9_-]+/g)].map((m) => m[0]))].sort();
+  /** 抽「**类名位置**的 `.ed-*`」：`(?<![\w-])` 排除 CSS 变量（`var(--ed-bg-raised)` 里的
+   *  `ed-bg-raised` 是变量名不是类名 —— 不排除则口径过宽、变成假红源）。抽取器自带阳/阴对照。 */
+  const classTokens = (text: string): string[] =>
+    [...new Set([...text.matchAll(/(?<![\w-])ed-[A-Za-z0-9_-]+/g)].map((m) => m[0]))].sort();
+  /** tsx 里出现的全部**类名**（剥注释后）—— 它必须与枚举块**双向相等** */
+  const produced: readonly string[] = classTokens(clean);
 
   it("枚举块与 tsx 产出的类双向相等（基类 `ed-btn` 是**复用**、不进枚举）", () => {
     expect(VIEW_SWITCHER_CLASSES, "枚举块被清空 = 本判据退化为空真").toHaveLength(2);
     // R-2 的前提：段元素必须仍带基类 `ed-btn` —— 掉了它，motion-coverage 的覆盖与四态一起失效
     expect(produced, "段元素不再带 `ed-btn` 基类（reduced-motion 覆盖会静默落空）").toContain("ed-btn");
     expect(produced.filter((c) => c !== "ed-btn"), "tsx 加了类而枚举块没跟 ⇒ 这条红").toEqual([...VIEW_SWITCHER_CLASSES].sort());
+    // 抽取器的**阳/阴对照**（防真空：口径过宽时下面的相等断言会把 CSS 变量也算成类）
+    expect(classTokens('const C = "ed-btn ed-btn--segment";'), "抽取器看不见真类名").toEqual(["ed-btn", "ed-btn--segment"]);
+    expect(classTokens('const s = { background: "var(--ed-bg-raised)" };'), "CSS 变量名被当成类名 ⇒ 口径过宽").toEqual([]);
   });
 
   it("① 产出的每个类都有规则：新增两类在 ViewSwitcher.css，复用的基类在 Button.css", () => {
