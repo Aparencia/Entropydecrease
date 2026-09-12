@@ -24,7 +24,7 @@
  * 副作用：写自己的探针文件（`tmp/t15/props-probe.ts`，跑完留在原地可复算；**仓内零新增**）。
  * 边界：路径全用 `fileURLToPath` + `relative()` 现算（本仓路径含空格；手数 `../` 会建出空树 —— #65）。
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -69,6 +69,10 @@ describe("A6 · 每个视图组件的 props 只来自 slot（**类型级** tsc �
 
   it("① 探针落盘（**仓内零新增**：住 gitignored 的 `tmp/t15/`）且逐字可复算", () => {
     const src = probeSource();
+    // `mkdirSync` 是**必需**的，不是保险：导出树（`git archive` 的变异体/CONTROL 树）里
+    // `.superpowers/**` 是 gitignored ⇒ **整个目录都不存在**，不建就 `ENOENT` ——
+    // 实测（T15 CONTROL-B）：两条用例**都不是断言失败而是 setup 失败**，会被误读成「判据没牙」。
+    mkdirSync(PROBE_DIR, { recursive: true });
     writeFileSync(PROBE, src, "utf8");
     expect(readFileSync(PROBE, "utf8")).toBe(src);
     expect(src.split("createElement(").length - 1, "5 个视图必须各有一个探针调用").toBe(5);
@@ -83,6 +87,7 @@ describe("A6 · 每个视图组件的 props 只来自 slot（**类型级** tsc �
     const diagnosticsOf = (file: string): string[] => ts.getPreEmitDiagnostics(ts.createProgram([file], options))
       .filter((d: { file?: { fileName: string } }) => d.file && flat(d.file.fileName) === flat(file))
       .map((d: { messageText: unknown }) => ts.flattenDiagnosticMessageText(d.messageText, " "));
+    mkdirSync(PROBE_DIR, { recursive: true });
     writeFileSync(PROBE, probeSource(), "utf8");
     const mine = diagnosticsOf(PROBE);
     expect(mine, `视图 props 与 slot 不一致（类型级）：\n${mine.join("\n")}`).toEqual([]);
