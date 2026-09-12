@@ -38,6 +38,16 @@
   padding: var(--ed-space-8, 8px);
 }
 
+/* 对齐档 `start`（批 4 Task 3 · B6：44 处共用 ⇒ **只开这一个**受控排版档位，不放开裸 `className`）：
+   落在列表行 / 侧栏里的空态要与同级列表项左对齐，而不是把自己居中成一块告示牌。
+   为什么两项都要：`align-items` 管 flex 子项（图标 / 标题 / 按钮）的横向落点，
+   `text-align` 管多行文本自身的对齐 —— 只写一项时另一项仍是基类的 `center`（判据
+   `EmptyState.align.test.tsx` ② 对两项各有一条断言，且带"只写一项"的反例样本）。 */
+.ed-empty--start {
+  align-items: flex-start;
+  text-align: start;
+}
+
 /* 图标：弱化墨度（装饰性顿点，视觉焦点让给标题与主行动按钮）；`flex: none` 防被压扁。
    颜色走 `currentColor`（图标层 `stroke="currentColor"`）⇒ 批 6 想换墨度只需改这一行。 */
 .ed-empty__icon {

@@ -33,12 +33,12 @@ ADR-032 交付了 token 层（色阶 / 字阶 / z-index 标尺 / 图标），但
 | 3 | `Button` | `Button.tsx` 132 · `Button.css` 92 · `Button.test.tsx` 286 | `<button>` 510 行/121 文件全是内联样式 · 按钮样式常量 86 行/60 文件 |
 | 4 | `Modal` | `Modal.tsx` 188 · `Modal.css` 81 · `Modal.test.tsx` 296 · `Modal.exit.test.tsx` 91 | 28 个手写弹层（其中 11 个早退式卸载） |
 | 5 | `ConfirmDialog` | `ConfirmDialog.tsx` 192 · `ConfirmDialog.css` 58 · `ConfirmDialog.test.tsx` 297 | 23 处命令式确认（`window.confirm` 在 WebView2 下可能静默返回 false） |
-| 6 | `Toast` | `Toast.tsx` 210 · `Toast.css` 65 · `Toast.test.tsx` 249 · `Toast.interrupt.test.tsx` 167 · `Toast.style.test.ts` 132 | 4 套自绘 toast，**全部只有进、没有出** |
-| 7 | `EmptyState` | `EmptyState.tsx` 127 · `EmptyState.css` 81 · `EmptyState.test.tsx` 276 | 40 行/28 文件的「暂无…」灰字，5 套空态，首启无主行动按钮 |
+| 6 | `Toast` | `Toast.tsx` 257 · `Toast.css` 76 · `Toast.test.tsx` 249 · `Toast.interrupt.test.tsx` 167 · `Toast.style.test.ts` 132 · `Toast.placement.test.tsx` 123 | 4 套自绘 toast，**全部只有进、没有出** |
+| 7 | `EmptyState` | `EmptyState.tsx` 170 · `EmptyState.css` 91 · `EmptyState.test.tsx` 276 · `EmptyState.align.test.tsx` 102 | 40 行/28 文件的「暂无…」灰字，5 套空态，首启无主行动按钮 |
 | 8 | `Loading` / `Skeleton` / `Probe` | `Loading.tsx` 105 · `Loading.css` 79 · `Loading.test.tsx` 238 | 85 处/30 文件的手写灰字，全站 0 骨架屏 |
 | 9 | `StatusLine` | `StatusLine.tsx` 94 · `StatusLine.css` 42 · `StatusLine.test.tsx` 267 | 196 处/76 文件，三种红并存，错误常在列表最底部 |
 | — | 共享内核 | `usePresence.ts` 200 · `usePresence.test.tsx` 282 · `usePresence.node.test.ts` 71 · `useFocusTrap.ts` 122 · `useFocusTrap.test.tsx` 236 · `ime.ts` 18 · `ime.test.ts` 32 | 卸载时机 / 焦点陷阱 / IME 组合态 |
-| — | 接缝与守卫 | `motion.css` 74 · `index.ts` 45 · `style-seams.test.ts` 271 · `style-contract.test.ts` 214 · `motion-coverage.test.ts` 147 | 动效变量与 reduced-motion 块 · 导出面 · 机器判据见 `style-seams` / `style-contract` / `motion-coverage` 三个测试文件 |
+| — | 接缝与守卫 | `motion.css` 74 · `index.ts` 45 · `style-seams.test.ts` 271 · `style-contract.test.ts` 233 · `motion-coverage.test.ts` 147 | 动效变量与 reduced-motion 块 · 导出面 · 机器判据见 `style-seams` / `style-contract` / `motion-coverage` 三个测试文件 |
 <!-- line-count-src: files=app/src/ui/primitives/motion.css,app/src/ui/primitives/index.ts,app/src/ui/primitives/style-seams.test.ts,app/src/ui/primitives/style-contract.test.ts,app/src/ui/primitives/motion-coverage.test.ts caliber=countLines@scripts/line-limits.mjs authority=HEAD-remeasurement -->
 
 > **行数口径（唯一有效）**：`countLines()`，即 `[System.IO.File]::ReadAllLines(path, UTF8).Count` —— **含空行**的全部行数（禁用 `Get-Content` / `Measure-Object -Line` / 数 `0x0A` 字节）。
@@ -223,6 +223,34 @@ z-index 的迁移纪律（0-A 交接第 3 条）：**必须按叠放段整段推
   ③ `busy` 态的焦点环被同规则的 `opacity: .55` 衰减到 55% —— **本批唯一"视觉降级压过无障碍"处**，
   已登记给批 6 一并处理；
   ④ `ConfirmDialogProps` 无 `tier` ⇒ 弹层内再弹拿不到 `modalNested`（登记为批 4 观察项）。
+     ✅ **批 4 Task 2 已结清**（2026-09-12；就地加注，上面的原决策文字保留）：实测**≥3 处结构性嵌套**
+     （`InterviewDialog → GoalPlanApprovalDialog` · `NoteAiDialog → RefineLaunchDialog/RefineWorkbench` ·
+     `RouteInfoPopover → GroupDeleteConfirm/ModelCardCreateDialog`）⇒ 按 B6 阈值「≥3 共用 ⇒ 改原语」加
+     `ConfirmDialogProps.tier?: ModalTier`（默认 `"modal"`）并**透传给 `Modal`**；**不新增档位**
+     （`ModalTier` 仍两档 ⇒ `style-contract` 的全枚举表不动）。判据 = `ConfirmDialog.tier.test.tsx`（7 条）。
+     **同批同源缺口**：`Modal` 的 **body 滚动锁**（20 个弹层共用 ⇒ 改原语）＝ 引用计数 + 原值快照、
+     门控 `presence.mounted`（不是 `open` —— 退场 160ms 内面板还在屏上）；判据 = `Modal.scroll-lock.test.tsx`（6 条）。
+     ⚠️ 该观察项的另一半「未做：body 滚动锁」逐字住在**规格**
+     `docs/superpowers/specs/2026-09-11-frontend-redesign-design.md:274`，**ADR 正文无此句** ⇒ 只在本行结清并指向规格。
+  ⑤ **原语「结构上表达不了」的两处能力缺口已在批 4 Task 3 按 B6 特殊条款结清**（2026-09-12，
+     实施单元 T3；本行是**就地加注**，上面的原决策文字一律保留）：
+     - `Toast` 的**位置**：`App.tsx` 的 AI toast 要贴导航条下方（`top: calc(var(--ed-nav-h) + 8px)`），
+       而 `--ed-nav-h` 是**壳层 token**（`ui/tokens.css`）—— L1 原语**结构上读不到**它（§2 依赖方向禁止反向）。
+       ⇒ 加**一个具名档位** `ToastProps.placement: "viewport" | "belowNav"`（默认 `"viewport"` = 基类形态），
+       实现走类 `.ed-toast--below-nav`（`Toast.css`，`top` 消费 `var(--ed-nav-h, 56px)` + `bottom: auto`），
+       **绝不**用行内 `style` 覆盖类语义（§4 逐字禁止）。
+     - `EmptyState` 的**对齐**：44 处空态（33 文件）里的内联排版在原语里无处安放（本组件边界① 逐字
+       「不加 `className`/`style`」）⇒ 加**一个受控排版档位** `EmptyStateProps.align: "center" | "start"`
+       （默认 `"center"` = 基类形态），实现走类 `.ed-empty--start`（`align-items` + `text-align`）。
+       **不放开裸 `className`** —— `fontSize`/墨度仍归 `Text` 字阶、空气仍归 `compact`。
+     - **阈值判据（批 4 起沿用）**：同一缺口 **≥3 个调用点共用 ⇒ 改原语；<3 ⇒ 改调用点**；
+       「原语结构上无法表达」是唯一的例外通道，且例外只许加**一个具名、有文档的 prop**。
+       两处判据分别落在 `Toast.placement.test.tsx` / `EmptyState.align.test.tsx`（含"不许行内 `style`"
+       与"不许写死数值"的反例样本），取值联合 ↔ CSS 类的全枚举锚在 `style-contract.test.ts`。
+     - 已知未覆盖面（诚实登记）：`belowNav` 档只定**纵向**锚点，从 `App.tsx` 今日的 `right: 16` 迁过来
+       仍有 **2px 横向差异**（§10 已承认「观感从批 4 开始变」）；存量 44 处空态的 `fontSize`（实测 35 处）
+       与内联灰（38 处）不在这两档的能力内，由 `Text` / `compact` 吸收，**逐处迁移时若仍表达不了 ⇒ 按上面
+       的阈值判据登记后再议**（不许就地加第三个口子）。
 
 ## 替代方案与否决理由
 
@@ -244,7 +272,7 @@ z-index 的迁移纪律（0-A 交接第 3 条）：**必须按叠放段整段推
 | `--ed-stamp` 不作底色 + `Button.css` 内计数为 0 | `style-seams.test.ts`「守卫②」（含口径锚：印章仍以 `color`/`border` 消费它） |
 | reduced-motion 覆盖率：**基类**名单逐一覆盖 + **动画落点**（含伪元素）逐字覆盖 + 名单无死条目 + 5 个非原语 `.ed-*` 名排除 | `motion-coverage.test.ts` |
 | 每个 `primitives/*.css` 被其宿主模块 import（删掉那行 import 时其余用例仍全绿 —— T3 评审实测的洞） | `style-contract.test.ts` |
-| 11 个取值联合 ↔ CSS 类规则的全枚举锚（`Record<Union, …>` 编译期双向 + 档数运行期冗余） | `style-contract.test.ts` |
+| 13 个取值联合 ↔ CSS 类规则的全枚举锚（`Record<Union, …>` 编译期双向 + 档数运行期冗余；`ToastPlacement` / `EmptyStateAlign` 由批 4 Task 3 补入，原 11 = 10 联合 + `PresencePhase` 三态） | `style-contract.test.ts` |
 | 退场时长三方对拍：`EXIT_MS` == 组件 CSS 的 `var(--ed-dur-*, <n>ms)` 兜底 == `motion.css` 定值 | `style-contract.test.ts` |
 | 位移 ≤ 8px · token 兜底值 == 真源 · 类名 ↔ 规则 | `style-seams.test.ts`（T3/T4 既有节） |
 | `ui/tokens.css` 入口接线未被回退 | `tokens.drift.test.ts` |

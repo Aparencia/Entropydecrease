@@ -32,8 +32,11 @@
  * 组件本身不读 store、不发请求、不写磁盘、**不持有任何状态**（无 `useState`/`useEffect`）。
  *
  * 边界：
- * ① **契约就是 `EmptyStateProps` 这 7 个字段**（计划 Task 10 的 `Produces`）：**不加** `className` /
- *    `style` —— 空态是「一处的形态」，调用点若要微调排版就等于把批 6 的「一处改对所有地方」重新打散。
+ * ① **契约就是 `EmptyStateProps` 这几个字段**（计划 Task 10 的 `Produces` 是 7 个；批 4 Task 3
+ *    按 B6 加了第 8 个 `align`）：**仍然不加** `className` / `style` —— 空态是「一处的形态」，
+ *    调用点若要微调排版就等于把批 6 的「一处改对所有地方」重新打散。批 4 唯一开的口子是
+ *    **两档受控对齐**（`EmptyStateAlign`，见其 `@ai-context`：44 处共用 ⇒ 只开一个档位，
+ *    `fontSize`/墨度仍归 `Text`、空气仍归 `compact`）。
  * ② `action.disabled` 走 `Button` 的**原生 `disabled`**（移出 Tab 序、不派发 click）——语义是
  *    「这个出路暂时不可用」；「点了正在处理」那种不可用态用 `Button` 的 `busy`，属调用点自己的按钮。
  * ③ `description` 渲染成 `<p>` ⇒ **ReactNode 应当是行内内容**（`<p>` 不接受块级子元素）；
@@ -59,6 +62,16 @@ import "./EmptyState.css";
  */
 const ICON_SIZE = 24;
 
+/**
+ * `align` → **附加类**（`null` = 不加，即基类形态）。写成 `Record<…>` 而非内联三元：
+ * **新增一档对齐而忘了给类会成为编译错误**（同 `Toast.tsx` 的 `PLACEMENT_CLASS` 契约完整性锚）。
+ * 默认档不产生 `--center` 类：`EmptyState.test.tsx:79` 的精确类名断言要求默认形态逐字不变。
+ */
+const ALIGN_CLASS: Readonly<Record<EmptyStateAlign, string | null>> = {
+  center: null,
+  start: "ed-empty--start",
+};
+
 /** 主行动按钮：空态的**唯一出路**（规格 §5.1「首启路径无主行动按钮」的落点） */
 export interface EmptyStateAction {
   /** 按钮文案（如「新建第一篇笔记」） */
@@ -70,6 +83,29 @@ export interface EmptyStateAction {
   /** 是否不可用（透传 `Button` 的原生 `disabled`） */
   readonly disabled?: boolean;
 }
+
+/**
+ * 两档**对齐**（受控排版档位，不是任意 `style`）—— 批 4 Task 3 按 B6 新增，`@ai-context`：
+ *
+ * Why 需要它：本原语的边界① 逐字**不加** `className` / `style`（空态是「一处的形态」，调用点微调
+ * 排版等于把「一处改对所有地方」重新打散）。而现存 **44 处**空态（33 文件，规格 §5.1 逐字相等）
+ * 普遍带内联排版：其中 `fontSize` / 墨度是 `Text` 字阶的权威、空气是 `compact` 的权威，
+ * **唯独"整块左对齐"（`align-items: flex-start` / `text-align: start`）在基类（居中）里表达不了**。
+ * 44 ≥ 3 ⇒ 按 B6「同一缺口 ≥3 个调用点共用 ⇒ 改原语」，**只开这一个**受控排版档位。
+ *
+ * 谁在用：`center`（默认）= 基类形态（居中的空态，今日 5 套空态的主流形态）；`start` = 落在**列表行 /
+ * 侧栏**里的空态（与同级列表项左对齐，不把自己居中成一块告示牌）。批 4 T13 的迁移任务逐处选档。
+ *
+ * 边界（逐条）：
+ * ① **只许这两档**，且**不放开**裸 `className` / `style`（边界① 逐字保留）—— 仍然表达不了的排版
+ *    （如某个 `fontSize: 11`）由 `Text` 字阶 / `compact` / 外层 `Surface` 组合吸收；
+ *    若确有 ≥3 处共用的第三种形态 ⇒ **登记 + 报控制方按 B6 判**，不许就地加口子。
+ * ② 实现**走类**（`.ed-empty--start`），默认档**不产生**修饰类 —— 精确类名断言
+ *    （`EmptyState.test.tsx:79` 既有的 `toBe`）要求默认档与今日形态逐字相同。
+ * ③ 判据在 `EmptyState.align.test.tsx`（类名精确值 · 无 `style` 属性 · 四槽位在两种档位下都在），
+ *    取值联合 ↔ CSS 类的全枚举锚在 `style-contract.test.ts`（`EmptyStateAlign` 一行）。
+ */
+export type EmptyStateAlign = "center" | "start";
 
 export interface EmptyStateProps {
   /** 标题（**必填**）：一句话说明「这里为什么是空的」。它同时是空态的主信息，不靠图标传达 */
@@ -84,6 +120,10 @@ export interface EmptyStateProps {
   secondary?: ReactNode;
   /** 紧凑形态（默认 `false`）：给列表行 / 侧栏内的空态收空气，不改字阶 */
   compact?: boolean;
+  /** **对齐档**，默认 `"center"`（居中，基类形态）；`"start"` = 整块左对齐（`.ed-empty--start`），
+   *  给落在列表行 / 侧栏里的空态用。**取值为闭集、且不放开 `className`/`style`** —— 为什么需要、
+   *  边界与"还表达不了什么"见 `EmptyStateAlign` 的 `@ai-context`。实现走类 ⇒ 根元素无 `style`。 */
+  align?: EmptyStateAlign;
   /** 落到 `data-testid`；不传时不产生该属性 */
   testId?: string;
 }
@@ -101,9 +141,12 @@ export function EmptyState({
   action,
   secondary,
   compact = false,
+  align = "center",
   testId,
 }: EmptyStateProps): ReactElement {
-  const cls = ["ed-empty", compact ? "ed-empty--compact" : null, "ed-empty-enter"].filter(Boolean).join(" ");
+  const cls = ["ed-empty", compact ? "ed-empty--compact" : null, ALIGN_CLASS[align], "ed-empty-enter"]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className={cls} data-testid={testId}>

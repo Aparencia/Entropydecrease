@@ -22,11 +22,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { ButtonSize, ButtonVariant } from "./Button";
+import type { EmptyStateAlign } from "./EmptyState";
 import type { ModalSize } from "./Modal";
 import type { StatusKind } from "./StatusLine";
 import type { SurfaceLevel, SurfaceRadius } from "./Surface";
 import type { TextFont, TextSize, TextTone } from "./Text";
-import type { ToastKind } from "./Toast";
+import type { ToastKind, ToastPlacement } from "./Toast";
 import type { PresencePhase } from "./usePresence";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -123,6 +124,20 @@ const STATUS_CLASS: Record<StatusKind, string> = {
   ok: "ed-status--ok",
 };
 const TOAST_CLASS: Record<ToastKind, string> = { info: "ed-toast--info", ok: "ed-toast--ok", err: "ed-toast--err" };
+/**
+ * 批 4 Task 3（B6）：两档**位置**（`ToastPlacement`）。默认档 `viewport` 的承载类是**基类**
+ * `.ed-toast` —— 组件对默认档**不渲染**修饰类（`Toast.placement.test.tsx` ①/⑤ 的精确类名断言
+ * 要求默认形态与迁移前逐字相同）。本表判的是「**每个档位都有承载它的规则**」：默认档漏了基类规则
+ * 仍是红，新增第三档而不给类则先红在 `Record<…>` 的编译期。`--below-nav` 的 `top` **消费
+ * `var(--ed-nav-h…)`**（不许写死数值）由 `Toast.placement.test.tsx` ④ 单独判。
+ */
+const TOAST_PLACEMENT_CLASS: Record<ToastPlacement, string> = {
+  viewport: "ed-toast",
+  belowNav: "ed-toast--below-nav",
+};
+/** 批 4 Task 3（B6）：两档**对齐**（`EmptyStateAlign`）。默认档 `center` 的承载类同样是基类
+ *  `.ed-empty`（默认档不产生修饰类，理由同上）；`--start` 的两条声明由 `EmptyState.align.test.tsx` ② 判。 */
+const EMPTY_ALIGN_CLASS: Record<EmptyStateAlign, string> = { center: "ed-empty", start: "ed-empty--start" };
 const MODAL_SIZE_CLASS: Record<ModalSize, string> = { s: "ed-modal--s", m: "ed-modal--m", l: "ed-modal--l" };
 /** 相位不是类名而是 `[data-phase]` 属性选择器（`usePresence` 的三态协议，Modal / Toast 共用） */
 const PHASE_SELECTOR: Record<PresencePhase, string> = {
@@ -151,12 +166,16 @@ const CONTRACTS: readonly UnionContract[] = [
   { union: "ButtonSize", css: "Button.css", members: BTN_SIZE_CLASS, expected: 3 },
   { union: "StatusKind", css: "StatusLine.css", members: STATUS_CLASS, expected: 4 },
   { union: "ToastKind", css: "Toast.css", members: TOAST_CLASS, expected: 3 },
+  { union: "ToastPlacement", css: "Toast.css", members: TOAST_PLACEMENT_CLASS, expected: 2 },
+  { union: "EmptyStateAlign", css: "EmptyState.css", members: EMPTY_ALIGN_CLASS, expected: 2 },
   { union: "ModalSize", css: "Modal.css", members: MODAL_SIZE_CLASS, expected: 3 },
 ];
 
 describe("契约完整性锚：类型联合 ↔ CSS 类规则（给联合加一档而忘改任一侧，必须变红）", () => {
-  it("10 个联合的档数与契约表逐条一致", () => {
-    expect(CONTRACTS).toHaveLength(10);
+  it("12 个联合的档数与契约表逐条一致", () => {
+    // 档数 = 表格行数（10 → 12：批 4 Task 3 加入 `ToastPlacement` / `EmptyStateAlign` 两行）。
+    // 这条冗余断言的作用是**逼人回来确认契约**：加行而不改它 ⇒ 红（同 `expected` 的道理）。
+    expect(CONTRACTS).toHaveLength(12);
     for (const c of CONTRACTS) {
       expect(Object.keys(c.members), `${c.union} 档数变了：加档必须同时改这里与 ${c.css}`).toHaveLength(c.expected);
     }

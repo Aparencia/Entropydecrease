@@ -205,6 +205,22 @@ describe("原语层导出面", () => {
     expect(INDEX_TS).toContain('export { Text } from "./Text";');
     expect(INDEX_TS).toContain('export type { TextFont, TextProps, TextSize, TextTag, TextTone } from "./Text";');
   });
+
+  /**
+   * 批 4 Task 3（B6）：新增的**取值联合**必须从 barrel 看得到 —— 批 4 起全站只许走 `index.ts`
+   * （ADR-033 §1），而 `ToastPlacement` / `EmptyStateAlign` 今日**还没有消费者**（T10/T13 才迁），
+   * 故「漏导出」不会被 `tsc --noEmit` 抓到（无人 import ⇒ 无 TS2305）—— 计划 Task 3 的 M3 期望
+   * 在这一点上无牙（T3 报告已实测登记）。本条把导出面本身变成判据：名字必须落在**那条**
+   * `export type { … } from "./<模块>"` 语句里（不是文件里随便出现一次）。
+   */
+  it("两条新取值联合出现在各自的 `export type { … } from` 语句里（漏导出 = 批 5 迁移时才炸）", () => {
+    expect(INDEX_TS, "`ToastPlacement` 未从 barrel 导出").toMatch(
+      /export type \{[^}]*\bToastPlacement\b[^}]*\} from "\.\/Toast";/,
+    );
+    expect(INDEX_TS, "`EmptyStateAlign` 未从 barrel 导出").toMatch(
+      /export type \{[^}]*\bEmptyStateAlign\b[^}]*\} from "\.\/EmptyState";/,
+    );
+  });
 });
 
 /* ─────────────────── 批 0-D Task 14 追加的守卫（一）：本层 CSS **文本**反例 ───────────────────

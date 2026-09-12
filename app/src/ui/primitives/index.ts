@@ -33,13 +33,13 @@ export { ConfirmDialog } from "./ConfirmDialog";
 export type { ConfirmDialogProps, ConfirmImpact } from "./ConfirmDialog";
 
 export { EmptyState } from "./EmptyState";
-export type { EmptyStateAction, EmptyStateProps } from "./EmptyState";
+export type { EmptyStateAction, EmptyStateAlign, EmptyStateProps } from "./EmptyState";
 
 export { Loading, Probe, Skeleton } from "./Loading";
 export type { LoadingProps, ProbeProps, SkeletonProps } from "./Loading";
 
 export { Toast } from "./Toast";
-export type { ToastAction, ToastKind, ToastProps } from "./Toast";
+export type { ToastAction, ToastKind, ToastPlacement, ToastProps } from "./Toast";
 
 export { StatusLine } from "./StatusLine";
 export type { StatusKind, StatusLineProps } from "./StatusLine";

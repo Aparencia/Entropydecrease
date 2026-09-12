@@ -32,6 +32,10 @@
  * ⑦ 无障碍（§8.6.1 第 4 条）：`role="status"`；**只有 `err` 用 `aria-live="assertive"`**（唯一有
  *    资格打断屏幕阅读器的档）；`reduced-motion` 由 `usePresence`（直跳终态、不依赖 `transitionend`）
  *    与 `motion.css`（`.ed-toast` 在该名单里）两侧共同兜住。
+ *
+ * 批 4 Task 3 追加的能力（B6 特殊条款，与上面 7 条状态机边界正交）：**位置档** `placement`
+ * （`viewport` 默认 / `belowNav`）。为什么需要、谁在用、边界（含 2px 横向差异）见 `ToastPlacement`
+ * 的 `@ai-context`；行为判据在 `Toast.placement.test.tsx`，取值联合 ↔ CSS 类的锚在 `style-contract.test.ts`。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
@@ -44,6 +48,30 @@ import "./Toast.css";
 
 /** 三档语义：`info` 中性 · `ok` 成功回执 · `err` 失败（唯一 `aria-live="assertive"` 的档） */
 export type ToastKind = "info" | "ok" | "err";
+
+/**
+ * 两档**位置**（受控档位，不是任意 CSS 值）—— 批 4 Task 3 按 B6 特殊条款新增，`@ai-context`：
+ *
+ * Why 需要它：`App.tsx` 的 AI toast 是**常驻壳层**里的全局提示，必须贴在应用导航条下方
+ * （今日逐字 `top: "calc(var(--ed-nav-h) + 8px)"`，`App.tsx:509`）。而 `--ed-nav-h` 是**壳层 token**
+ * （`ui/tokens.css:73`）—— L1 原语**结构上读不到**它（依赖方向：领域 → 视图 → 容器 → 原语，禁止反向）。
+ * ⇒ 迁移时"改调用点"的唯一走法是行内 `style` 覆盖类语义，而 ADR-033 §4 **逐字禁止**
+ * （那会把「一处改对所有地方」重新打散）⇒ B6 给出特殊条款：**只许加一个具名、有文档的 prop**。
+ *
+ * 谁在用：`viewport`（默认）= 面板/页面级提示，视口右下角 18px（`Toast.css` 基类，今日 4 套 toast
+ * 里 `useTransientToast.tsx` 的形态）；`belowNav` = **常驻壳层**里的全局提示（批 4 T10 把 `App.tsx`
+ * 的 AI toast 迁过来时用）。
+ *
+ * 边界（逐条）：
+ * ① **只许这两档**，不暴露任意 CSS 值（`top` / `right` 的具体数值是**形态**，不是调用点的自由）。
+ *    需要第三档 ⇒ 先按 B6 的阈值判据（同一缺口 ≥3 个调用点共用 ⇒ 改原语）登记，再加档。
+ * ② 实现**走类**（`.ed-toast--below-nav`），**绝不**在容器上写行内 `top`；`zIndex` 仍走 TS 标尺内联。
+ * ③ 本档只改**纵向锚点**（`top` + `bottom: auto`）；`right` 仍取基类的 18px —— 故从今日
+ *    `App.tsx`（`right: 16`）迁过来会有 **2px 横向差异**，属规格 §10「观感从批 4 开始变」的已接受面。
+ * ④ 判据在 `Toast.placement.test.tsx`（类名笛卡尔积 · 无行内 `top` · CSS 消费 `--ed-nav-h`），
+ *    取值联合 ↔ CSS 类的全枚举锚在 `style-contract.test.ts`（`ToastPlacement` 一行）。
+ */
+export type ToastPlacement = "viewport" | "belowNav";
 
 /**
  * 行动槽（规格 §5.3「撤销 toast 10s」的入口）。**本批只建槽位，不实现撤销栈**；
@@ -61,6 +89,11 @@ export interface ToastProps {
   message: ReactNode;
   /** 语义档，默认 `info` */
   kind?: ToastKind;
+  /** **位置档**，默认 `"viewport"`（视口右下 18px，基类形态）；`"belowNav"` = 贴在应用导航条下方
+   *  （`.ed-toast--below-nav`，`top: calc(var(--ed-nav-h, 56px) + 8px)`）—— 给**常驻壳层**里的
+   *  全局提示用。**取值为闭集**（见 `ToastPlacement` 的 `@ai-context`：为什么不暴露任意值、
+   *  以及从 `App.tsx` 迁过来时的 2px 横向差异）。实现走类 ⇒ 容器上**没有**行内 `top`。 */
+  placement?: ToastPlacement;
   /** 自动消失时长，默认 `3000`；**`<= 0` = 不自动消失**（规格 §5.3 的撤销 toast 用 10_000） */
   durationMs?: number;
   /** 行动槽（撤销 / 重试）；不传则不渲染该按钮。**点击既不自关、也不重置计时**（见边界⑤）
@@ -91,6 +124,17 @@ const TONE_BY_KIND: Readonly<Record<ToastKind, TextTone>> = {
 };
 
 /**
+ * `placement` → **附加类**（`null` = 不加，即基类形态）。写成 `Record<…>` 而非内联三元：
+ * **新增一档位置而忘了给类会成为编译错误**（同 `TONE_BY_KIND` 的「契约完整性锚」）。
+ * 默认档**不产生** `--viewport` 类：精确类名断言（`Toast.placement.test.tsx` ①/⑤）要求默认档
+ * 与今日形态逐字相同 —— 这是「迁移不改默认观感」的机器判据。
+ */
+const PLACEMENT_CLASS: Readonly<Record<ToastPlacement, string | null>> = {
+  viewport: null,
+  belowNav: "ed-toast--below-nav",
+};
+
+/**
  * 渲染一条 toast。未挂载时返回 `null`。
  *
  * 返回 `ReactElement | null`（= 契约里的 `JSX.Element | null`）：React 19 把全局 `JSX` 命名空间
@@ -100,6 +144,7 @@ export function Toast({
   open,
   message,
   kind = "info",
+  placement = "viewport",
   durationMs = DEFAULT_DURATION_MS,
   action,
   onDismiss,
@@ -180,9 +225,11 @@ export function Toast({
 
   if (!presence.mounted) return null;
 
+  const cls = ["ed-toast", `ed-toast--${kind}`, PLACEMENT_CLASS[placement]].filter(Boolean).join(" ");
+
   return (
     <div
-      className={`ed-toast ed-toast--${kind}`}
+      className={cls}
       role="status"
       aria-live={kind === "err" ? "assertive" : "polite"}
       data-phase={presence.phase}

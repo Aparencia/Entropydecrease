@@ -50,6 +50,17 @@
 .ed-toast--ok { border-left-color: var(--ed-ok); }
 .ed-toast--err { border-left-color: var(--ed-stamp); }
 
+/* 位置档 ②（批 4 Task 3 · B6 特殊条款）：贴在**应用导航条**下方。
+   为什么是类而不是行内 `top`：`--ed-nav-h` 是壳层 token（`ui/tokens.css`），L1 原语读不到它，
+   而调用点用行内 style 覆盖类语义被 ADR-033 §4 逐字禁止 ⇒ 具名档位 `ToastProps.placement="belowNav"`。
+   兜底 56px 与 `TopBar.css` 的 `var(--ed-nav-h, 56px)` 同值（两处兜底漂移不会有任何报错）。
+   ⚠️ `bottom: auto` 是**必要配套**，不是冗余：基类声明了 `bottom`，固定定位元素同时给出 top 与
+   bottom（高度 auto）会被**上下拉伸**成整屏高 —— 判据在 `Toast.placement.test.tsx` ④。 */
+.ed-toast--below-nav {
+  top: calc(var(--ed-nav-h, 56px) + 8px);
+  bottom: auto;
+}
+
 .ed-toast[data-phase="enter"] { opacity: 0; transform: translateY(8px); } /* 位移 8px = 规格 §8.4 上限 */
 .ed-toast[data-phase="entered"] { opacity: 1; transform: translateY(0); }
 .ed-toast[data-phase="exit"] {
