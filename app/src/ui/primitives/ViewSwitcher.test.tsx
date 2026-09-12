@@ -37,6 +37,11 @@ function bodyOf(css: string, sel: string): string {
   return at < 0 ? "" : css.slice(at, css.indexOf("}", at));
 }
 
+/** W8b（R11.6 追加段）的扫描口径：一段 CSS 里的 `transition` 声明（`;` 切声明、锚属性名） */
+const transitionDecls = (css: string): string[] => css.split(";").filter((d) => /(?:^|[;\s])transition\s*:/.test(d));
+/** 其中**没走 token** 的那些（空数组 = 都走 token） */
+const untokenedTransitions = (css: string): string[] => transitionDecls(css).filter((d) => !/var\(--ed-(?:dur|ease)/.test(d));
+
 const OPTIONS: readonly ViewSwitcherOption[] = [
   { key: "raw", label: "原文", icon: "sessions" },
   { key: "tritrack", label: "三轨对齐", icon: "image" },
@@ -223,5 +228,24 @@ describe("W8 响应层接缝（§8.6.1 第 3 条）：`--ed-dur-micro` 120ms + �
     expect(block, "motion.css 的名单不含 `.ed-btn`（段类与基类同元素的前提被破坏）").toMatch(/\.ed-btn(?![\w-])/);
     expect(VS_CSS, "本文件写了 @media（reduced-motion 必须只有 motion.css 一处）").not.toContain("@media");
     expect(VS_CSS, "本文件写了动画落点（段控件是响应层，不是环境层）").not.toMatch(/(?:^|[;\s])(?:-(?:webkit|moz|ms|o)-)?animation(?:-name)?\s*:/);
+  });
+
+  /**
+   * G3 改判（R1.2 / §七 G3 + **R11.6 追认**）：与计划 `### 表 4` 的 S5 一致 —— G3 的两条禁令
+   * （本文件不得写 `@media` / `animation`）**原文逐字保留**（它们守的是别的东西：唯一 reduced-motion
+   * 块 · 桶边界 · 与 G5 同向），本段**只追加**「transition 的值只许 token」的**正面判据**。
+   * **更强**：旧版只有禁令 ⇒ 无法区分「没做」与「做对了」（段控件没接缝也是绿）；新版**禁令 + 正面
+   * 判据**双向 ⇒ 每条各有一个独立失败模式。⚠️ 本段不改上面那个 `it` 的一字（`git diff` 可验）。
+   */
+  it("W8b（R11.6 追加）：段控件的 `transition` 值只许 token（补禁令的盲区：没接缝也曾经全绿）", () => {
+    const decls = transitionDecls(VS_CSS);
+    expect(decls.length, "段控件掉了响应层接缝（`transition`）⇒「切换视图」这一类没有回执").toBeGreaterThan(0);
+    const untokened = untokenedTransitions(VS_CSS);
+    expect(untokened, `段控件的时长/缓动必须走 var(--ed-dur-*) / var(--ed-ease*)：${untokened.join(" / ")}`).toEqual([]);
+    // 仪器自证（双跑）：反例恰 1 条（**逐序数组相等**）、正例 0 条 —— 否则「0 条」是提取器坏了
+    expect(untokenedTransitions("transition: background 120ms;"), "提取器抓不到裸值 ⇒ 上面是空真").toEqual([
+      "transition: background 120ms",
+    ]);
+    expect(untokenedTransitions("transition: background var(--ed-dur-micro, 120ms);"), "token 正例被判成犯规 ⇒ 上面会假红").toEqual([]);
   });
 });
