@@ -32,6 +32,20 @@ const MOTION_CSS = readPrimitiveCss("motion.css");
 const REDUCED_BODY = reducedMotionRules()[0].body;
 const CSS_FILES: readonly string[] = readdirSync(PRIMITIVES).filter((f) => f.endsWith(".css"));
 
+/**
+ * 时长 / 缓动消费点的**名字模式**（T13 修：与 `motionTokens.consumption.test.ts` 的 `CONSUMER` 同类缺陷）。
+ *
+ * Why：`--ed-ease` 后接 `-` 处正是**词边界** ⇒ 只认 `--ed-ease`（或用 `\b` 收尾）会把
+ * `--ed-ease-instrument` / `--ed-ease-paper` **前缀吞成** `--ed-ease`，随后因「兜底形态不符」把一处
+ * **完全合规**的消费点报成违规 —— 波 B/C 第一次用新缓动名时就会误红（双基调的两条缓动 T8 已进真源，
+ * 今天 0 CSS 消费点，所以这条一直是潜伏的）。四类名字都要覆盖：
+ * `--ed-dur-*` · `--ed-ease` · `--ed-ease-instrument` · `--ed-ease-paper`。
+ * ⚠️ 写成**转义**形态（`var\(`）⇒ `motionTokens.consumption.test.ts` 的全树扫描不会把本文件当消费点
+ * （本文件头注边界②）。
+ */
+const DURATION_VALUE = new RegExp(String.raw`^var\((--ed-dur-[a-z-]+),\s*(\d+ms)\)$`);
+const EASING_VALUE = new RegExp(String.raw`^var\((--ed-ease(?:-[a-z-]+)?),\s*(cubic-bezier\([^)]*\))\)$`);
+
 describe("⑤ 三档同行为 + 桶边界 + 单一真源（§8.5「节能档只留响应层」）", () => {
   it("响应层节里零 `[data-motion`，且全仓没有任何 `[data-motion]` 规则碰这些元素", () => {
     expect(SECTION).not.toContain("data-motion");
@@ -78,19 +92,48 @@ describe("⑤ 三档同行为 + 桶边界 + 单一真源（§8.5「节能档只�
     for (const r of RULES) {
       const dur = declarationValue(r.body, "transition-duration");
       if (dur !== null) {
-        const m = /^var\((--ed-dur-[a-z-]+),\s*(\d+ms)\)$/.exec(dur);
+        const m = DURATION_VALUE.exec(dur);
         if (!m) bad.push(`${r.selector}: transition-duration 不是「token + 同值兜底」形态 → ${dur}`);
         else if (truth.get(m[1]) !== m[2]) bad.push(`${r.selector}: ${m[1]} 兜底 ${m[2]} ≠ 真源 ${truth.get(m[1])}`);
       }
       const ease = declarationValue(r.body, "transition-timing-function");
       if (ease !== null) {
-        const m = /^var\((--ed-ease),\s*(cubic-bezier\([^)]*\))\)$/.exec(ease);
+        const m = EASING_VALUE.exec(ease);
         if (!m) bad.push(`${r.selector}: transition-timing-function 不是「token + 同值兜底」形态 → ${ease}`);
         else if (truth.get(m[1]) !== m[2]) bad.push(`${r.selector}: ${m[1]} 兜底 ${m[2]} ≠ 真源 ${truth.get(m[1])}`);
       }
     }
     expect(bad, `响应层的时长 / 缓动脱离了唯一真源：\n${bad.join("\n")}`).toEqual([]);
     expect(truth.size, "真源名册读空了 ⇒ 上面两条是空真").toBe(DURATION_TOKENS.length + EASING_TOKENS.length);
+  });
+
+  /* T13 追加（控制方 2026-09-13 指令）：「两条正则只认旧名」是与 `motionTokens.consumption.test.ts`
+   * 被 T6b 修掉的那条**同一类**缺陷（`--ed-ease` 前缀吞掉 `--ed-ease-<name>`）⇒ 口径本身要有自证。
+   * 样本一律**拼接写**：本文件不得出现 `var(--ed-` 的裸串（见文件头边界②）。 */
+  it("口径自证：四类 token 名都能被**整段**解析（`ease-…` 不得被前缀吞成 `--ed-ease` / 不得误判形态）", () => {
+    const durSamples: ReadonlyArray<readonly [string, string, string]> = [
+      ["var" + "(--ed-dur-micro, 120ms)", "--ed-dur-micro", "120ms"],
+      ["var" + "(--ed-dur-card, 220ms)", "--ed-dur-card", "220ms"],
+    ];
+    for (const [value, name, fallback] of durSamples) {
+      const m = DURATION_VALUE.exec(value);
+      expect([m?.[1], m?.[2]], `时长消费点被漏解析 / 名字被截断：${value}`).toEqual([name, fallback]);
+    }
+    const easeSamples: ReadonlyArray<readonly [string, string, string]> = [
+      ["var" + "(--ed-ease, cubic-bezier(0.2, 0, 0, 1))", "--ed-ease", "cubic-bezier(0.2, 0, 0, 1)"],
+      ["var" + "(--ed-ease-instrument, cubic-bezier(0.4, 0, 0.2, 1))", "--ed-ease-instrument", "cubic-bezier(0.4, 0, 0.2, 1)"],
+      ["var" + "(--ed-ease-paper, cubic-bezier(0.215, 0.61, 0.355, 1))", "--ed-ease-paper", "cubic-bezier(0.215, 0.61, 0.355, 1)"],
+    ];
+    for (const [value, name, fallback] of easeSamples) {
+      const m = EASING_VALUE.exec(value);
+      // 名字必须**整段**取到（前缀吞掉时 m[1] 会是 `--ed-ease`、m 直接为 null 也在这里现形）
+      expect([m?.[1], m?.[2]], `缓动消费点被漏解析 / 名字被前缀吞掉：${value}`).toEqual([name, fallback]);
+    }
+    // 反例（防空真）：形态不符的写法必须**不**被放过 —— 无兜底 / 兜底类型错位 / 值里带别的写法
+    for (const badValue of ["var" + "(--ed-ease)", "var" + "(--ed-ease, 120ms)", "var" + "(--ed-dur-micro, cubic-bezier(0.2, 0, 0, 1))"]) {
+      const ok = DURATION_VALUE.test(badValue) || EASING_VALUE.test(badValue);
+      expect(ok, `这台解析器把不合规的写法也放过了：${badValue}`).toBe(false);
+    }
   });
 });
 
@@ -104,6 +147,25 @@ describe("⑥ 控制方 2026-09-13 追加（T6 评审 I-2 / I-3）：优先级�
     const tierBodies = parseRules(MOTION_CSS).filter((r) => r.selector.includes("data-motion")).map((r) => r.body);
     expect(tierBodies.length, "档位规则一条都没解析到 ⇒ 反向判据是空真").toBeGreaterThanOrEqual(3);
     expect(tierBodies.join(" "), "档位块带了 !important ⇒ 反转无障碍优先级").not.toContain("!important");
+  });
+
+  /* T13 追加（控制方 2026-09-13 第二次追加 B）：R18.1 的 `!important` 判据只管**档位块**与 reduced 块，
+   * 响应层节自己「零 `!important`」今天没有判据 —— 有人往里加一条 `!important` 就会反转
+   * 「行内样式优先于类规则」这条 ADR-033 §4 的既成语义（`motion.css` 头部 ⑤ 逐字），而全仓无人察觉。 */
+  it("I-4：响应层节**零** `!important`（防反转「行内优先于类」的语义）", () => {
+    const flagged = (text: string): string[] =>
+      [...text.matchAll(/([a-z-]+)\s*:\s*([^;{}]*!important[^;{}]*)/g)].map((m) => `${m[1]}: ${m[2].trim()}`);
+    expect(SECTION.length, "响应层节读空了 ⇒ 本条是空真").toBeGreaterThan(500);
+    expect(
+      flagged(SECTION),
+      `响应层出现了 !important ⇒ 行内样式再也盖不过类规则（ADR-033 §4 的「行内优先于类」被反转）：\n${flagged(SECTION).join("\n")}`,
+    ).toEqual([]);
+    // 反例对照（防空真）：同一台扫描器对已知样本必须报满，对干净样本必须 0
+    expect(flagged(".x { opacity: .5 !important; transition-duration: 1ms !important; }")).toEqual([
+      "opacity: .5 !important",
+      "transition-duration: 1ms !important",
+    ]);
+    expect(flagged(".x { opacity: .5; transition-duration: 1ms; }")).toEqual([]);
   });
 
   it("I-3：档位块与 reduced 块之间零规则块（两块必须相邻）", () => {
