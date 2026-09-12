@@ -8,7 +8,7 @@
  *   ① 形状：`KbHit` → `Command`（id 用 chunkId 定身份、label 复用全站 `hitLabel`、hint 标「命中」）；
  *   ② 降级：空白串**不发 IPC** · IPC 抛错 ⇒ 空列表**且不抛**（`degraded` 标记上抛，不吞错——有 warn）；
  *   ③ 阴性样本：脏命中逐条跳过（null / 缺 chunkId / 类型错 / 碎片命中 / 笔记缺 noteId）；
- *   ④ 入参：limit 夹到 [1, 50]（Rust 侧同口径），`searchCommands` 的计划签名可用。
+ *   ④ 入参：limit 夹到 [1, 50]（上界与 Rust 同值 50；下界 1 是**前端自夹** —— M-4 的事实口径），`searchCommands` 的计划签名可用。
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -124,7 +124,7 @@ describe("② 防御性降级（AGENTS.md §3.4）", () => {
 });
 
 describe("④ 入参与计划签名", () => {
-  it("limit 夹到 [1, 50]（Rust 侧 clamp 同口径；NaN/负数/超大都不越界）", async () => {
+  it("limit 夹到 [1, 50]（上界与 Rust 同值；下界 1 由前端自夹；NaN/负数/超大都不越界）", async () => {
     invokeMock.mockResolvedValue([]);
     await kbSearchCommands("a", 999);
     await kbSearchCommands("a", 0);
@@ -136,6 +136,9 @@ describe("④ 入参与计划签名", () => {
       1,
       KB_SEARCH_DEFAULT_LIMIT,
     ]);
+    // M-1 锚死：上面两行右侧是**本模块自己的常量**（自引用 ⇒ 改常量照绿）——真值取自 Rust `kb_search.rs:23-24`
+    expect(KB_SEARCH_MAX_LIMIT).toBe(50);
+    expect(KB_SEARCH_DEFAULT_LIMIT).toBe(10);
   });
 
   it("searchCommands（计划 Interfaces 的逐字签名）返回命令数组，空白串短路", async () => {

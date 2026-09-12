@@ -20,7 +20,10 @@
  * 副作用：`open` 为真时在 `window` 上挂一个 keydown（只处理 Esc），关闭或卸载即解绑；
  *   输入框 `autoFocus` 会搬走焦点、关闭时**不还原**（与今日 28 个手写弹层一致 —— 焦点归还是批 4 的
  *   `Modal` 焦点管理范围）。
- * 边界：① **不做模糊搜索排序**（只对本地面板命令做大小写不敏感的子串过滤；T12 的检索结果由后端给序）；
+ * 边界：① **合并语义**（控制方 I-1 裁决 B，逐字口径）：「**有命中时页面命令恒在；零命中时按查询词
+ *   过滤并显示空态**」—— 页面命令只在**零命中**那一支才把查询词交给 `filterCommands`（有命中时它们
+ *   不参与过滤，导航入口不会因检索而消失；此前那句「页面命令恒在最前」不含过滤语义，属不实承诺）；
+ *   检索结果由后端给序、恒追在页面命令之后；
  *   ② **不做动效**（批 6）；③ 不认识任何 `focus*` 深链参数（T12 才收敛入口）；
  *   ④ 层级不写裸数字 —— 走 `zIndex("modal")` 六档标尺；
  *   ⑤ 组合态的 Esc（「只取消候选词」）归批 4 的 IME 原语，本文件只保证 **Enter 不误提交**。
@@ -68,14 +71,14 @@ function step(index: number, delta: number, size: number): number {
   return (Math.min(index, size - 1) + delta + size) % size;
 }
 
-/** 本地子串过滤（大小写不敏感）。空查询 = 全量 —— 「没输入时也看得到全部页面命令」是本面板的默认形态 */
+/** 本地子串过滤（大小写不敏感）。空查询 = 全量 —— I-1 裁决 B 下「有命中」那一支正是走空查询（不过滤） */
 function filterCommands(commands: readonly Command[], query: string): readonly Command[] {
   const q = query.trim().toLowerCase();
   if (!q) return commands;
   return commands.filter((c) => c.label.toLowerCase().includes(q));
 }
 
-/** 装配命令列表：注册表的 9 页 + 面板自带的对话面板入口（页面命令恒在最前，T12 的结果追在其后） */
+/** 装配命令列表：注册表的 9 页 + 面板自带的对话面板入口（T12 的检索结果恒追在这一组之后） */
 function buildCommands(onPick: (pick: PalettePick) => void): Command[] {
   const pages: Command[] = ALL_ENTRIES.map((e) => ({
     id: `page:${e.key}`,
@@ -121,9 +124,10 @@ export function CommandPalette({ open, onClose, onPick }: CommandPaletteProps) {
 
   // 命令表随渲染重建（11 条，成本可忽略）：`run` 闭包因此恒为最新，不需要为依赖稳定性再包一层 memo
   // T12：**检索结果**（`kb_search` 数据源）——取样（180ms 防抖 + seq 只认最后一次 + 失败降级）
-  // 整段在 `useKbPaletteSearch` 里，本组件只把结果与页面命令合并展示（页面命令恒在最前）。
-  const { commands: hits, degraded } = useKbPaletteSearch(open, query, (jump) => onPick({ kind: "hit", jump }));
-  const list = [...filterCommands(buildCommands(onPick), query), ...hits];
+  // 整段在 `useKbPaletteSearch` 里。**合并语义**（I-1 裁决 B）：「有命中时页面命令恒在；零命中时按
+  // 查询词过滤并显示空态」⇒ 只有零命中那一支才把查询词传进 `filterCommands`（空串 = 全量不过滤）。
+  const { commands: hits, degraded, skipped } = useKbPaletteSearch(open, query, (jump) => onPick({ kind: "hit", jump }));
+  const list = [...filterCommands(buildCommands(onPick), hits.length ? "" : query), ...hits];
   const activeAt = list.length === 0 ? -1 : Math.min(active, list.length - 1);
 
   if (!open) return null;
@@ -179,6 +183,15 @@ export function CommandPalette({ open, onClose, onPick }: CommandPaletteProps) {
             学习库检索不可用——只显示页面命令
           </div>
         ) : null}
+        {/* I-2：命中里**没有跳转目标**的条数要如实说出来 —— 旧版把它们静默丢掉后显示
+            「没有匹配的命令」是**假陈述**（学习库确实有匹配，只是没有可打开的入口） */}
+        {skipped > 0 ? (
+          <div className="ed-cmdk__note" data-testid="command-palette-skipped">
+            {list.length === 0
+              ? `没有可打开的命令（另有 ${skipped} 条无定位信息的命中）`
+              : `另有 ${skipped} 条无定位信息的命中（无跳转目标）`}
+          </div>
+        ) : null}
         <ul className="ed-cmdk__list" role="listbox" aria-label="命令列表" data-testid="command-palette-list">
           {list.map((cmd, i) => (
             <li
@@ -194,7 +207,7 @@ export function CommandPalette({ open, onClose, onPick }: CommandPaletteProps) {
               {cmd.hint ? <span className="ed-cmdk__hint">{cmd.hint}</span> : null}
             </li>
           ))}
-          {list.length === 0 ? (
+          {list.length === 0 && skipped === 0 ? (
             <li className="ed-cmdk__empty" data-testid="command-palette-empty">
               没有匹配的命令
             </li>
