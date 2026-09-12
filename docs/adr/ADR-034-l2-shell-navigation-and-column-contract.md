@@ -26,8 +26,9 @@
 - **`ColumnSpec` 是 7 个字段**：`{ page: PageKey, key, default, min, max, autoFoldBelow, pinnable }`。规格 §6.2 逐字只列 6 个 ⇒ **`page` 是实现的加法**，判据收益两条：① `columnsOf(page)` 能按页取列 ② 守卫能判「列不许挂在已删页上」。
 - **不取代 `useColumnLayout`**：选项 (b)「注册表自实现」被否决（会静默丢失 3 项今日无用例的运行时能力：`resetWidth` / SSR 守卫 / localStorage 异常），登记为**日后可能的合并方向，且不得声称能力对等**。
 - **键名 = 既有持久化键**（`layout:col-width:{key}` / `layout:col-fold:{key}`）——改名 = 用户已记住的列宽静默丢失（评审已按 `git show` 逐字比对，7 个旧键全部保留）。
+  > ⚠️ **加注⑥（2026-09-12 批 4 前置守卫评审 follow-up · 上句的证据归因；原文一字未改）**：上句「评审已按 `git show` 逐字比对，7 个旧键全部保留」是**单源**，来源 = `.superpowers/sdd/2026-09-11-frontend-redesign-batch3-shell/task-8-review.md:18`（「7 个旧持久化键逐字保留……**缺失 0**」与「仪器自检：故意把 `notes-list` 改名后重比 ⇒ 检出」**两半都在同一份里**）。批 3 收口评审 `batch-3-closing-review-t1-t6.md:347` **自陈**「T7 / T8 的任何内容……**一律未评审**」；批 3 台账 `progress.md:363` 只是**转述**（「**它**独立证实……7 个旧持久化键逐字保留」，它 = T8 评审）⇒ **不存在「两份独立评审」**（该措辞曾出现在批 4 台账 `progress.md:40`，控制方已于 2026-09-12 按前置守卫评审 I-1 更正为单源）。**独立的第二读数**由批 4 前置守卫评审给出（`.superpowers/sdd/2026-09-12-frontend-redesign-batch4-primitives/batch4-pre-guards-review.md` §六：脚本 `tmp/review-guards/histkeys.mjs` 复现 **7 个旧调用点 / 7 唯一键 / `MISSING_COUNT=0`**，并带「改名 ⇒ 检出、噪声串 ⇒ 不误命中」双向仪器自检）—— 那是**本批评审的独立复现**，**不是**批 3 的第二份评审。⇒ 引用本句时请引 `task-8-review.md:18`（+ 上述复现读数）；**不新增日常守卫**（历史对拍需要 `git show` 的树外证据）。
 - `pinnable` 全行 `false`：规格给了字段但**未给逐行值** ⇒ 取默认、无消费方，**登记给批 6**（与列折叠动效一起定）。
-  > ⚠️ **加注①（2026-09-12 批 4 前置对码更正 · 原 `:29`；原文一字未改）**：实测 `COLUMN_SPECS` 的 `pinnable` 是 **`true` 1 行 / `false` 12 行**，`true` 的那行是 **`notes-outline`**（`app/src/shell/columnRegistry.ts:50`，值由批 3 的 `92ea5d6b` 落库、**早于**本 ADR）⇒ **上句「全行 `false`」不成立**，本条是 ADR 的**简化表述有误**。依据是规格 §6.2 该行逐字「接线拖拽+记忆**或**删钩子」+ 注册表自身注释（`columnRegistry.ts:16-18` 已写明该例外）。🔴 **控制方 2026-09-12 裁决：代码对、ADR 错** ⇒ 批 6 定值时以「`notes-outline` = `true`、其余 12 行 = `false`」为起点。另：本 ADR `:77` 的「双向注记」段只登记了 `page` 与 `navActionsFull` 两处加法，**漏了这一处**。
+  > ⚠️ **加注①（2026-09-12 批 4 前置对码更正 · 原 `:29`；原文一字未改）**：实测 `COLUMN_SPECS` 的 `pinnable` 是 **`true` 1 行 / `false` 12 行**，`true` 的那行是 **`notes-outline`**（`app/src/shell/columnRegistry.ts:50`，值由批 3 的 `92ea5d6b` 落库、**早于**本 ADR）⇒ **上句「全行 `false`」不成立**，本条是 ADR 的**简化表述有误**。依据是规格 §6.2 该行逐字「接线拖拽+记忆**或**删钩子」+ 注册表自身注释（`columnRegistry.ts:16-18` 已写明该例外）。🔴 **控制方 2026-09-12 裁决：代码对、ADR 错** ⇒ 批 6 定值时以「`notes-outline` = `true`、其余 12 行 = `false`」为起点。另：本 ADR `:77` 的「双向注记」段只登记了 `page` 与 `navActionsFull` 两处加法，**漏了这一处**。⚠️ **登记（2026-09-12 前置守卫评审 follow-up · M-5）**：该注释的**后半句也不成立** —— 「这是本批唯一一处『规格没给值、计划者取默认』的字段」：批 3 至少另有三处「规格没给值、由本批取值」（`navActionsFull 1400` 规格未写明、A7 实测确立，见 §5 · `--nav-h = 56` 规格只给名字不给值，见 §4 · `ColumnSpec.page` 规格 §6.2 只列 6 个字段，见 §2）⇒ 该注释有**两处**表述不准。🔴 **只登记、不改该注释**：`columnRegistry.ts` 是批 3 产物，B14 已明令「不动 `columnRegistry.ts`」，改它需另行授权。
 - `settings-main` **不得喂 hook**（`clamp(860, 0, 0) = 0` ⇒ 0 宽静默故障）；它只取 `.default`（**单一真源，全仓该值只此一处**）。
 
 ### 3. 断点：单一真源 `shell/breakpoints.ts`，CSS 只许写「阈值 − 1」
@@ -109,7 +110,7 @@
 
 > ⚠️ **加注②（2026-09-12 批 4 前置对码更正 · 原 `:97` 行（上表第 1 行）的落点归属；上表原文一字未改）**：「保活三式不被改」的判据在 **`app/src/shell/navRegistry.test.ts:141-150`**（三式字面量逐条，实测 3/3）；**`app/src/shell/TopBar.persistent.test.tsx:175-212` 判的是另一件事** —— 两个常驻状态件在 `right` 插槽里的**结构尺 + 渲染尺**（实测该文件对 `mountedPages` /「保活」**0 命中**）。⇒ 该格第二个文件指错了对象（断言本身成立）。
 >
-> ⚠️ **加注③（2026-09-12 批 4 前置对码更正 · 原 `:102` 行（上表「断点」行）的数字；上表原文一字未改）**：断点是**六数**不是五数 —— `app/src/shell/breakpoints.ts` 现有 6 个键：`nav 1024` · `navFull 1180` · **`navActionsFull 1400`** · `twoCol 1100` · `threeCol 1024` · `outlineCol 1280`，`app/src/shell/breakpoints.test.ts:14-34` 逐字钉住这 6 个。⇒ 上表「五数」少算了 `navActionsFull 1400`（本 ADR §3 自己列的就是 6 个键）。
+> ⚠️ **加注③（2026-09-12 批 4 前置对码更正 · 原 `:102` 行（上表「断点」行）的数字；上表原文一字未改）**：断点是**六数**不是五数 —— `app/src/shell/breakpoints.ts` 现有 6 个键：`nav 1024` · `navFull 1180` · **`navActionsFull 1400`** · `twoCol 1100` · `threeCol 1024` · `outlineCol 1280`，`app/src/shell/breakpoints.test.ts:14-34` **字面量钉住其中 4 个**（`nav` `:15` · `twoCol` `:16` · `navFull` `:17` · `navActionsFull` `:32`），`threeCol` / `outlineCol` **只有相对序**（`:21-22` 的 `threeCol < twoCol < outlineCol`，全仓无字面量断言）⇒ 另 2 个改值（如 `threeCol` 1024→1000、`outlineCol` 1280→1290）**照样绿**。⇒ 上表「五数」少算了 `navActionsFull 1400`（本 ADR §3 自己列的就是 6 个键）。
 
 ## 登记（非本 ADR 管辖，供后续批次接手）
 
@@ -130,7 +131,7 @@
 | 新增守卫（`app/src/shell/`） | 覆盖的 ADR 条目 | 此前的现状 |
 |---|---|---|
 | `shellReset.test.ts` | §4 的「全局 `html,body,#root` reset 与 6px 滚动条同批落地」与「Chromium ≥121 二者互斥，仓内取 `::-webkit-scrollbar`」（原 `:43`） | **无判据** —— 全仓 0 个测试读 `app/index.html`（只有 `scripts/check-bundle-budget.mjs` 读构建产物） |
-| `columnKeys.freeze.test.ts` | §2 的「键名 = 既有持久化键（改名 = 用户已记住的列宽静默丢失）」（原 `:28`）：13 个键**逐字字面量冻结** + 持久化键前缀冻结 | **仅代码** —— 合规性验证表的「键名 == 旧持久化键」当时无守卫（批 3 只用 `git show` 人工比对过） |
+| `columnKeys.freeze.test.ts` | §2 的「键名 = 既有持久化键（改名 = 用户已记住的列宽静默丢失）」（原 `:28`）：13 个键**逐字字面量冻结** + 持久化键前缀冻结 | **仅代码** —— 合规性验证表的「键名 == 旧持久化键」当时无守卫（批 3 只用 `git show` 人工比对过：**单源 = T8 评审 `task-8-review.md:18`**，见 §2 下加注⑥） |
 
 **（二）T0 对码报告（`.superpowers/sdd/2026-09-12-frontend-redesign-batch4-primitives/task-0-report.md`）§四 五条「建议补写」登记：**
 
@@ -138,7 +139,7 @@
 |---|---|---|---|
 | **S-1** | 批 4 迁移 `shell/CommandPalette.tsx` / `App.tsx` 的 AI toast / dock 裸 `900` 的**授权与边界** | 本节上方已登记四条残留，但**正文没有对应的决策条**；批 4 计划的 T9 / T10 / T4 要按它执行 | **待批 4 承接**（T9 / T10 / T4） |
 | **S-2** | A3 四条声明里**哪几条是可迁移的判据、哪几条随迁移搬到原语层** | B13 逐字要求三条断言**同提交**搬到原语层；ADR §6 的 A3 只有 T7 的决策记录 | **待批 4 承接**（T7 / T10；B13） |
-| **S-3** | 🔴 `TopBar.test.tsx:182`（`data-testid="ai-toast"` 那条）在 T10 后**同样落空**，而 B13 的授权只覆盖 `:183/:184/:185` ⇒ **存在一条授权缺口** | `:182` 断言的是 `App.tsx` 的**源码文本**（`toContain('data-testid="ai-toast"')`）；B13 ④「`:182` 保留」只说了保留 testid 字符串，不等于「`:182` 不用改」 | **待批 4 承接**；🔴 **须控制方显式扩权到 4 条、或裁定 T10 在 `App.tsx` 保留该字面量**（本 ADR 不代裁） |
+| **S-3** | 🔴 `TopBar.test.tsx:182`（`data-testid="ai-toast"` 那条）在 T10 后**同样落空**，而 B13 的授权只覆盖 `:183/:184/:185` ⇒ **存在一条授权缺口** | `:182` 断言的是 `App.tsx` 的**源码文本**（`toContain('data-testid="ai-toast"')`）；B13 ④「`:182` 保留」只说了保留 testid 字符串，不等于「`:182` 不用改」 | **待批 4 承接**；🔴 **须控制方显式扩权到 4 条、或裁定 T10 在 `App.tsx` 保留该字面量**（本 ADR 不代裁）—— ⚠️ **时点差更正（2026-09-12 前置守卫评审 follow-up · M-4）**：**控制方同日已裁 `rulings.md` B15**（`:71-73`）⇒ **授权扩展到 4 条**（`:182`/`:183`/`:184`/`:185`），条件与 B13 相同（搬到**原语层**、**等价或更强**、**每条各带变异体**、逐条说明「改了哪条 / 为什么 / 强度为何不降」）；**语义要求** = `ai-toast` 这个 testid 仍须**渲染级可达**（改写后用**渲染级**断言证明「渲染出的元素带 `data-testid="ai-toast"`」，不再断言源码里出现过该字符串）。🔴 **本行的「须显式扩权」已不是待办：T10 不必为此再停一次**（`783a62ae` 的加注① 已回写 B14，本处补 B15） |
 | **S-4** | 规格 §6.2「本次改动」两条（会话详情头改粘性 / 笔记工具栏三层合并）的**承接** | 本节 `:115` 的登记给批 4/批 5，但**批 4 计划 19 个任务无人承接** | 🔴 **控制方已裁：由 T18 收口承接、或按批次归属登记** —— 见上文 §登记 下 `:115` 的就地加注④ |
 | **S-5** | 六档 z-index 的**消费进度**锚点 | ADR §6 只列六档与「刻意不做 CSS 变量」；批 4 的 T4 要迁 58 处 / 43 文件 / 17 值 | **待批 4 承接**（T4；**唯一真源** = `ui/zIndex.guard.test.ts` 的冻结名单） |
 
