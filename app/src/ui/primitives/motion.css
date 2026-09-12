@@ -35,6 +35,38 @@
  */
 
 
+/* ★ 强度三档（规格 §8.5 / R3.1）—— **本块必须写在下面 reduced-motion 块之前**：源序即优先级，
+   后写的 reduced-motion 覆盖带 `!important` ⇒ 系统偏好永远赢过用户选的档（§8.5 逐字「系统
+   `prefers-reduced-motion` 优先于档位」）；顺序写反 = 用户选的档位盖掉系统无障碍设置。
+   机器判据 = `motion-coverage.test.ts` 的「三档强度通道」describe（档位块行号 < reduced 块行号；
+   CSS 里的档位取值集合 === `MOTION_INTENSITIES`）。
+   ⚠️ 本块**不得**定义任何 `--ed-*` 变量（真源只有 `scripts/gen-tokens.mjs`；`style-seams.test.ts`
+   断言本文件的 `--ed-*` 定义恒 0）⇒ 档位差异一律**直接覆写属性**，不引私变量、不新造第二个真源。
+   ⚠️ 本块**不得**写 `animation:` / `animation-name:`（那会让这些选择器必须再进 reduced-motion 名单）
+   —— 只覆写 `animation-duration` / `animation-iteration-count`。 */
+
+/* ① 节能（eco）：只留响应层。环境层的循环动效「一次即止」；一次性入场直接跳终态（`both` 保持终态）。
+   编排层的「跳终态」由 JS 侧读档位决定 —— 本文件不得覆写时长真源。 */
+html[data-motion="eco"] .ed-skeleton::after,
+html[data-motion="eco"] .ed-probe,
+html[data-motion="eco"] .ed-empty-enter {
+  animation-duration: 1ms;
+  animation-iteration-count: 1;
+}
+
+/* ② 标准（standard，默认档）：四层全开 —— **故意留空**。缺省即标准，覆写任何属性都会把「默认档」
+   变成要维护的第二真源；空块保留是为了让「三档取值都在 CSS 里有落点」（值域闭合判据要求 CSS 的
+   取值集合与 `MOTION_INTENSITIES` 相等）。 */
+html[data-motion="standard"] {
+}
+
+/* ③ 丰富（rich）：环境层频率提高（幅度上限不动 —— §8.6.1 第 1 条「环境层永远不抢注意力」）。
+   只动 token 支撑的那条循环：`.ed-probe` 的 `2.4s` 是 `Loading.css` 的既有字面量、尚未 token 化
+   ⇒ 本档不给它新造第二个字面量（登记：环境层落点的档位节奏随 T13 的环境层落点一并定）。 */
+html[data-motion="rich"] .ed-skeleton::after {
+  animation-duration: calc(var(--ed-dur-skeleton, 1200ms) * 0.75);
+}
+
 /* ★ 名单 = 12 个 `.ed-*` **基类** + **每一处 `animation` 声明的选择器原文**（含伪元素）。
    ⚠️ 为什么伪元素必须逐字列出（T11 评审用 headless Chromium `--force-prefers-reduced-motion` 实测的 Critical）：
    `animation-duration` / `animation-iteration-count` **不是可继承属性** —— 覆盖写在宿主元素上，

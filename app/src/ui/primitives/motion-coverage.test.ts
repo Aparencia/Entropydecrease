@@ -24,6 +24,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { MOTION_INTENSITIES } from "../../motion/intensity";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const normalizeEol = (s: string): string => s.replace(/\r\n/g, "\n");
@@ -143,5 +144,37 @@ describe("★ 每一处 `animation` 声明的选择器都在名单里（`animati
       uncovered,
       `这些选择器声明了 animation 却不在 motion.css 的 reduced-motion 名单里（伪元素拿不到宿主元素的覆盖）：\n${uncovered.join("\n")}`,
     ).toEqual([]);
+  });
+});
+
+/* ── T6 追加段（R3.1）：三档强度通道的**源序**与**值域闭合**。本段**只追加** —— 上面两条 describe
+ * 与既有 import 一行未动；`:142` 的「每个 `animation` 选择器逐字进名单」是只读铁判据（G7）。
+ * 为什么源序是判据而不是注释：§8.5 逐字要求「系统 `prefers-reduced-motion` 优先于档位」，而在同一张
+ * 样式表里这**只能**靠源序实现（档位块先写、reduced-motion 块后写 ⇒ 后者的 `!important` 覆盖赢）；
+ * 把两块顺序对调，用户选的档位就会盖掉系统无障碍设置，且**没有任何其它判据会报错**。
+ * 口径：注释先**就地掩码**（换行保留 ⇒ 报告里的行号与真实文件一致；`stripComments` 会连注释里的换行
+ * 一起删掉、行号漂移）；掩码后取「档位块首个选择器」与「reduced-motion 块起始」的**行号**比对。 */
+describe("★ 三档强度通道：源序（档位块在 reduced-motion 块之前）与值域闭合", () => {
+  const masked = read("motion.css").replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "));
+  const tierAt = masked.search(/\[data-motion="(?:eco|standard|rich)"\]/);
+  const reducedAt = masked.indexOf("@media (prefers-reduced-motion");
+  const lineAt = (index: number): number => masked.slice(0, index).split("\n").length;
+
+  it("两块都在（防选择器改名把守卫静默关掉）", () => {
+    expect(tierAt, "motion.css 里找不到档位块（`html[data-motion=…]`）").toBeGreaterThanOrEqual(0);
+    expect(reducedAt, "motion.css 里找不到 reduced-motion 块").toBeGreaterThanOrEqual(0);
+  });
+
+  it("档位块行号 < reduced-motion 块行号（§8.5：系统设置永远赢过用户选的档）", () => {
+    expect(tierAt >= 0 && reducedAt >= 0, "两块必须都在，否则本条是空真").toBe(true);
+    expect(
+      lineAt(tierAt),
+      `档位块在第 ${lineAt(tierAt)} 行、reduced-motion 在第 ${lineAt(reducedAt)} 行 —— 顺序写反 = 用户选的档位盖掉系统无障碍设置`,
+    ).toBeLessThan(lineAt(reducedAt));
+  });
+
+  it("值域闭合：CSS 里的档位取值集合 === MOTION_INTENSITIES（多一档 / 少一块都红）", () => {
+    const inCss = [...new Set([...masked.matchAll(/\[data-motion="([a-z]+)"\]/g)].map((m) => m[1]))].sort();
+    expect(inCss, "CSS 的档位取值与 motion/intensity.ts 的名册不一致").toEqual([...MOTION_INTENSITIES].sort());
   });
 });
