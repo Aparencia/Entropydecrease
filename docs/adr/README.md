@@ -38,6 +38,7 @@
 | ADR-032 | [前端设计系统与 token 层落地（`--ed-` 前缀单源生成 · 纸墨双档色阶 · 四档墨度的可及性裁决 · z-index 六档 · 自绘线性图标）](./ADR-032-frontend-design-system-tokens.md) | 已接受 | 2026-09-11 |
 | ADR-033 | [L1 原语层与视图层契约（9 类原语落点 · 依赖方向 · CSS 类交互态 · `[data-phase]` 动效接缝 · 退场指针门控 · 弹层唯一实现 · 阴影定值与 `--due` 二次修正）](./ADR-033-l1-primitives-and-view-layer-contract.md) | 已接受（批 0-D 落地） | 2026-09-11 |
 | ADR-034 | [L2 壳层契约（导航注册表 · 列契约 · 断点单一真源 · 窗口尺寸与 `--nav-h` · 溢出两级 · 六档 z-index）](./ADR-034-l2-shell-navigation-and-column-contract.md) | 已接受（批 4 开工前补写，决策本体是批 3 的 A1–A7） | 2026-09-12 |
+| ADR-035 | [L4 动效纲领与引擎（GSAP 唯一入口 · token 真源 · 三档强度 · 双基调 · 位移上限）](./ADR-035-l4-motion-grammar-and-engine.md) | 已接受（批 6 波 A 落地，决策本体是规格 §8 与批 6 的 R0–R12 裁决） | 2026-09-13 |
 
 ## 编号规则
 
