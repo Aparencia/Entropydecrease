@@ -155,7 +155,9 @@ describe("RefineWorkbench 行级染色与差异视图（批 3 / 问题11）", ()
     expect(badgeHeading).not.toBeNull();
     expect(badgeHeading?.textContent).toBe("标题修改");
     expect(badgeHeading?.querySelectorAll("span").length).toBe(1);
-    // Assert：栏内无闭合标签残片（错位插入会把 `</h2>` 拆成游离文本 `<` + `/h2>`）
+    // Assert：栏内无闭合标签残片（错位插入会把 `</h2>` 拆成游离文本 `<` + `/h2>`）。
+    // 先钉住栏非空，否则两条 `not.toContain` 在「栏取到空元素」时空真。
+    expect(rightPane.textContent).toContain("标题修改");
     expect(rightPane.textContent).not.toContain("<");
     expect(rightPane.textContent).not.toContain("/h");
   });
