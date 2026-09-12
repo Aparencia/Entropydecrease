@@ -15,14 +15,17 @@
  *      ⑤未登记文件 = 0 ⑥防真空对照）—— `describe.each` 让三组用例**各自具名**，失败可单点定位。
  *
  * ★ 第 ⑦ 条（计划 M3/V4 点名必须补）：**调用点不得用行内 `style` 覆盖 `Surface` 的底/圆角/边框**
- *   （ADR-033 §4：`style` 是纯透传、**视觉权威在类**）。今日域内 `<Surface` 开标签 **0 个** ⇒ 该判据
- *   对真实代码**空真**；故它自带正反 fixture（正例必命中 / 布局反例必不命中 / 域外样本不在域内）
- *   并冻结 `FROZEN_SURFACE_TAG_TOTAL`（T17-B 迁移后必须手工抬高 ⇒ 空真结束）。
+ *   （ADR-033 §4：`style` 是纯透传、**视觉权威在类**）。迁移前域内 `<Surface` 开标签 **0 个** ⇒ 该判据
+ *   对真实代码**空真**；故它自带正反 fixture（正例必命中 / 布局反例必不命中 / 域外样本不在域内）。
+ *   ⚠️ T15a 后本件**不再**断言「标签数 == `FROZEN_SURFACE_TAG_TOTAL`」（那会让任何新视图用 `<Surface>`
+ *   必然红）—— 改由 `surfaceTagRegistry.test.ts` ⑪ 的**新增调用点登记制**判：登记即计数、总数 ==
+ *   Σ登记值 == Σ实测。本件只保留「标签数 == Σ 登记值」这一条**交叉**自证（两件判据对同一把尺子）。
  *
  * ★ 变异体（`tmp/t17a/run-mutants.mjs`，**每个变异新解一棵导出树** · CONTROL 在冻结提交的新解树上取）：
  *   M1 恢复一处 `border: "1px solid #e5e7eb"` ⇒ ①红 · M2 调用点新增 `boxShadow:` 字面量 ⇒ 阴影组红
  *   （**阴影红线**）· M3 行内 `style` 覆盖 `Surface` 底色 ⇒ ⑦红 · M4 新增 `borderRadius: 6` ⇒ 圆角组红 ·
  *   M5 删基线一行 ⇒ ④/③红 · M6（反例守卫，**必须绿**）新增合法档 `borderRadius: 8` ⇒ 全绿。
+ *   （T15a 的 M1–M6 是**另一组**：`<Surface>` 调用点登记制，见 `surfaceTagRegistry.test.ts`。）
  *
  * 副作用：只读磁盘（递归遍历 `app/src`）。边界：**文本级**判据、不做 AST；切片外余量（边框 28 · 圆角 28 · 阴影 3 文件）只冻结不迁移，去向见 `surfaceBaseline.ts` 与 `tmp/t17a/slice.md`。
  */
@@ -30,25 +33,29 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { relOf, readLines, stripComments, walkSources } from "./sliceScan";
 import {
   BORDER_ANCHOR, FROZEN_BORDER_BY_FILE, FROZEN_BORDER_TOTAL,
   FROZEN_RADIUS_OUTLIER_BY_FILE, FROZEN_RADIUS_OUTLIER_TOTAL,
-  FROZEN_SHADOW_BY_FILE, FROZEN_SHADOW_TOTAL, FROZEN_SURFACE_TAG_TOTAL,
-  RADIUS_OUTLIER_ANCHOR, SHADOW_ANCHOR, SHADOW_RESIDUAL, type ShadowResidualKind,
+  FROZEN_SHADOW_BY_FILE, FROZEN_SHADOW_TOTAL,
+  RADIUS_OUTLIER_ANCHOR, SHADOW_ANCHOR,
 } from "./surfaceBaseline";
-import { BORDER_RESIDUAL, RADIUS_RESIDUAL, SURFACE_RESIDUAL_WHY } from "./surfaceResidual";
+import { relOf, stripComments, walkSources } from "./sliceScan";
+import {
+  absOf as absOfSrc, inDomain, overridesSurface, scanSurfaceTags, surfaceTagsIn, textOf as textOfSrc,
+} from "./surfaceScan";
+import {
+  BORDER_RESIDUAL, RADIUS_RESIDUAL, SHADOW_RESIDUAL, SURFACE_RESIDUAL_WHY,
+  SURFACE_TAG_REGISTRY, type ShadowResidualKind,
+} from "./surfaceResidual";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** `app/src` —— 基线的键就是相对这个目录的正斜杠路径。 */
 const SRC = join(HERE, "..", "..");
 
-/** 域口径（判据与 fixture 共用**同一个**谓词，防"两套口径"） */
-const inDomain = (rel: string): boolean => !/\.test\.tsx?$/.test(rel) && !rel.startsWith("ui/primitives/");
+/** 域口径与读法**全部来自共享件** `surfaceScan.ts`（域谓词只有一份实现） */
+const absOf = (rel: string): string => absOfSrc(SRC, rel);
+const textOf = (rel: string): string => textOfSrc(SRC, rel);
 const FILES: readonly string[] = walkSources(SRC).map((abs) => relOf(SRC, abs)).filter(inDomain);
-const absOf = (rel: string): string => join(SRC, ...rel.split("/"));
-/** 剥注释后的整段文本（仪器只此一处取用，判据与自证同源） */
-const textOf = (rel: string): string => readLines(absOf(rel)).stripped.join("\n");
 /** 「处」口径：整段文本上的匹配次数（`g` 只用于统计） */
 const countOcc = (text: string, re: RegExp): number =>
   (text.match(new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`)) ?? []).length;
@@ -144,42 +151,8 @@ describe.each(FAMILIES)("$label（T17-A 冻结基线，只许降）", (f) => {
 });
 
 /* ───────── ⑦ ADR-033 §4 的机器判据：调用点不得用行内 `style` 覆盖 `Surface`（计划 M3/V4） ───────── */
-/** 被覆盖即违规的属性键（底/圆角/边框三族；**不含** `padding/margin/width` 等布局口 —— 那是 `style` 的合法用途） */
-const OVERRIDE_KEYS =
-  /(?:^|[,{;\s])(background|backgroundColor|backgroundImage|border|borderColor|borderWidth|borderStyle|borderTop|borderBottom|borderLeft|borderRight|borderRadius)\s*:/;
-
-/**
- * 单个 `<Surface …>` 开标签是否用行内 `style` 覆盖了底/圆角/边框。
- * 边界（**文本级启发式，不是 AST**）：假阳 = JSX 文本节点里出现的字面量 `<Surface`（实测本仓 0 例）；
- *   假阴 = 样式对象经变量间接给出（`style={S}` / `style={pick()}`）⇒ 判据只认 `style={{` 的字面对象。
- *   `style={{ padding: 8 }}` 这类**纯布局**写法**不**算违规（ADR-033 §4：`style` 是透传，供布局用）。
- */
-function overridesSurface(tag: string): boolean {
-  const at = tag.search(/\bstyle\s*=\s*\{/);
-  return at >= 0 && OVERRIDE_KEYS.test(tag.slice(at));
-}
-
-/** 取 `<Surface …>` 的整个开标签：从 `<Surface` 起按 `{}` 深度找深度 0 的 `>`（跨行标签也能取全） */
-function surfaceTagsIn(text: string): { tag: string; line: number }[] {
-  const out: { tag: string; line: number }[] = [];
-  const re = /<Surface(?=[\s/>])/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    let i = m.index + 8;
-    let depth = 0;
-    while (i < text.length) {
-      const c = text[i];
-      if (c === "{") depth++;
-      else if (c === "}") depth--;
-      else if (c === ">" && depth === 0) break;
-      i++;
-    }
-    out.push({ tag: text.slice(m.index, i + 1), line: text.slice(0, m.index).split("\n").length });
-  }
-  return out;
-}
-
-const SURFACE_TAGS = FILES.flatMap((rel) => surfaceTagsIn(textOf(rel)).map((t) => ({ file: rel, ...t })));
+// 仪器在 `surfaceScan.ts`（T15a 析出：⑦ 与 ⑪ 的登记制共用同一把尺子，防两套口径漂移）
+const SURFACE_TAGS = scanSurfaceTags(FILES, textOf);
 const OVERRIDES = SURFACE_TAGS.filter((t) => overridesSurface(t.tag));
 
 describe("⑦ 调用点不得用行内 `style` 覆盖 `Surface` 的底/圆角/边框（ADR-033 §4）", () => {
@@ -188,7 +161,7 @@ describe("⑦ 调用点不得用行内 `style` 覆盖 `Surface` 的底/圆角/�
     expect(hits, `行内 style 覆盖了 Surface 的视觉语义（视觉权威必须在类上）：\n${hits.join("\n")}`).toEqual([]);
   });
 
-  it("启发式双侧自证 + 非真空登记：正例必命中 · 布局反例必不命中 · 域外样本不在域内 · 标签数 == 冻结值", () => {
+  it("启发式双侧自证 + 登记面自证：正例必命中 · 布局反例必不命中 · 域外样本不在域内 · 标签数 == Σ 登记值", () => {
     expect(overridesSurface('<Surface style={{ background: "#fff" }}>'), "底色覆盖没被命中").toBe(true);
     expect(overridesSurface('<Surface\n  className="card"\n  style={{ borderRadius: 8 }}\n>'), "跨行 + 圆角覆盖没被命中").toBe(true);
     expect(overridesSurface('<Surface style={{ border: "1px solid #e5e7eb" }}>'), "边框覆盖没被命中").toBe(true);
@@ -198,9 +171,10 @@ describe("⑦ 调用点不得用行内 `style` 覆盖 `Surface` 的底/圆角/�
     expect(existsSync(absOf("ui/primitives/Surface.test.tsx")), "域外样本文件不存在 ⇒ 排除自证无效").toBe(true);
     expect(inDomain("ui/primitives/Surface.test.tsx"), "原语层/测试文件掉进了域内").toBe(false);
     expect(inDomain("components/GoalCard.tsx"), "域内样本被误排除").toBe(true);
-    // 空真登记：今日 0 个 `<Surface>` ⇒ 上面那条 0 命中是**空真**；T17-B 迁移后必须手工抬高
-    expect(SURFACE_TAGS.length, "调用点里出现了 <Surface> ⇒ 请抬高 FROZEN_SURFACE_TAG_TOTAL 并复核 ⑦ 已变为有真实输入").toBe(
-      FROZEN_SURFACE_TAG_TOTAL,
+    // 空真登记：迁移前 0 个 `<Surface>` ⇒ 那条 0 命中是**空真**；T17-B 迁进 14 个后 ⑦ 第一次有真实输入。
+    // T15a 修正：标签数不再钉死常数，而须**恰等于登记值之和**（登记即计数；增长走 ⑪ 的登记制通道）
+    expect(SURFACE_TAGS.length, "调用点里的 `<Surface>` 数 ≠ 登记表之和 ⇒ 请走 ⑪ 的登记制（登记 + 抬高总数 + 同步锚）").toBe(
+      SURFACE_TAG_REGISTRY.reduce((a, e) => a + e.count, 0),
     );
   });
 });

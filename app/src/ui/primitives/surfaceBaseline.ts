@@ -209,6 +209,19 @@ export const FROZEN_SHADOW_BY_FILE: Readonly<Record<string, number>> = {
  *   「调用点不得用行内 `style` 覆盖原语语义」这条判据对真实代码是**空真**的。T17-B 迁进 14 个开标签后
  *   该判据**第一次有了真实输入**（同批实测行内覆盖 = **0**，即 14 个开标签无一用 `style` 覆盖底/圆角/边框）。
  * 只许降（再迁一处 ⇒ 手工收紧本常数；**不许**为图省事把它调大去容纳未迁的调用点）。
+ *
+ * ★ **T15a 判据修正（控制方裁决 · 2026-09-12）：由「标签数 == 冻结值」改为「新增调用点登记制」**
+ *   事实：批 5 任何新视图只要用 `<Surface>` 就必然红（14 是批 4 的迁移面，而本批纪律是
+ *   `*Baseline.ts` 只读、向下重同步）⇒ T9 被迫改用 token 变量绕开原语。修正：**允许新文件把它的
+ *   `<Surface>` 调用点登记进逐文件表**（登记即计数），在保留全部防漂移牙齿的前提下允许合法增长。
+ *   **这不是放宽**：
+ *     · 既有 9 个文件（T17-B 迁移快照）的逐文件上限**原样锁死** —— 表 `≤` + 下列
+ *       `SURFACE_TAG_FROZEN_LEGACY_COUNT` 之和锁 + 「表 > 实测 ⇒ 红」三条一起把 legacy 钉住；
+ *     · 登记条目只许给**原本不在表里**的文件，且 `count` 必须**恰等于**实测（不是 ≤）；
+ *     · `FROZEN_SURFACE_TAG_TOTAL == Σ 登记值` 且 `== Σ 实测(逐文件)`，锚条数同步；
+ *     · 未登记文件的命中仍然 = 0；登记的文件必须**真实存在 ∧ 此刻仍命中**（防僵尸登记）。
+ *   登记表 = `surfaceResidual.ts` 的 `SURFACE_TAG_REGISTRY`（理由逐条在表里；放彼处是因为本件
+ *   已贴近 300 行硬限，且该件正是「登记为什么」的归处）。
  */
 export const FROZEN_SURFACE_TAG_TOTAL = 14;
 
@@ -221,38 +234,28 @@ export const BORDER_ANCHOR = { entries: 107, file: "components/action-center/Act
 export const RADIUS_OUTLIER_ANCHOR = { entries: 108, file: "components/KnowledgeSystemWizard.tsx", value: 9 } as const;
 export const SHADOW_ANCHOR = { entries: 24, file: "components/NoteRowContextMenu.tsx", value: 1 } as const;
 
-/** 阴影残留的分类：`exception` = 结构上表达不了 · `anchored-menu` = B1 锚定菜单（不迁原语）· `backlog` = 切片外余量 */
-export type ShadowResidualKind = "exception" | "anchored-menu" | "backlog";
+/**
+ * ★ T17-B 迁移面的**冻结上界**（T15a 修正的牙齿）：`SURFACE_TAG_REGISTRY` 里这些文件的登记值之和
+ * **必须恒等于** `FROZEN_SURFACE_TAG_TOTAL`（今日 14）。
+ *
+ * Why 需要它（否则修正会漏出一条自助抬高的通道）：`FROZEN_SURFACE_TAG_TOTAL == Σ 登记值` 这条只会
+ *   在**手改总数时不改表**的情况下红。若拿掉本常数，一个够耐心的人可以「把某个既有文件的登记值降 1
+ *   ＋ 新登记一个小文件 ＋ 总数不动」——三条判据全绿，而既有文件的实测命中仍在 ⇒ 那条通道等于
+ *   把 legacy 面腾出来给新调用点。本常数堵死它：**新增条目只能靠抬高总数，而总数对 9 个既有文件
+ *   的实测值是一个紧上界**（Σ 实测 ≤ 总数，见 `surfaceRatchet.test.ts` ⑪）。
+ * 与迁移面**同向**：真迁走一处 ⇒ 手工收紧本常数 + 总数 + 表值（三处同改）。
+ */
+export const SURFACE_TAG_FROZEN_LEGACY_COUNT = 14;
 
 /**
- * 允许残留的**逐文件理由**（照 `loadingBaseline.ts` 的 `RESIDUAL` 范式）。
- * 每条都必须：分类合法 ∧ 理由非空 ∧ 该文件此刻**仍然命中** —— 防"僵尸豁免"（一处被迁走却仍挂在
- * 豁免表里，下一个人就会以为它还在）。键集必须**逐字等于**「冻结表里值 > 0」的键集（两侧都查）。
+ * 登记制的锚（与三条棘轮的锚同形、独立；`entries` = 登记表条数 · `file/value` = 一个具名登记的
+ * 冻结值）——防「登记表被静默清空 / 仪器把它读成 0 而总数判据仍绿」。**新登记 = 手工同步本锚。**
  */
-export const SHADOW_RESIDUAL: readonly { file: string; kind: ShadowResidualKind; reason: string }[] = [
-  { file: "components/AiConversationDock.tsx", kind: "exception", reason: "`-8px 0 24px` 是**方向性**边缘投影（dock 向左升起）；`--ed-shadow-1/2` 是双向环境投影（`0 1px 2px …, 0 4px 12px …`）⇒ 换成 token 会丢掉「从右边滑出来」的暗示，属观感变化，登记给批 5" },
-  { file: "components/BrowserChrome.tsx", kind: "anchored-menu", reason: "B1 锚定菜单族（计划 §表 4 的 TABLE4_ALIAS，`data-app-menu` 右键菜单，`zIndex(\"popover\")`）⇒ 不迁原语；T17-B 第 1 批已把字面量换成 `boxShadow: \"var(--ed-shadow-1)\"`（token 引用不是字面量）" },
-  { file: "components/CanvasNodeConcept.tsx", kind: "backlog", reason: "不在 B11 切片内（画布节点族）⇒ 余量登记给批 5/7" },
-  { file: "components/CanvasNodeModel.tsx", kind: "backlog", reason: "不在 B11 切片内（画布节点族）⇒ 余量登记给批 5/7" },
-  { file: "components/CanvasNodeQuestion.tsx", kind: "backlog", reason: "不在 B11 切片内（画布节点族）⇒ 余量登记给批 5/7" },
-  { file: "components/CaptureOverlayPanel.tsx", kind: "exception", reason: "`0 0 0 9999px rgba(0,0,0,0.45)` 是**用巨扩散当全屏遮罩**，不是投影；且该文件是 B2 的「不迁覆盖层」⇒ 结构上无法由 `--ed-shadow-*` 承载" },
-  { file: "components/GroupRowContextMenu.tsx", kind: "anchored-menu", reason: "B1 的 `NON_MIGRATED_14` 成员（硬守卫：该文件源码不得出现 `ui/primitives`）⇒ 不迁原语；T17-B 第 1 批已把字面量换成 `boxShadow: \"var(--ed-shadow-1)\"`（token 引用不是字面量）" },
-  { file: "components/GroupSidebarRow.tsx", kind: "anchored-menu", reason: "组色选择浮层（`position:absolute; top:100%` + `zIndex(\"popover\")`）⇒ 锚定菜单族，同 B1 处置" },
-  { file: "components/KnowledgeCanvasView.tsx", kind: "exception", reason: "`0 2px 8px rgba(15,118,110,0.25)` 是**语义色**（青绿）投影，配根节点 `background:#0f766e`；`--ed-shadow-1/2` 是暖墨中性投影 ⇒ 换 token 会丢语义，需批 5/8 裁决" },
-  { file: "components/KnowledgeGraphView.tsx", kind: "exception", reason: "`boxShadow: data.focused ? \"0 0 0 2px #fff, 0 0 0 4px #0f766e\" : \"…\"` 是**表达式双态**，focused 分支是焦点环不是投影 ⇒ 需逐分支改写，不在本批" },
-  { file: "components/NoteEditView.tsx", kind: "anchored-menu", reason: "B1 的 `NON_MIGRATED_14` 成员（高亮气泡，透明点击层）⇒ 不迁原语" },
-  { file: "components/NoteHeaderActions.tsx", kind: "anchored-menu", reason: "笔记颜色选择浮层（`data-testid=\"note-color-picker-pop\"`，`zIndex(\"popover\")`）⇒ 锚定菜单族" },
-  { file: "components/NoteLinkToSystem.tsx", kind: "anchored-menu", reason: "B1 的 `NON_MIGRATED_14` 成员（透明层）⇒ 不迁原语" },
-  { file: "components/NoteListBatchMenu.tsx", kind: "anchored-menu", reason: "B1 的 `NON_MIGRATED_14` 成员（批量菜单）⇒ 不迁原语" },
-  { file: "components/NoteMoveToGroupMenu.tsx", kind: "anchored-menu", reason: "B1 的 `NON_MIGRATED_14` 成员（移动菜单）⇒ 不迁原语" },
-  { file: "components/NoteRowContextMenu.tsx", kind: "anchored-menu", reason: "B1 的 `NON_MIGRATED_14` 成员（行右键菜单）⇒ 不迁原语；本文件同时是阴影棘轮的锚" },
-  { file: "components/RichEditorView.tsx", kind: "anchored-menu", reason: "B1 的 `NON_MIGRATED_14` 成员（高亮气泡）⇒ 不迁原语" },
-  { file: "components/RouteInfoPopover.tsx", kind: "anchored-menu", reason: "B1 的 `NON_MIGRATED_14` 成员（路由信息气泡）⇒ 不迁原语" },
-  { file: "components/ScreenSelectOverlay.tsx", kind: "exception", reason: "`0 0 0 1px rgba(255,255,255,0.25)` 是**白色反相描边环**（截图上的框选提示），不是投影；且该文件是 B2 的「不迁覆盖层」" },
-  { file: "components/SessionRowContextMenu.tsx", kind: "anchored-menu", reason: "B1 的 `NON_MIGRATED_14` 成员（会话行右键菜单）⇒ 不迁原语" },
-  { file: "components/SystemStatusBadge.tsx", kind: "anchored-menu", reason: "徽标的点击浮层（白底 + 边框 + `zIndex(\"popover\")`）⇒ 锚定菜单族" },
-  { file: "components/WindowSelectCard.tsx", kind: "anchored-menu", reason: "「推荐窗口」下拉浮层（`position:absolute; top:100%`）⇒ 锚定菜单族" },
-  { file: "components/chat/ChatLaunchMenu.tsx", kind: "anchored-menu", reason: "B1 的 `NON_MIGRATED_14` 成员（T13-b 从 `pages/ChatPage.tsx` 搬来的同一段）⇒ 不迁原语" },
-  { file: "components/note-selection/SelectionActionMenu.tsx", kind: "anchored-menu", reason: "B1 的 `NON_MIGRATED_14` 成员（选区动作菜单）⇒ 不迁原语" },
-];
+export const SURFACE_TAG_ANCHOR = { entries: 9, file: "components/TaskConversationView.tsx", value: 3 } as const;
 
+/**
+ * ★ 阴影残留的分类与逐文件理由（`ShadowResidualKind` / `SHADOW_RESIDUAL`）**已移到
+ *   `surfaceResidual.ts`** —— T15a 的登记制用的正是 `surfaceResidual` 那件「登记为什么」的归处
+ *   （照 `loadingBaseline.ts` 的 `RESIDUAL` 范式），而本件已贴近 300 行硬限：两者同住会顶红
+ *   `line-limits`。判据（`surfaceRatchet.test.ts` ⑧）逐条未改，只是导入来源换了一件。
+ */
