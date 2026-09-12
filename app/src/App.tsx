@@ -12,26 +12,34 @@
  *                 确认后 stop_live_session 再 close，取消则采集继续。
  *              ai:task-update 全局 toast（REQ-145 第二通道）与采集状态无关，保留。
  */
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+// 批 2 包体治理：课堂页（默认页）**保持静态 import**。
+// @ai-context: 它是首屏必渲染的页面 —— 改成 lazy 只是把同一批字节挪进动态 chunk，
+//   首屏仍要多一次 chunk 往返，且预算读数会失真（控制方 2026-09-12 裁决 2 末条认可该判断）。
 import ClassroomPage from "./pages/ClassroomPage";
-import NotesPage from "./pages/NotesPage";
-import SessionsPage from "./pages/SessionsPage";
+// 批 2 包体治理：其余 8 个页面从静态 import 改为按页动态 import。
+// @ai-context: 「保留挂载（TD-004）」的语义按页保留 —— **访问过的页常驻、永不卸载**；
+//              只是「从未访问过的页」不再进入首屏 module graph。
+// @ai-context: 不引入路由库（规格 §3 红线 2）：入口仍是 useState<Page> + NAV_ITEMS，
+//              只是每个页面成为一个独立 chunk。
+const NotesPage = lazy(() => import("./pages/NotesPage"));
+const SessionsPage = lazy(() => import("./pages/SessionsPage"));
 // v0.20.5：行动域页（做——行动中心独立成页，意图分层）
-import ActionPage from "./pages/ActionPage";
+const ActionPage = lazy(() => import("./pages/ActionPage"));
 // v0.20.10（批 5，用户问题 6）：复习域页（练——复习面独立顶层 Tab；spec §9 二期兑现）
-import ReviewPage from "./pages/ReviewPage";
+const ReviewPage = lazy(() => import("./pages/ReviewPage"));
 // v0.16.0：AI 对话页（纯聊天 + AI 任务对话视图——DSH 交互范式）
-import ChatPage from "./pages/ChatPage";
+const ChatPage = lazy(() => import("./pages/ChatPage"));
 // 2026-08-21 用户需求：设置页（课堂助手设置类面板迁出，单页滚动+分组）
-import SettingsPage from "./pages/SettingsPage";
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 // v0.13.1：知识体系页（三时钟纪律——体系进周/季度视图，不入每日复习面）
-import KnowledgePage from "./pages/KnowledgePage";
+const KnowledgePage = lazy(() => import("./pages/KnowledgePage"));
 // v0.18.0：学习目标页（意图层——独立 Tab，零叙事元素）
-import GoalsPage from "./pages/GoalsPage";
+const GoalsPage = lazy(() => import("./pages/GoalsPage"));
 // REQ-274（v0.19.4）：全局 AI 对话面板（丙案——按需唤起 + 内容保活）
 import AiConversationDock from "./components/AiConversationDock";
 import AppErrorBoundary from "./components/AppErrorBoundary";
@@ -92,10 +100,42 @@ function App() {
   );
 }
 
+/**
+ * PageSlot — 页面容器：首访挂载 + 保活 + display 门控 + 独立 Suspense。
+ *
+ * @ai-context: 批 2 包体治理的挂载闸门，也是「保留挂载」语义的唯一实现点。
+ *   · mounted=false ⇒ 整棵子树不渲染 ⇒ 该页的 lazy chunk **不会被请求**（首屏收益的来源）；
+ *   · mounted=true 之后永不回到 false ⇒ 已访问页面常驻（TD-004 保活语义，状态与事件监听不重置）；
+ *   · 每页一个独立 Suspense（fallback=null）：只有**新挂载**的页会挂起，
+ *     已经可见的页不会因为邻居加载而被替换成 fallback（避免可见的闪烁）。
+ * @ai-context: 为什么 fallback 是 null 而不是原语层的 Loading：本批是**尺寸治理批**，
+ *   引入原语会把它连同 CSS 一起拉进首屏，与目标冲突；「首访加载态」登记给批 3/4
+ *   （壳层与加载原语一起做），见计划 Task 11 的瓶颈清单。
+ * @ai-context: 动态 import 失败时 React 会把它抛到最近的错误边界 —— App.tsx 的
+ *   AppErrorBoundary 仍在最外层包着 MainShell，因此「chunk 加载失败」有兜底 UI，不会白屏。
+ * 副作用：无。边界：children 是懒组件元素，未 mounted 时不会被 React 渲染 ⇒ 不触发 dynamic import。
+ */
+function PageSlot({ show, mounted, children }: { show: boolean; mounted: boolean; children: React.ReactNode }) {
+  if (!mounted) return null;
+  return (
+    <div style={{ flex: 1, display: show ? "block" : "none", overflow: "hidden" }}>
+      <Suspense fallback={null}>{children}</Suspense>
+    </div>
+  );
+}
+
 /** 主导航壳（唯一实例由 App 包入 provider——同窗单实例纪律；状态与事件监听
  *  保留挂载语义不变，TD-004） */
 function MainShell() {
   const [page, setPage] = useState<Page>("classroom");
+  // 批 2：首访挂载集合。初始只有默认页 —— 其余页面在首次被选中后的下一帧挂载。
+  // @ai-context: 用 useState + useEffect 而不是「渲染期 ref.add」：渲染期改 ref 在
+  //   StrictMode 下虽幂等，但仍是渲染副作用；本仓 React 19 StrictMode 会双调用渲染。
+  //   代价是切页时首帧内容区为空（本来也要等 chunk 下载），无观感回归。
+  const [mountedPages, setMountedPages] = useState<ReadonlySet<Page>>(() => new Set<Page>(["classroom"]));
+  useEffect(() => {
+    setMountedPages((prev) => (prev.has(page) ? prev : new Set(prev).add(page)));
+  }, [page]);
   // 2026-08 A4：跨页直达目标会话（课堂助手融合完成 → 会话页自动打开详情）
   const [focusSessionId, setFocusSessionId] = useState<number | null>(null);
   // v0.7.1：跨页直达目标笔记（会话页"查看笔记" → 笔记页自动选中并滚动可见）
@@ -309,7 +349,7 @@ function MainShell() {
       {/* 页面区（TD-004：保留挂载 + display 切换——页面切换不重挂载，
           避免 ClassroomPage 每次进入重复窗口枚举 100-500ms 停顿；状态与事件监听保留） */}
       <main style={{ flex: 1, minHeight: 0, display: "flex" }}>
-        <div style={{ flex: 1, display: page === "classroom" ? "block" : "none", overflow: "hidden" }}>
+        <PageSlot show={page === "classroom"} mounted={mountedPages.has("classroom")}>
           {/* 2026-08 A4：融合完成直达会话（onOpenSessions 跳转 + focusSessionId 定位） */}
           <ClassroomPage
             onOpenSessions={(id) => {
@@ -317,8 +357,8 @@ function MainShell() {
               setPage("sessions");
             }}
           />
-        </div>
-        <div style={{ flex: 1, display: page === "sessions" ? "block" : "none", overflow: "hidden" }}>
+        </PageSlot>
+        <PageSlot show={page === "sessions"} mounted={mountedPages.has("sessions")}>
           {/* v0.7.1：active 驱动列表刷新（display:none 挂载不刷新根治）+ 查看笔记跨页直达 */}
           <SessionsPage
             focusSessionId={focusSessionId}
@@ -332,8 +372,8 @@ function MainShell() {
             active={page === "sessions"}
             onOpenNote={(id) => openNotePlain(id)}
           />
-        </div>
-        <div style={{ flex: 1, display: page === "notes" ? "block" : "none", overflow: "hidden" }}>
+        </PageSlot>
+        <PageSlot show={page === "notes"} mounted={mountedPages.has("notes")}>
           {/* v0.7.1：focusNoteId 定位 + 来源会话反向跳转（与课堂助手 onOpenSessions 同模式） */}
           <NotesPage
             focusNoteId={focusNoteId}
@@ -357,22 +397,22 @@ function MainShell() {
               setPage("sessions");
             }}
           />
-        </div>
+        </PageSlot>
         {/* v0.20.5：行动域页（保活挂载 + active 门控切回重载——TD-004 模式） */}
-        <div style={{ flex: 1, display: page === "action" ? "block" : "none", overflow: "hidden" }}>
+        <PageSlot show={page === "action"} mounted={mountedPages.has("action")}>
           <ActionPage active={page === "action"} />
-        </div>
+        </PageSlot>
         {/* v0.20.10（批 5）：复习域页（保活挂载 + active 门控切回重载——
             闪卡域无事件总线，TD-004 模式同 ActionPage；focusReviewGroupId 深链
             组预选，消费后清空） */}
-        <div style={{ flex: 1, display: page === "review" ? "block" : "none", overflow: "hidden" }}>
+        <PageSlot show={page === "review"} mounted={mountedPages.has("review")}>
           <ReviewPage
             active={page === "review"}
             focusGroupId={focusReviewGroupId}
             onFocusGroupConsumed={() => setFocusReviewGroupId(null)}
           />
-        </div>
-        <div style={{ flex: 1, display: page === "chat" ? "block" : "none", overflow: "hidden" }}>
+        </PageSlot>
+        <PageSlot show={page === "chat"} mounted={mountedPages.has("chat")}>
           {/* v0.16.0：AI 对话页——跨页跳转复用 focus 机制（任务对话引用 → 会话/笔记/设置）。
               2026-09-09 批 1：active 门控透传——保活挂载下切回重同步（别页发起/完成的
               AI 任务本页无感知；SessionsPage/ActionPage 同款 active 语义） */}
@@ -397,8 +437,8 @@ function MainShell() {
               setPage("sessions");
             }}
           />
-        </div>
-        <div style={{ flex: 1, display: page === "knowledge" ? "block" : "none", overflow: "hidden" }}>
+        </PageSlot>
+        <PageSlot show={page === "knowledge"} mounted={mountedPages.has("knowledge")}>
           {/* v0.13.1：知识体系页（三时钟纪律——体系进周/季度视图，不与每日复习面混排）
               v0.13.7：focusSystemId 跨页直达（组行徽标/结算简报 → 自动选中体系） */}
           <KnowledgePage
@@ -407,16 +447,16 @@ function MainShell() {
             onOpenNote={(id) => { setFocusNoteId(id); setPage("notes"); }}
             onOpenGroup={(id) => { setFocusGroupId(id); setPage("notes"); }}
           />
-        </div>
-        <div style={{ flex: 1, display: page === "goals" ? "block" : "none", overflow: "hidden" }}>
+        </PageSlot>
+        <PageSlot show={page === "goals"} mounted={mountedPages.has("goals")}>
           {/* v0.18.0：学习目标页（意图层——列表是导航不是仪表盘） */}
           <GoalsPage />
-        </div>
-        <div style={{ flex: 1, display: page === "settings" ? "block" : "none", overflow: "hidden" }}>
+        </PageSlot>
+        <PageSlot show={page === "settings"} mounted={mountedPages.has("settings")}>
           {/* 2026-08-21：设置页（保留挂载——面板状态不因切页重置；TD-004 同模式）；
               active 透传——学习库段 8s 轮询按可见性门控（v0.19.1 审查 L2） */}
           <SettingsPage active={page === "settings"} />
-        </div>
+        </PageSlot>
       </main>
       {/* REQ-274：全局 AI 对话面板（常驻挂载——开合仅切 display，选中态/后台任务保活） */}
       <AiConversationDock
