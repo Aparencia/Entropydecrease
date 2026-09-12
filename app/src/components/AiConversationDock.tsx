@@ -242,7 +242,7 @@ export default function AiConversationDock({
       data-testid="ai-dock"
       style={{
         position: "fixed", top: "var(--ed-nav-h)", right: 0, bottom: 0, width: PANEL_W, zIndex: zIndex("panel"),
-        background: "#fff", borderLeft: "1px solid #e5e7eb", boxShadow: "-8px 0 24px rgba(0,0,0,0.08)",
+        background: "#fff", borderLeft: "1px solid #e5e7eb", boxShadow: "var(--ed-shadow-1)",
         display: open ? "flex" : "none", flexDirection: "column", overflow: "hidden",
         fontSize: 12.5, color: "#1f2937",
       }}

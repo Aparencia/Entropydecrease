@@ -87,7 +87,7 @@ export function SystemStatusBadge() {
             border: "1px solid #e5e7eb",
             borderRadius: 8,
             padding: "10px 12px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+            boxShadow: "var(--ed-shadow-1)",
             fontSize: 11,
             color: "#374151",
             lineHeight: 1.8,

@@ -53,7 +53,7 @@ export default memo(function CanvasNodeQuestion({ data, selected }: NodeProps<Qu
         borderRadius: 8,
         border: selected ? "2px solid #14b8a6" : "1px solid #d1d5db",
         background: selected ? "#f0fdfa" : "#ffffff",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+        boxShadow: "var(--ed-shadow-1)",
         padding: 8,
       }}
     >

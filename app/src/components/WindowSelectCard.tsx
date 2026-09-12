@@ -163,7 +163,7 @@ export function WindowSelectCard({ windows, selected, onSelect, onRefresh, loadi
             borderRadius: 8,
             border: "1px solid #e5e7eb",
             background: "#fff",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+            boxShadow: "var(--ed-shadow-2)",
             padding: 8,
           }}
         >

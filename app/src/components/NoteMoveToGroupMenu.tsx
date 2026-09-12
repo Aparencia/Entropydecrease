@@ -125,7 +125,7 @@ export default function NoteMoveToGroupMenu({ note, groups, onChanged, onCleanNo
               border: "1px solid #e5e7eb",
               borderRadius: 6,
               padding: 6,
-              boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+              boxShadow: "var(--ed-shadow-1)",
             }}
           >
             <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", padding: "2px 8px 4px" }}>

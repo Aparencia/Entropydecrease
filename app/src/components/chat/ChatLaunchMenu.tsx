@@ -51,7 +51,7 @@ export default function ChatLaunchMenu({ onLaunch }: ChatLaunchMenuProps) {
           <div
             data-testid="task-launch-menu"
             data-app-menu=""
-            style={{ position: "absolute", top: "100%", left: 0, zIndex: zIndex("popover"), background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 4, boxShadow: "0 4px 12px rgba(0,0,0,0.12)", minWidth: 180 }}
+            style={{ position: "absolute", top: "100%", left: 0, zIndex: zIndex("popover"), background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 4, boxShadow: "var(--ed-shadow-1)", minWidth: 180 }}
           >
             <button
               type="button"

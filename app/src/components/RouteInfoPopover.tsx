@@ -222,7 +222,7 @@ export default function RouteInfoPopover({
           top: anchor.y + 4,
           left: Math.max(4, Math.min(anchor.x, window.innerWidth - 304)),
           overflowY: "auto", background: "#fff", borderRadius: 8,
-          border: "1px solid #e5e7eb", boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+          border: "1px solid #e5e7eb", boxShadow: "var(--ed-shadow-2)",
           padding: 12, fontSize: 12,
         }}
       >

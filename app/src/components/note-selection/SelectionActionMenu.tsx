@@ -140,7 +140,7 @@ export default function SelectionActionMenu({ x, y, mode, text, onClose, onActio
           background: "#fff",
           border: "1px solid #e5e7eb",
           borderRadius: 8,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.14)",
+          boxShadow: "var(--ed-shadow-2)",
           padding: 4,
         }}
       >

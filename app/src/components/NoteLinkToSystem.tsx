@@ -249,7 +249,7 @@ export default function NoteLinkToSystem({ noteId, onChanged, onGotoKnowledgeSys
             style={{
               position: "absolute", zIndex: zIndex("popover"), top: "calc(100% + 6px)", right: 0,
               padding: 10, background: "#fff", border: "1px solid #e5e7eb",
-              borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+              borderRadius: 8, boxShadow: "var(--ed-shadow-2)",
               display: "flex", flexDirection: "column", gap: 6, width: 280,
               maxHeight: 460, overflowY: "auto",
             }}

@@ -27,7 +27,7 @@ export default memo(function CanvasNodeConcept({ data, selected }: NodeProps<Con
         borderRadius: 8,
         border: selected ? "2px solid #14b8a6" : "1px solid #e5e7eb",
         background: selected ? "#f0fdfa" : "#ffffff",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+        boxShadow: "var(--ed-shadow-1)",
         padding: 8,
       }}
     >
