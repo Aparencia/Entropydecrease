@@ -260,7 +260,7 @@ describe("批 6 预留：GSAP 必须落进独立 chunk（本批不安装 GSAP）
     expect(gsap).not.toBe(vendorGroupOf("/r/node_modules/react/index.js"));
   });
 
-  it("槽位在表里，且 package.json 此刻没有 gsap（两半必须同时成立）", () => {
+  it("槽位在表里，且 package.json 已装 gsap（两半必须同时成立）", () => {
     // 只查 package.json ⇒ 槽位被删也通过；只查表 ⇒ 批 6 装了依赖却没人复核产物也通过。
     // devDependencies 也查：本段问的是「gsap 装了没有」，不是「它进不进浏览器产物」。
     const pkg = JSON.parse(readFileSync(join(HERE, "..", "..", "package.json"), "utf8")) as {
@@ -268,8 +268,8 @@ describe("批 6 预留：GSAP 必须落进独立 chunk（本批不安装 GSAP）
       devDependencies?: Record<string, string>;
     };
     const all = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
-    // 批 6 装上后这条会红 ⇒ 去构建一次，核对 vendor-gsap chunk 独立生成且只经 import() 到达。
-    expect(Object.keys(all).filter((d) => d === "gsap" || d === "@gsap/react")).toEqual([]);
+    // 批 6 已装上（本行由批 6 按上面那句正解改判）：判据从「此刻没有」变成「恰是这两个」。
+    expect(Object.keys(all).filter((d) => d === "gsap" || d === "@gsap/react").sort()).toEqual(["@gsap/react", "gsap"]);
     expect(vendorGroupOf("/r/node_modules/gsap/index.js")).toBe("vendor-gsap");
   });
 
