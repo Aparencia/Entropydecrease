@@ -56,7 +56,7 @@ export default function PhaseChrome({ phase, children }: PhaseChromeProps): Reac
       </div>
       {/* 采集层：**恒挂载**（两态叠在同一格才能交叉淡入；条件挂载会让淡出变成硬切） */}
       <div className={PHASE_LIVE_CLASS} data-testid="phase-live" inert={phase !== "capture"}>
-        <LiveBarHost />
+        <LiveBarHost phase={phase} />
       </div>
     </div>
   );
@@ -77,8 +77,11 @@ export default function PhaseChrome({ phase, children }: PhaseChromeProps): Reac
  *     —— 与 `LiveActivityPanel.tsx:130/154/161` 的既有范式同源。
  *     ⚠️ 登记：`live_session_status` 的载荷里**没有** `started_at`（`types/live.ts:36-48` 实测）⇒ 前端
  *     只能用「自己第一次看到 active 的时刻」，与后端会话起点的毫秒级误差属后端事件面（本任务不改后端）。
+ *   · `phase`（T29 追加的**可选**槽）= 本宿主从 `PhaseChrome` 拿到的同一相位值 ⇒ 往下传给 `LiveBar` 的
+ *     相变凝固编排（`usePhaseFreeze`）。缺省 `"capture"`：`LiveBarHost` 单测（T19 的 C4–C6）不传它 ⇒
+ *     冻结进度 0、**不建任何时间线**（相位未变），既有判据零改动。
  */
-export function LiveBarHost(): ReactElement {
+export function LiveBarHost({ phase = "capture" }: { readonly phase?: ShellPhase }): ReactElement {
   const capture = useCaptureControl();
   const active = capture.active;
   const paused = capture.pausedReason !== null;
@@ -99,6 +102,7 @@ export function LiveBarHost(): ReactElement {
     <LiveBar
       elapsedMs={elapsedMs}
       paused={paused}
+      phase={phase}
       onTogglePause={() => {
         void (paused ? capture.resume() : capture.pause());
       }}

@@ -13,6 +13,8 @@
  *     （非削波时也染状态戳色 ⇒ W3b 红）。
  *   · W4 零颜色字面量：两件生产件剥注释后 hex 0 命中 ∧ 渲染出的每个着色面都是 `var(--ed-*)`
  *     ⇒ 变异体 = 写 `backgroundColor: "#0d9488"`。
+ *   · （T29 追加）W5 收束：`freeze=1` ⇒ 条高**集合大小 1**、`freeze=0` ⇒ 两组；**被改的内联属性恰
+ *     `transform`**（`height` 在场但不变 ⇒ 收束没动布局属性）⇒ 变异体 = 收束只改 `opacity` / 改用 `height`。
  *
  * 副作用：无（只读磁盘 + 只挂载 jsdom 容器）。边界：jsdom **无排版引擎** ⇒ 本文件判得到
  *   「条数 / 次序 / 色值 / 属性」，**判不到**「波形看起来像波形」（观感面进报告 `## 诚实边界`）。
@@ -22,10 +24,12 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { animatedProps } from "../test/motionHarness";
 import Waveform, {
   WAVEFORM_BARS,
   WAVEFORM_CLIP_BARS,
   WAVEFORM_FLOOR_DB,
+  WAVEFORM_GROOVE_SCALE,
   inClipZone,
   litBars,
 } from "./Waveform";
@@ -183,5 +187,44 @@ describe("W4 · 零颜色字面量（色值只在 ui/tokens.css 与 token 生成
     const colors = barsOf(root()).map((b) => b.style.backgroundColor);
     expect(colors.filter((c) => !c.startsWith("var(--ed-")), "有非 token 色").toEqual([]);
     expect(colors.length, "读到 0 个着色面 ⇒ 本条是空真").toBe(6);
+  });
+});
+
+/** 逐条条高（`scaleY` 是几何的唯一通道 ⇒ 也是唯一的读数口）。 */
+const barScales = (el: HTMLElement): number[] =>
+  barsOf(el).map((b) => Number.parseFloat(/scaleY\(([^)]+)\)/.exec(b.style.transform)?.[1] ?? "NaN"));
+
+describe("W5 · 收束成直线（T29：受控 `freeze` 0..1）", () => {
+  it("freeze=0 ⇒ 逐序两组条高（点亮 5 条满高 / 其余底槽）· freeze=1 ⇒ 集合大小恰 1", () => {
+    render(<Waveform rms={0.1} clipping={false} bars={8} freeze={0} />);
+    expect(barScales(root()), "采集态的波形：点亮段与底槽段两组高度").toEqual([
+      1, 1, 1, 1, 1, WAVEFORM_GROOVE_SCALE, WAVEFORM_GROOVE_SCALE, WAVEFORM_GROOVE_SCALE,
+    ]);
+    cleanup();
+    render(<Waveform rms={0.1} clipping={false} bars={8} freeze={1} />);
+    const settled = barScales(root());
+    expect(settled, "凝固 = 每条都落到**同一**高度（上沿是一条水平线）").toEqual(
+      Array.from({ length: 8 }, () => WAVEFORM_GROOVE_SCALE),
+    );
+    expect(new Set(settled).size, "集合大小必须是 1").toBe(1);
+    cleanup();
+    render(<Waveform rms={0.1} clipping={false} bars={8} />);
+    expect(barScales(root()), "缺省 freeze=0 ⇒ 既有调用点的渲染逐字不变").toEqual([
+      1, 1, 1, 1, 1, WAVEFORM_GROOVE_SCALE, WAVEFORM_GROOVE_SCALE, WAVEFORM_GROOVE_SCALE,
+    ]);
+  });
+
+  it("收束**只改 `transform`**：freeze 0 → 0.5 的内联属性**增量** ⊆ 白名单，`height` 在场但逐字不变", () => {
+    const inlineOf = (el: HTMLElement): Record<string, string> =>
+      Object.fromEntries(animatedProps(el).map((p) => [p, el.style.getPropertyValue(p)]));
+    const view = render(<Waveform rms={0.1} clipping={false} bars={8} freeze={0} />);
+    const before = barsOf(root()).map(inlineOf);
+    view.rerender(<Waveform rms={0.1} clipping={false} bars={8} freeze={0.5} />);
+    const after = barsOf(root()).map(inlineOf);
+    const changed = [...new Set(after.flatMap((props, i) => Object.keys(props).filter((p) => props[p] !== before[i][p])))];
+    expect(changed, "收束改了 `height`（或别的非合成属性）⇒ 会触发排版").toEqual(["transform"]);
+    expect(Object.keys(after[0]), "`height` 是静态几何基准（在场但不在增量里）").toContain("height");
+    expect(barScales(root())[0], "中途值落在两端之间（不是瞬切）").toBeGreaterThan(WAVEFORM_GROOVE_SCALE);
+    expect(barScales(root())[0]).toBeLessThan(1);
   });
 });

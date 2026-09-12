@@ -17,6 +17,10 @@
  *   计算）；③ 颜色**零字面量**，一律 `var(--ed-*)`（与 `views/session/SessionCardFlowView.tsx` 同一
  *   纪律：色值只在 `ui/tokens.css` 与生成器里）；④ 动效接缝（ADR-033 §4 允许的用途）只声明
  *   `background` 的 micro 档 token 过渡 —— **几何不做 transition**（§8.4「宽度本身不做 transition」）。
+ * @ai-context T29 追加（规格 §8.6 第 3 行「波形收束成直线」）：受控 prop `freeze`（0..1）+ 唯一映射
+ *   `barScale()` —— **几何只经 `scaleY` 表达**（静态 `height: 100%` 只是几何基准，不入动画属性集合）。
+ *   本件**不自建时间线**：编排层（`shell/usePhaseFreeze.ts`，唯一 `startControllable` 调用点）把持有
+ *   的 `freeze` 传进来。缺省 `freeze = 0` ⇒ 既有调用点的渲染逐字不变（T18 的六条判据零改动）。
  */
 import type { CSSProperties, ReactElement } from "react";
 
@@ -42,6 +46,14 @@ export interface WaveformProps {
   readonly bars?: number;
   readonly height?: number;
   readonly testId?: string;
+  /**
+   * 相变**凝固进度**（批 6 T29 · 规格 §8.6 第 3 行「波形收束成直线」）：`0` = 采集态的活波形
+   * （点亮条满高、未点亮条留底槽 ⇒ 两组高度 ⇒ 有波形），`1` = **所有条同一高度**（= 底槽档 ⇒ 上沿
+   * 是一条水平线）。缺省 `0` ⇒ 既有调用点的渲染与 T18 落库时**逐字相同**。
+   * 🔴 只动 `transform` 的 `scaleY`（+ 静态 `height: 100%` 作几何基准）—— **不许动 `height` 的值**
+   * （R8.4 的属性集合审计 / §8.4「不 animate height」）。
+   */
+  readonly freeze?: number;
 }
 
 /**
@@ -58,6 +70,25 @@ export function litBars(rms: number, bars: number): number {
 /** 该条是否落在右端削波热区（索引 0 = 最左）。它只判**位置**，不判是否点亮。 */
 export function inClipZone(index: number, bars: number): boolean {
   return index >= bars - WAVEFORM_CLIP_BARS;
+}
+
+/**
+ * 底槽档：未点亮条的静态高度比（相对满高）。**收束的终态与它共用同一个数**（收束 = 一律落到这个
+ * 高度 ⇒ 上沿成一条水平线），所以「波形收束」只引入**一个**几何新数字（R27.1：数字只有一个落点）。
+ */
+export const WAVEFORM_GROOVE_SCALE = 0.28;
+
+/**
+ * 条高（`scaleY`）的**唯一映射**（T29）：
+ *   · `freeze = 0` ⇒ 点亮条 `1` / 未点亮条 `WAVEFORM_GROOVE_SCALE`（两个不同值 ⇒ 波形有起伏）；
+ *   · `freeze ∈ (0,1)` ⇒ 各自向终态线性收拢（对 `freeze` 单调）；
+ *   · `freeze = 1` ⇒ **一律** `WAVEFORM_GROOVE_SCALE`（集合大小 1 ⇒ 收束成直线）。
+ * 全定义域安全：`freeze` 非有限值按 `0`（永不抛、永不把 NaN 漏进 `style`）。
+ */
+export function barScale(lit: boolean, freeze: number): number {
+  const base = lit ? 1 : WAVEFORM_GROOVE_SCALE;
+  const f = Number.isFinite(freeze) ? Math.min(1, Math.max(0, freeze)) : 0;
+  return base + (WAVEFORM_GROOVE_SCALE - base) * f;
 }
 
 /** 条的公共几何 + 动效接缝（色值逐条不同，故在渲染处合并）。 */
@@ -80,6 +111,7 @@ export default function Waveform({
   bars = WAVEFORM_BARS,
   height = WAVEFORM_HEIGHT,
   testId = "waveform",
+  freeze = 0,
 }: WaveformProps): ReactElement {
   // 条数先归一到非负整数：`Array.from({length:-1})` 本就是空数组，但显式归零让 `data-bars`
   // 与真实条数永远一致（负值 / 小数不会漏进属性）。
@@ -108,6 +140,11 @@ export default function Waveform({
             data-clip={hot ? "true" : "false"}
             style={{
               ...BAR_STYLE,
+              // 几何基准（静态，不是被动画的属性）：满高由 `height` prop 给定的根盒子高度决定，
+              // 条高本身一律交给 `scaleY` 表达 ⇒ 相变收束**不动** `height`（R8.4 / §8.4）。
+              height: "100%",
+              transformOrigin: "bottom",
+              transform: `scaleY(${barScale(on, freeze)})`,
               // 用**长写** `backgroundColor` 而不是 `background` 简写：jsdom 30 的 CSSStyleDeclaration
               // 会把简写里的 `var(...)` 整条丢掉（实测 `style.background === ""`），长写则逐字保真
               // ⇒ 判据读得到真实产出的色值（本批「判据读不到产出 = 假绿」的家族）。

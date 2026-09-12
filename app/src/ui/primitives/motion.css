@@ -230,6 +230,24 @@ html[data-shell-phase="capture"] .shell-phase__live { position: static; opacity:
 html[data-shell-phase="review"] .shell-phase__idle { opacity: 0; pointer-events: none; }
 /* ▲▲▲ 相变态结束（T19）▲▲▲ */
 
+/* ▼▼▼ 琥珀退去（T29；§8.6 第 3 行 / R4.5「不许新造琥珀值」）—— 采集仪表在**非采集**相位退场 ▼▼▼
+   墨度的逐帧退去在编排层（`shell/usePhaseFreeze.ts` 写墨度层 `live-ink` 的 inline `opacity`：1 ⇒ 0.72；
+   可反向 / 可中断 / 与波形收束同源）⇒ 本节**不写 `opacity`**（同一属性只有一个写者）。本节管相位键的两件：
+   琥珀色值**逐字锁 `--ed-due`**（定义仍只在 tokens.css 与生成器），以及采集脉冲「停呼吸」（§8.6.1 第 1 条）。
+   ⚠️ 停循环**不写 `animation:`**（`motion-coverage.test.ts` 只放行 12 基类与既有动画落点 ⇒ 新选择器写
+   `animation` 会撞「死条目」）⇒ 用与 eco 档同一手法（`animation-duration` / `animation-iteration-count`）。
+   ⚠️ 相位侧取 `:not([data-shell-phase="capture"])`（计划 Step 3 写作 `="idle"`）：复习态同样是零 chrome
+   （§6.3）⇒ 也必须退；写成 `idle` 会把复习态漏成「仍在采集」（偏离登记在 T29 报告）。 */
+html:not([data-shell-phase="capture"]) .shell-phase__live .ed-status--warn,
+html:not([data-shell-phase="capture"]) .shell-phase__live .ed-text--due {
+  color: var(--ed-due);
+}
+html:not([data-shell-phase="capture"]) .shell-phase__live .ed-status--live-pulse {
+  animation-duration: 1ms;
+  animation-iteration-count: 1;
+}
+/* ▲▲▲ 琥珀退去结束（T29）▲▲▲ */
+
 /* ★ 强度三档（规格 §8.5 / R3.1）—— 本块写在下面 reduced-motion 块**之前**（源序），但优先级**不**
    由源序给：reduced-motion 块的每条声明都带 `!important`（本文件唯一的 `!important` 落点）⇒ 无论两块
    谁先谁后，系统偏好都赢过用户选的档（§8.5 逐字「系统 `prefers-reduced-motion` 优先于档位」）。
