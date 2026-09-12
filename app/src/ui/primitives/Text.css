@@ -14,7 +14,15 @@
   font-family: var(--ed-font-ui, "Inter", "Segoe UI Variable", "Microsoft YaHei UI", system-ui, sans-serif);
   /* 接缝（规格 §8.6.1 第 3 条）：墨度与字距是批 6「记忆浮现」的可动画属性，先纳入 transition。
      `letter-spacing` 的初值显式写 `0` 而非 `normal`：`normal` 与长度之间**不可插值**（离散跳变），
-     留 `normal` 会让这条接缝是死的 —— 批 6 改字距时不会有过渡。 */
+     留 `normal` 会让这条接缝是死的 —— 批 6 改字距时不会有过渡。
+     🔻 批 6 T32 的兑现口径（就地加注，2026-09-13 —— **上面原文一字未改**）：这条接缝的两半**去向不同**：
+     ① **墨度那半在用**：`components/review/ReviewSessionPanel.tsx` 的答案文本经 `Text` 原语渲染，
+        揭晓挂载后墨度由 `ink-3` 翻到 `ink-1`（两相靠一次状态翻档，见 `useRevealMemory.ts` 头注）
+        ⇒ 上面这条 `color` transition 真的会跑（挂载即高墨度则没有 from 值、永不触发）。
+     ② 🔴 **`letter-spacing` 那半不参与本动效**：它是 **layout 属性**，逐帧动它会让整段文本重排
+        （越出 R8.4 的合成属性白名单）⇒ 规格 §8.6 第 6 行逐字要求「**用 `x` 而非 `letterSpacing`**」，
+        字距收敛改由 `useRevealMemory.ts` 的 `track` 段（`transform` 位移，≤ 4px）表达。
+     ⇒ 这条声明**保留**（`.ed-text` 的既有契约与将来落点），但**别**以为 #6 动了字距。 */
   letter-spacing: 0;
   transition: color var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1)),
               letter-spacing var(--ed-dur-micro, 120ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));

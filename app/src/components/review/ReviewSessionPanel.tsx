@@ -21,6 +21,7 @@ import type { Flashcard } from "../../types/notes";
 import PromoteCardButton from "../PromoteCardButton";
 import DueScale from "./DueScale";
 import { intervalToScale, useScaleGrowth } from "./useScaleGrowth";
+import { INK_FROM, RATE_FROM_PX, TRACK_FROM_PX, inkTone, useRevealMemory } from "./useRevealMemory";
 import { Loading, Skeleton, StatusLine, Text } from "../../ui/primitives";
 
 /** 四档评分按钮（文案=回忆质量自评） */
@@ -95,6 +96,10 @@ export default function ReviewSessionPanel({ groupId, groupName, active = true, 
   // **不**由 `due` 计数驱动（绑总数会出现「回缩了但数字没变」—— 本页总到期数走 token 门控重载）。
   const growTo = intervalToScale(lastInterval);
   const growth = useScaleGrowth(growTo);
+
+  // 「揭晓」（#6 记忆浮现）的四段编排 —— 唯一 timeline、四件落点（`data-reveal` 锚点）全在 back 子树里。
+  // 四件动效的形态、`x` 而非 `letterSpacing` 的理由、持有/可中断/降级/三档全在 `useRevealMemory` 头注。
+  const reveal = useRevealMemory(revealed);
 
   const rate = async (rating: string) => {
     if (!current) return;
@@ -221,16 +226,32 @@ export default function ReviewSessionPanel({ groupId, groupName, active = true, 
                 </button>
               ) : (
                 <>
-                  {/* back（验证材料） */}
-                  <div style={{
+                  {/* back（验证材料）—— §8.6 #6 的 ①墨色洇开 / ③剪报底纹左刷 的宿主。`data-reveal` 是本批的
+                      结构锚点（R8.5）；四段的编排与理由在 `useRevealMemory` 头注（本处只放落点与静态起始形态）。 */}
+                  <div ref={reveal.ink} data-reveal="ink" style={{
                     marginTop: 10, minHeight: 70, padding: 14, background: "#f0fdfa",
-                    borderRadius: 8, fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap",
-                    maxHeight: 220, overflowY: "auto",
+                    borderRadius: 8, maxHeight: 220, overflowY: "auto", opacity: INK_FROM,
                   }}>
-                    {current.back}
+                    {/* 剪报底纹（本任务新建的**承载层**：复习面板今天没有既有载体 —— R5.6 诚实边界②）。
+                        色取既有 token `--ed-mark-clip`（零新色值）；`transformOrigin: left` 是**静态**样式
+                        （不进被动画属性集合 —— 否则 `transform-origin` 会越出 R8.4 的合成属性白名单）。 */}
+                    <div ref={reveal.clip} data-reveal="clip" aria-hidden="true" style={{
+                      height: 6, marginBottom: 8, background: "var(--ed-mark-clip)",
+                      transformOrigin: "left center", transform: "scaleX(0)",
+                    }} />
+                    {/* ②字距极轻收敛：载体是这一层的 `x`（**不是** `letter-spacing` —— layout 属性会重排，R5.6 硬判据） */}
+                    <div ref={reveal.track} data-reveal="track" style={{ transform: `translate(${TRACK_FROM_PX}px, 0px)` }}>
+                      {/* 答案文本交回 `Text` 原语：`.ed-text` 是「墨度 + 字距」钩子（`Text.css:15-20`）的唯一出口，
+                          揭晓挂载后墨度由 `ink-3` 翻到 `ink-1` ⇒ 那条 `color` transition 真的会跑（接缝兑现）。 */}
+                      <Text as="p" size={4} tone={inkTone(reveal.inked)} testId="session-answer" style={{ whiteSpace: "pre-wrap" }}>
+                        {current.back}
+                      </Text>
+                    </div>
                   </div>
-                  {/* 四档评分（提取质量自评 → FSRS 调度） */}
-                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  {/* 四档评分（提取质量自评 → FSRS 调度）+ §8.6 #6 的 ④评分按钮随后浮起（最后一段才动） */}
+                  <div ref={reveal.rate} data-reveal="rate" data-tone="instrument" style={{
+                    display: "flex", gap: 8, marginTop: 12, opacity: 0, transform: `translate(0px, ${RATE_FROM_PX}px)`,
+                  }}>
                     {RATINGS.map((r) => (
                       <button
                         key={r.value}

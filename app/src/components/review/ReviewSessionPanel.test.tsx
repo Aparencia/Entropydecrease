@@ -7,8 +7,15 @@
  *              完成收尾回总览。invoke 全 mock（list_due_cards/review_card）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Flashcard } from "../../types/notes";
+import { relOf, stripComments, walkSources } from "../../ui/primitives/sliceScan";
+
+const HERE = dirname(fileURLToPath(import.meta.url)); // app/src/components/review
+const SRC = join(HERE, "..", ".."); // app/src
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
@@ -186,5 +193,72 @@ describe("ReviewSessionPanel · 刻度生长（批 6 T30 · §8.6 #4 · PB2 精�
     expect(growToAttr(), "缺字段 ⇒ 零目标（把它当 0 天就会把刻度清零）").toBeNull();
     expect(scaleTick().getAttribute("data-tier")).toBe("none");
     expect(screen.queryByTestId("session-last-interval")).toBeNull();
+  });
+});
+
+describe("ReviewSessionPanel · 记忆浮现四件（批 6 T32 · §8.6 #6 · R5.6 · §8.6.1 第 3 条）", () => {
+  /** 四件的**逐序**落点口径（R8.5 的结构锚点：`data-reveal`）。 */
+  const ANCHORS = ["ink", "track", "clip", "rate"] as const;
+  const anchor = (v: (typeof ANCHORS)[number]): HTMLElement | null => document.querySelector(`[data-reveal="${v}"]`);
+
+  it("P1 · 揭晓前四件落点一件都不在；揭晓后**逐序**在位（data-reveal = ink/track/clip/rate）", async () => {
+    renderPanel();
+    await screen.findByText("隔离霜作用");
+    expect(ANCHORS.map((v) => anchor(v)), "揭晓前不许有任何揭晓落点（揭晓是「整棵子树瞬切」的既有形态）")
+      .toEqual([null, null, null, null]);
+    fireEvent.click(screen.getByText("回忆完成 · 查看答案"));
+    await screen.findByText("打底隔离彩妆与污染");
+    expect(ANCHORS.map((v) => anchor(v)?.getAttribute("data-reveal"))).toEqual(["ink", "track", "clip", "rate"]);
+    expect(anchor("rate")?.getAttribute("data-tone"), "§8.3：复习面 = 精密仪器（基调声明在落点上）").toBe("instrument");
+  });
+
+  it("P2 · ③剪报底纹是**左刷**：原点是 left（R5.6 逐字）· 色取既有 token · 纯装饰（aria-hidden）", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByText("回忆完成 · 查看答案"));
+    await screen.findByTestId("session-answer");
+    const node = anchor("clip");
+    expect(node, "底纹承载层必须在场（本任务新建的视觉层，R5.6 诚实边界②）").not.toBeNull();
+    expect((node as HTMLElement).style.transformOrigin, "M4：改成 right ⇒ 这条红（「左刷」是 R5.6 逐字）").toBe("left center");
+    expect((node as HTMLElement).style.background, "零新色值：底纹取既有 token --ed-mark-clip").toBe("var(--ed-mark-clip)");
+    expect((node as HTMLElement).getAttribute("aria-hidden"), "纯装饰层不进无障碍树").toBe("true");
+  });
+
+  it("P3 · 🔴 `Text.css:15-20` 的墨度钩子**真被接上**：答案文本是 `.ed-text`，且揭晓时**两相翻档**（低 → 高墨度）", async () => {
+    const records: MutationRecord[] = [];
+    renderPanel();
+    await screen.findByText("隔离霜作用");
+    const observer = new MutationObserver((list) => records.push(...list));
+    observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"], attributeOldValue: true });
+    fireEvent.click(screen.getByText("回忆完成 · 查看答案"));
+    const answer = await screen.findByTestId("session-answer");
+    await waitFor(() =>
+      expect(records.some((r) => (r.oldValue ?? "").includes("ed-text--ink-3")), "DOM 里必须发生过 ink-3 → 高墨度的翻档").toBe(true),
+    );
+    observer.disconnect();
+    const flip = records.find((r) => (r.oldValue ?? "").includes("ed-text--ink-3"));
+    expect(answer.className, "答案文本走 `Text` 原语 ⇒ 带 `.ed-text`（钩子载体；行内 fontSize 交回原语）").toContain("ed-text");
+    expect(answer.className, "落定 = 高墨度（低档取 ink-3 而非过渡态 ink-4）").toContain("ed-text--ink-1");
+    expect((flip?.target as HTMLElement).className, "翻档的目标就是答案文本本身").toContain("ed-text--ink-1");
+  });
+
+  it("P4 · 🔴 硬判据（R5.6）**静态齿 A**：全仓两个字距写法的读数仍为 5 处、3 文件（本任务不得新增第 6 处）", () => {
+    const LS = "letter" + "Spacing"; // 🔴 被扫串一律**拼接构造**：本文件也在扫描域内（`app/src/**`）⇒ 写全会自伤
+    const hits = walkSources(SRC)
+      .map((f) => ({ rel: relOf(SRC, f), n: stripComments(readFileSync(f, "utf8")).split(LS).length - 1 }))
+      .filter((h) => h.n > 0);
+    expect(hits.map((h) => h.rel).sort(), "基线 = 3 文件（ColumnBar / SettingsPage / Text.test）").toEqual([
+      "components/ColumnBar.tsx", "pages/SettingsPage.tsx", "ui/primitives/Text.test.tsx",
+    ]);
+    expect(hits.reduce((a, b) => a + b.n, 0), "全仓读数（剥注释口径，基线 5；M1 ⇒ 6）").toBe(5);
+  });
+
+  it("P5 · 🔴 硬判据（R5.6）**静态齿 B**：两个字距写法在 `useRevealMemory.ts` / 本面板里 0 命中", () => {
+    const LS = "letter" + "Spacing";
+    const LSK = "letter" + "-spacing";
+    for (const file of ["useRevealMemory.ts", "ReviewSessionPanel.tsx"]) {
+      const code = stripComments(readFileSync(join(HERE, file), "utf8"));
+      expect(code.length, "扫描域缩到空 ⇒ 「0 命中」一文不值").toBeGreaterThan(1000);
+      expect([code.includes(LS), code.includes(LSK)], `${file} 出现字距字面量（layout 属性）`).toEqual([false, false]);
+    }
   });
 });
