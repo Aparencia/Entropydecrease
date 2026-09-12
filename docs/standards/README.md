@@ -22,6 +22,7 @@
 | [api-design.md](./api-design.md) | API 与数据层设计规范 | ⬜ 有后端时 | ✅ |
 | [cicd-release.md](./cicd-release.md) | CI/CD 与发布规范 | ⬜ 有 CI 时 | ✅ |
 | [performance.md](./performance.md) | 性能优化工作流 | ⬜ 可选 | ⬜ |
+| [motion.md](./motion.md) | 动效规范（L4 四层纲领 / 引擎分界 / 双基调 / 三档强度 / 判据纪律） | ✅ 必用 | ✅ 必用 |
 | [logging-observability.md](./logging-observability.md) | 日志与可观测性 | ⬜ 可选 | ✅ |
 | [maintenance-iteration.md](./maintenance-iteration.md) | 维护与迭代规范 | ⬜ 可选 | ⬜ |
 | [incident-postmortem.md](./incident-postmortem.md) | 事故复盘流程 | ⬜ 可选 | ⬜ |
