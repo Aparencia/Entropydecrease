@@ -19,7 +19,8 @@
  *              `{ "vendor-gsap": ["gsap"] }` —— 那会在 gsap 未安装时**直接让构建失败**。
  * @ai-context: 分组还可能**成环**（不只是「搬字节」）：`vendor-md` 与 `vendor-katex` 互相静态
  *              import 时被 vite 判为循环 chunk 并熔成不可分簇 ⇒ 懒加载边界静默失效。断环只能靠
- *              **方向**；⚠️ 截至 Task 5 该环**尚未断净**（残留桥与已实测的最小解见下方管线段）。
+ *              **方向**：md 侧不得反向依赖 katex。⚠️ 移动模块时**必须连它自己的依赖一起挪**
+ *              （Task 5 实测：少挪一个直接依赖，环就还在）—— 见下方 Markdown 管线段。
  *
  * 副作用：无（纯函数）。
  * 边界：入参是 rollup 的模块 id（Windows 上可能含 `\`）；不解析 tsconfig paths；不处理虚拟模块（`\0` 前缀）。
@@ -58,7 +59,6 @@ export const EXACT: Readonly<Record<string, VendorGroup>> = {
   "hast-util-to-text": "vendor-katex",
   "hast-util-from-html-isomorphic": "vendor-katex",
   "hast-util-is-element": "vendor-katex",
-  "hast-util-parse-selector": "vendor-katex",
   // 编辑器（CodeMirror 6 无 scope 的几件）
   codemirror: "vendor-editor",
   crelt: "vendor-editor",
@@ -69,17 +69,21 @@ export const EXACT: Readonly<Record<string, VendorGroup>> = {
   zustand: "vendor-canvas",
   "use-sync-external-store": "vendor-canvas",
   // Markdown 管线
-  // 🔴 以下三件是 **md → katex** 反向边的一条桥（`hast-util-to-jsx-runtime` → `property-information`），
-  //    必须留在 vendor-md：归回 vendor-katex 会让该方向复活。⚠️ **Task 5 实测的诚实边界**：
-  //    只挪这三件**不足以断环** —— 本组的 `hastscript` 仍 import `hast-util-parse-selector`
-  //    （仍登记在 vendor-katex）⇒ 构建**依旧**打印 `Circular chunk: vendor-katex -> vendor-md ->
-  //    vendor-katex`，两 chunk 依旧互相静态 import（130.58 kB gzip 熔成不可分簇）。
-  //    已实测的**断环最小解** = 把 `hast-util-parse-selector` 一并挪来本组（我实测：vite 不再打印
-  //    该警告、md→katex 边归零只剩 katex→md 单向）；该行**超出控制方授权范围 ⇒ 本批未落地**，
-  //    证据与复现命令见 `.superpowers/sdd/2026-09-11-frontend-redesign-batch2-bundle/task-5-report.md` §C。
+  // 🔴 以下四件是断 `vendor-md ⇄ vendor-katex` **循环 chunk** 的关键，必须留在 vendor-md：
+  //    它们消掉了两条 md → katex 边 ——
+  //      ① `hast-util-to-jsx-runtime` → `property-information`（前三件即可消除）
+  //      ② `hastscript` → `hast-util-parse-selector`：**移动一个模块必须连它自己的依赖一起挪**。
+  //         只把 `hastscript` 挪来、把它的直接依赖 `hast-util-parse-selector` 留在 katex，
+  //         就是一次**不完整的移动**，环仍在（Task 5 实测：3 行版构建照旧打印循环警告）。
+  //    归回 katex 会立刻复活环：vite 打印 `Circular chunk: vendor-katex -> vendor-md ->
+  //    vendor-katex`，两 chunk 熔成不可分簇 ⇒「懒 markdown」与「懒 katex」变成同一件事。
+  //    剩下的 katex → md 单向边（rehype-katex / hast-util-to-text / hast-util-from-dom →
+  //    unist-util-* / hastscript / web-namespaces）不成环，是允许的方向。
+  //    证据与复现：task-5-report.md §C（P0 三行仍在环 / P1 四行环消失 的对照构建）。
   "property-information": "vendor-md",
   hastscript: "vendor-md",
   "web-namespaces": "vendor-md",
+  "hast-util-parse-selector": "vendor-md",
   "react-markdown": "vendor-md",
   unified: "vendor-md",
   bail: "vendor-md",

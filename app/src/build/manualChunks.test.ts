@@ -130,7 +130,7 @@ const EXACT_PINS: readonly (readonly [string, VendorGroup])[] = [
   ["hast-util-to-text", "vendor-katex"],
   ["hast-util-from-html-isomorphic", "vendor-katex"],
   ["hast-util-is-element", "vendor-katex"],
-  ["hast-util-parse-selector", "vendor-katex"],
+  ["hast-util-parse-selector", "vendor-md"],
   ["property-information", "vendor-md"],
   ["hastscript", "vendor-md"],
   ["web-namespaces", "vendor-md"],
@@ -280,11 +280,11 @@ describe("批 6 预留：GSAP 必须落进独立 chunk（本批不安装 GSAP）
 });
 
 // 实测（Task 4）：vite 警告 `Circular chunk: vendor-katex -> vendor-md -> vendor-katex`，两 chunk
-// 首行互指 ⇒ 130.66 kB gzip 熔成不可分簇。断环只靠**方向**（不靠把 katex 并进 md —— 那会被
-// 上面的 EXACT 钉值表抓住）：md→katex 的桥留在 md 侧，katex→md 的单向边保留。
+// 首行互指 ⇒ 130.66 kB gzip 熔成不可分簇。断环只靠**方向**：md 侧不许反向依赖 katex，且**移动
+// 模块必须连它自己的依赖一起挪**（Task 5 实测：少挪 `hast-util-parse-selector` 时环仍在）。
 describe("循环 chunk 反例守卫（vendor-md ⇄ vendor-katex 不许成环）", () => {
-  it("md→katex 的桥（property-information 族）必须留在 vendor-md", () => {
-    for (const n of ["property-information", "hastscript", "web-namespaces"]) {
+  it("md→katex 的两条桥（property-information 族 + 被移动模块自身的依赖）必须留在 vendor-md", () => {
+    for (const n of ["property-information", "hastscript", "web-namespaces", "hast-util-parse-selector"]) {
       expect(EXACT[n]).toBe("vendor-md");
       expect(vendorGroupOf(`/r/node_modules/${n}/index.js`)).toBe("vendor-md");
     }
