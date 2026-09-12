@@ -119,8 +119,11 @@ details > summary {
 details > summary:hover { filter: brightness(0.97); }
 details[open] > summary { color: var(--ed-ink-1); }
 
-/* ⑤ 拖拽 —— 4 处：`ColumnResizer`（`role="separator"`，已有 0.15s 行内背景回执）+ `NoteListRow` /
-   `NoteTreeSection` 的原生 DnD（裸 `draggable` 属性 ⇒ 元素级可命中的第二种形态）。
+/* ⑤ 拖拽 —— 4 处起手，元素级只命中**两**种形态：`ColumnResizer`（`role="separator"`，已有 0.15s 行内
+   背景回执）+ `NoteListRow.tsx:58`（全仓**唯一**的裸 `draggable` 属性 ⇒ `[draggable="true"]` 的落点）。
+   ⚠️ **标签更正（T13 同提交，合并评审实测）**：旧注释把 `NoteTreeSection` 也算成裸 `draggable` 的落点 ——
+   实测它**只有 `onPointerDown`、0 处 `draggable`**（`NoteTreeSection.tsx:45`）⇒ 本节给不了它回执，
+   它逐条登记在 `responseCoverage.test.ts` 的余量表（`拖拽 · NoteTreeSection 的 pointerdown 起手`）。
    ⚠️ `ColumnResizer` 的行内 `transition: background 0.15s` 是 **shorthand**，会整条替换类上的
    transition ⇒ 本节**不给** `[role="separator"]` 声明 transition（声明了也不生效 = 标签说谎），只给
    状态回执；它的平滑半场由自己那 0.15s 承担（登记在 responseCoverage.test.ts 的余量表）。 */
@@ -134,6 +137,57 @@ details[open] > summary { color: var(--ed-ink-1); }
 [role="separator"]:hover { filter: brightness(0.97); }
 /* ▲▲▲ 响应层结束（切换视图一类由原语层承担，见上 ⑥）▲▲▲ */
 
+/* ▼▼▼ 环境层（T13）：规格 §8.1「2–6s 循环｜应用在呼吸」的四件 ▼▼▼
+   四件逐字 = **探针摆动 · 采集脉冲 · 未确认段落墨度极缓慢起伏（幅度 2%）· 到期刻度微光**；按 §8.2 的
+   分界判据一律走 **CSS keyframes**（循环环境动效不占 JS 主线程，reduced-motion 一条媒体查询即静态）。
+   本节只加**类规则 + `@keyframes`**：零 `--ed-*` 定义（真源只有 `scripts/gen-tokens.mjs`）、零位移
+   （环境层只起伏墨度）、零颜色字面量；落点一律 `<既有基类>--<修饰>` 形状（`motion-coverage.test.ts`
+   的选择器域只放行修饰类 / 子元素 / 既有基类，新起一个 `.ed-*` 基类名会当场红）。
+   ⚠️ **周期**：三条新循环一律从唯一真源 `--ed-dur-skeleton`（1200ms）以 `calc()` **倍数**派生 ⇒ 不新造
+   时长字面量（R16.3④）；第 ① 件「探针摆动」的 `2.4s` 在 `Loading.css:71`、**未 token 化**（G5：
+   `Loading.css` 本批零改动）⇒ 本节**不复写**它，rich 档的频率提高也从 token 派生（见下面的强度三档块）。
+   ⚠️ 三条落点今天都是 **0 调用点**（采集态 LIVE 仪表 / 到期刻度 / 低置信段正文分别由波 B 的 T18、T21
+   与 T25/T28 接线）⇒ 本节是 **seam**：**不得**把「落了 seam」读成「环境层已交付」（R11.3 / R12.4）。 */
+
+/* ② 采集脉冲：LIVE 仪表「在呼吸」的落点（`.ed-status--live-pulse` = `ed-status` 基类的修饰类）。
+   只起伏墨度（0.55 ↔ 1）：不动位移、不碰色值 —— §8.6.1 第 1 条「环境层永远不抢注意力」。 */
+@keyframes ed-capture-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+/* ③ 未确认段落墨度极缓慢起伏：幅度逐字 2%（§8.1）⇒ 两端极值 `0.98 ↔ 1`。幅度真源 = `app/src/motion/env.ts`
+   的 `LOW_CONFIDENCE_INK_AMPLITUDE`（本文件**不写** `0.02`：两处各写一个 0.02 就是第二个真源）。
+   🔴 **只动 `opacity`** —— 未确认段落的起伏是「墨度」的，不是位置（`env.test.ts` 的 M4b 变异体钉这一点）。
+   落点规则在 `Text.css`（`.ed-text--low-confidence` 与 `ed-text` 基类同元素，故不进基类名单）。 */
+@keyframes ed-unconfirmed-breathe {
+  0%, 100% { opacity: 0.98; }
+  50%      { opacity: 1; }
+}
+
+/* ④ 到期刻度微光：琥珀逐字锁 `--ed-due` 族（R4.5「不许新造琥珀值」）；同样只起伏墨度。 */
+@keyframes ed-due-glow {
+  0%, 100% { opacity: 0.72; }
+  50%      { opacity: 1; }
+}
+
+/* ② 的落点规则。`.ed-status` 基类在 `StatusLine.css` —— 本文件只加这一个**修饰类**，**不碰**那个文件
+   （分桶裁定：状态行的循环动效归 `Loading`/`Skeleton`/`Probe` 之外的这一条新 seam，而 `StatusLine.css`
+   被既有守卫禁止新增 keyframes）。缓动取 `--ed-ease-instrument`：采集是「有读数」的面（§8.3 表）。 */
+.ed-status--live-pulse {
+  animation: ed-capture-pulse calc(var(--ed-dur-skeleton, 1200ms) * 2)
+             var(--ed-ease-instrument, cubic-bezier(0.4, 0, 0.2, 1)) infinite;
+}
+
+/* ④ 的落点规则。`color` 那一行是琥珀族的**逐字锁**（R4.5）：本类今天 0 调用点，真正的刻度载体由
+   波 B/C 的 `DueScale` 建（T21 / T29）。 */
+.ed-surface--due-glow {
+  color: var(--ed-due);
+  animation: ed-due-glow calc(var(--ed-dur-skeleton, 1200ms) * 3)
+             var(--ed-ease-instrument, cubic-bezier(0.4, 0, 0.2, 1)) infinite;
+}
+/* ▲▲▲ 环境层结束（第 ① 件探针摆动复用 `Loading.css` 的既有落点，档位调制见下面的强度三档块）▲▲▲ */
+
 /* ★ 强度三档（规格 §8.5 / R3.1）—— 本块写在下面 reduced-motion 块**之前**（源序），但优先级**不**
    由源序给：reduced-motion 块的每条声明都带 `!important`（本文件唯一的 `!important` 落点）⇒ 无论两块
    谁先谁后，系统偏好都赢过用户选的档（§8.5 逐字「系统 `prefers-reduced-motion` 优先于档位」）。
@@ -142,7 +196,8 @@ details[open] > summary { color: var(--ed-ink-1); }
    —— 那会**反转**无障碍优先级（用户选的档盖掉系统设置）。
    机器判据 = `motion-coverage.test.ts` 的「三档强度通道」describe（档位块行号 < reduced 块行号；
    CSS 里的档位取值集合 === `MOTION_INTENSITIES`）+ `../../motion/responseSeams.test.ts` 的
-   「I-2 · `!important` 承重」与「I-3 · 两块之间零规则块」两条（T12 追加，控制方 2026-09-13 指令）。
+   「I-2 · `!important` 承重」「I-3 · 两块之间零规则块」（T12 追加）与「I-4 · 响应层节零 `!important`」
+   （T13 按控制方 2026-09-13 指令补）三条。
    ⚠️ 本块**不得**定义任何 `--ed-*` 变量（真源只有 `scripts/gen-tokens.mjs`；`style-seams.test.ts`
    断言本文件的 `--ed-*` 定义恒 0）⇒ 档位差异一律**直接覆写属性**，不引私变量、不新造第二个真源。
    ⚠️ 本块**不得**写 `animation:` / `animation-name:`（那会让这些选择器必须再进 reduced-motion 名单）
@@ -152,7 +207,10 @@ details[open] > summary { color: var(--ed-ink-1); }
    编排层的「跳终态」由 JS 侧读档位决定 —— 本文件不得覆写时长真源。 */
 html[data-motion="eco"] .ed-skeleton::after,
 html[data-motion="eco"] .ed-probe,
-html[data-motion="eco"] .ed-empty-enter {
+html[data-motion="eco"] .ed-empty-enter,
+html[data-motion="eco"] .ed-status--live-pulse,
+html[data-motion="eco"] .ed-text--low-confidence,
+html[data-motion="eco"] .ed-surface--due-glow {
   animation-duration: 1ms;
   animation-iteration-count: 1;
 }
@@ -164,10 +222,25 @@ html[data-motion="standard"] {
 }
 
 /* ③ 丰富（rich）：环境层频率提高（幅度上限不动 —— §8.6.1 第 1 条「环境层永远不抢注意力」）。
-   只动 token 支撑的那条循环：`.ed-probe` 的 `2.4s` 是 `Loading.css` 的既有字面量、尚未 token 化
-   ⇒ 本档不给它新造第二个字面量（登记：环境层落点的档位节奏随 T13 的环境层落点一并定）。 */
+   四件一律走**唯一真源派生的 `calc()` 倍数**（T13 一并定；T6 当时把 `.ed-probe` 的档位节奏登记给了 T13）：
+   `.ed-probe` 的 `2.4s` 是 `Loading.css` 的既有字面量、未 token 化 ⇒ 本档**不给它新造第二个字面量**
+   （R16.3④「不发明数字」优先于「凑齐 token」），改用 `* 5 / 3` = 2000ms = §8.1 环境层带（2–6s）的**下限**
+   —— 相对 standard 的 2.4s 仍是**频率提高**。三条新落点同法：2000 / 4000 / 3000ms（standard 是
+   2400 / 4800 / 3600ms）⇒ 全部仍落在 2–6s 带内、且一律 ≤ standard 档（频率只许提高）。 */
 html[data-motion="rich"] .ed-skeleton::after {
   animation-duration: calc(var(--ed-dur-skeleton, 1200ms) * 0.75);
+}
+html[data-motion="rich"] .ed-probe {
+  animation-duration: calc(var(--ed-dur-skeleton, 1200ms) * 5 / 3);
+}
+html[data-motion="rich"] .ed-status--live-pulse {
+  animation-duration: calc(var(--ed-dur-skeleton, 1200ms) * 5 / 3);
+}
+html[data-motion="rich"] .ed-text--low-confidence {
+  animation-duration: calc(var(--ed-dur-skeleton, 1200ms) * 10 / 3);
+}
+html[data-motion="rich"] .ed-surface--due-glow {
+  animation-duration: calc(var(--ed-dur-skeleton, 1200ms) * 5 / 2);
 }
 
 /* ★ 名单 = 12 个 `.ed-*` **基类** + **每一处 `animation` 声明的选择器原文**（含伪元素）。
@@ -187,6 +260,9 @@ html[data-motion="rich"] .ed-skeleton::after {
   .ed-toast, .ed-empty, .ed-loading, .ed-skeleton, .ed-probe,
   .ed-status,
   .ed-skeleton::after, .ed-empty-enter,
+  /* T13 追加：环境层三条新循环的 `animation` 落点（`animation-*` **不可继承** ⇒ 逐字列出选择器原文，
+     与伪元素同理；`.ed-text--low-confidence` 的声明在 `Text.css`，`::after` 那条的老账见上）。 */
+  .ed-status--live-pulse, .ed-text--low-confidence, .ed-surface--due-glow,
   button:not(.ed-btn), [role="button"],
   input:not([type="checkbox"]):not([type="radio"]), textarea,
   input[type="checkbox"], input[type="radio"],

@@ -58,8 +58,11 @@ const BASE_CLASSES: ReadonlyArray<readonly [file: string, base: string]> = [
 /**
  * 5 个**现存非原语**的 `.ed-*` 名（T3 评审 M-4 实测）。它们不是 CSS 类 —— 是既有标识符里的子串：
  * `ed-desc`←`"updated-desc"` · `ed-label`←`note-link-linked-label` · `ed-note`←`…saved-note` ·
- * `ed-milestone-note`←`data-testid="degraded-milestone-note"` · `ed-low-confidence`←`structuredBlocks.ts:58`
- * 产出的类名串（其 `App.css` 规则已随 Task 13 删除）。任何「全树裸扫 `.ed-*`」的写法都会在这 5 个上假红。
+ * `ed-milestone-note`←`data-testid="degraded-milestone-note"` · `ed-low-confidence`←**已退役**的名字：
+ * 它是 `structuredBlocks.ts` 的 `lowConfidenceClass()` 在批 6 T13 之前产出的旧类名（其 `App.css` 规则
+ * 已随批 0-D Task 13 删除），T13 按 R12.1 改成了 `ed-text--low-confidence`。本条**仍保留**这个旧名
+ * （控制方 R12.1：不启用 G16 ⇒ 不改这几条既有断言）—— 它的作用从「锚住一个真存在的标识符」变成
+ * 「锚住一个**绝不许再出现**在 CSS 选择器域里的名字」。任何「全树裸扫 `.ed-*`」的写法都会在这 5 个上假红。
  */
 const NON_PRIMITIVE_ED_NAMES: readonly string[] = [
   "ed-desc",
@@ -149,12 +152,15 @@ describe("★ 每一处 `animation` 声明的选择器都在名单里（`animati
 
 /* ── T6 追加段（R3.1）：三档强度通道的**源序**与**值域闭合**。本段**只追加** —— 上面两条 describe
  * 与既有 import 一行未动；`:142` 的「每个 `animation` 选择器逐字进名单」是只读铁判据（G7）。
- * 为什么源序是判据而不是注释：§8.5 逐字要求「系统 `prefers-reduced-motion` 优先于档位」，而在同一张
- * 样式表里这**只能**靠源序实现（档位块先写、reduced-motion 块后写 ⇒ 后者的 `!important` 覆盖赢）；
- * 把两块顺序对调，用户选的档位就会盖掉系统无障碍设置，且**没有任何其它判据会报错**。
+ * 为什么源序是判据而不是注释：§8.5 逐字要求「系统 `prefers-reduced-motion` 优先于档位」。🔴 **机理订正
+ * （R18.1，T6 评审 I-2 实测）**：真正承重的是 **reduced-motion 块的每条声明都带 `!important`**（档位块
+ * 不带）—— 即使把两块顺序对调，reduced 仍然赢。所以本段守的**不是**优先级本身，而是一条**防御性钦定**：
+ * 把「reduced 块带 `!important`、档位块不带」这两条前提的**相对位置**也钉住，于是将来有人拿掉
+ * `!important`、或给档位块加上 `!important`（那会**反转**无障碍优先级），至少还有一道信号。
+ * 真实机理自身的守卫在 `../../motion/responseSeams.test.ts` 的 I-2（逐条声明必须带 `!important`）。
  * 口径：注释先**就地掩码**（换行保留 ⇒ 报告里的行号与真实文件一致；`stripComments` 会连注释里的换行
  * 一起删掉、行号漂移）；掩码后取「档位块首个选择器」与「reduced-motion 块起始」的**行号**比对。 */
-describe("★ 三档强度通道：源序（档位块在 reduced-motion 块之前）与值域闭合", () => {
+describe("★ 三档强度通道：源序（防御性钦定 —— 档位块写在 reduced-motion 块之前）与值域闭合", () => {
   const masked = read("motion.css").replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "));
   const tierAt = masked.search(/\[data-motion="(?:eco|standard|rich)"\]/);
   const reducedAt = masked.indexOf("@media (prefers-reduced-motion");
@@ -165,11 +171,11 @@ describe("★ 三档强度通道：源序（档位块在 reduced-motion 块之�
     expect(reducedAt, "motion.css 里找不到 reduced-motion 块").toBeGreaterThanOrEqual(0);
   });
 
-  it("档位块行号 < reduced-motion 块行号（§8.5：系统设置永远赢过用户选的档）", () => {
+  it("档位块行号 < reduced-motion 块行号（§8.5 的**防御性钦定**：真实承重机理是 reduced 块的 `!important`，见 R18.1）", () => {
     expect(tierAt >= 0 && reducedAt >= 0, "两块必须都在，否则本条是空真").toBe(true);
     expect(
       lineAt(tierAt),
-      `档位块在第 ${lineAt(tierAt)} 行、reduced-motion 在第 ${lineAt(reducedAt)} 行 —— 顺序写反 = 用户选的档位盖掉系统无障碍设置`,
+      `档位块在第 ${lineAt(tierAt)} 行、reduced-motion 在第 ${lineAt(reducedAt)} 行 —— 顺序写反 = 这条防御性钦定失效（优先级本身仍由 reduced 块的 !important 承担）`,
     ).toBeLessThan(lineAt(reducedAt));
   });
 

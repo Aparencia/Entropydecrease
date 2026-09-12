@@ -81,7 +81,9 @@ describe("renderMarkdownTable", () => {
 describe("lowConfidenceClass", () => {
   it("低置信（<0.5）返回标记类名，其余返回空串", () => {
     // Assert
-    expect(lowConfidenceClass(0.3)).toBe("ed-low-confidence");
+    // 批 6 T13（R12.1）：类名由 `ed-low-confidence` 改为 `<既有基类>--<修饰>` 形状
+    // （`ed-text` 基类的修饰类）—— 旧名字会被 motion-coverage.test.ts 的「未登记基类」判据拦下。
+    expect(lowConfidenceClass(0.3)).toBe("ed-text--low-confidence");
     expect(lowConfidenceClass(0.5)).toBe("");
     expect(lowConfidenceClass(null)).toBe("");
     expect(lowConfidenceClass(undefined)).toBe("");

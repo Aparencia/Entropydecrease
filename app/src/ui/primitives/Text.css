@@ -44,3 +44,15 @@
 .ed-text--font-mono { font-family: var(--ed-font-mono, "JetBrains Mono", Consolas, ui-monospace, monospace); font-variant-numeric: tabular-nums; }
 
 .ed-text--truncate { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 未确认段落（低置信段）的墨度极缓慢起伏 —— 环境层第 ③ 件（规格 §8.1 逐字「幅度 2%」· 裁决 R11.3）。
+   为什么落在 `Text.css`：类名是 `ed-text` 基类的**修饰类**（`<既有基类>--<修饰>` 形状，
+   🔴 受 `motion-coverage.test.ts` 的选择器域约束，**不得**改回 `ed-low-confidence`），与基类同元素
+   ⇒ 不进基类名单、只按「`animation` 声明逐字进名单」那条加进 `motion.css` 的 reduced-motion 块。
+   `@keyframes` 在 `motion.css`（本层零 keyframes）；幅度真源 = `app/src/motion/env.ts` 的
+   `LOW_CONFIDENCE_INK_AMPLITUDE`（本文件只写两端极值，不写 0.02）。
+   生产调用点 = `components/structuredBlocks.ts` 的 `lowConfidenceClass()`（`confidence < 0.5`）。 */
+.ed-text--low-confidence {
+  animation: ed-unconfirmed-breathe calc(var(--ed-dur-skeleton, 1200ms) * 4)
+             var(--ed-ease-paper, cubic-bezier(0.215, 0.61, 0.355, 1)) infinite;
+}

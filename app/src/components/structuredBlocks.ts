@@ -53,7 +53,17 @@ export function renderMarkdownTable(md: string): string {
   return `<table>${thead}${tbody}</table>`;
 }
 
-/** 低置信样式类名（黄色虚线下划线；低置信/AI 占位渲染统一入口） */
+/**
+ * 低置信样式类名（黄色虚线下划线；低置信/AI 占位渲染统一入口）。
+ *
+ * @ai-context 类名形状受 `ui/primitives/motion-coverage.test.ts` 的**选择器域约束**（批 6 T13 · 裁决 R12.1）：
+ *   逐字取 `<既有基类>--<修饰>` 形状（此处 = `Text` 原语的基类 `ed-text`）—— 该修饰类与基类同元素，
+ *   于是被 reduced-motion 名单的基类条目覆盖，且不必新增基类名。
+ *   🔴 **不得**改回 `ed-low-confidence`：那个名字落在任何基类域之外，会被上面那条守卫的「未登记基类」
+ *   判据（`:113-124`）拦下；放行它要改三条既有断言（= G16 候选），控制方已裁定**不启用**。
+ *   样式落点 = `ui/primitives/Text.css` 的 `.ed-text--low-confidence`（环境层第 ③ 件：墨度极缓慢起伏，
+ *   幅度真源见 `motion/env.ts`）；触发判据 = `SessionSegment.confidence` 的低置信段（阈值 `< 0.5`，不改）。
+ */
 export function lowConfidenceClass(confidence: number | null | undefined): string {
-  return confidence != null && confidence < 0.5 ? "ed-low-confidence" : "";
+  return confidence != null && confidence < 0.5 ? "ed-text--low-confidence" : "";
 }

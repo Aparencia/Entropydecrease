@@ -70,6 +70,8 @@
 
 **`@keyframes` 桶边界（硬）**：循环环境动效**只留三处** —— `Loading` / `Skeleton` / `Probe`。`StatusLine` 归 **transition（无循环动画）**：状态行是**信息**不是「呼吸物」，循环动效会让它在长列表里变成噪音（「闲置时也有生命感」由 `Probe` 承担）。新循环动效**只能写进 `motion.css`** —— `Loading.css` / `Button.css` / `StatusLine.css` 三处均被既有守卫禁止新增 keyframes。
 
+- **环境层的时长来源（登记，R16.3④ 的落点）**：环境层四件里**唯一未 token 化**的时长是 `Loading.css` 的 `ed-probe-swing 2.4s`（硬编码字面量）。批 6 **不**把它升成 token：`Loading.css` 在本批是零改动文件（G5），而在别处再写一个 `2.4s`/`2400ms` 就是第二个真源 ⇒ 采「**不发明数字**优先于凑齐 token」；它因此是**唯一**一条非 token 环境层时长，逐字登记在此。其余三条循环（采集脉冲 / 未确认段落墨度起伏 / 到期刻度微光）的周期一律从唯一真源 `--ed-dur-skeleton`（1200ms）以 `calc()` **倍数**派生 ⇒ 不新增时长字面量，`rich` 档的频率提高同样走 token 派生（`* 5 / 3` = 2000ms = 本节 2–6s 带的下限）。
+
 **`usePresence`（既有事实 · 本批零改动）**：规格 §8.4（:518）第三段的落点 —— `app/src/ui/primitives/usePresence.ts` **已存在**（**200 行** · barrel 已导出 · 三相位 `enter/entered/exit` · 默认 `exitMs` 160 + `timeoutSlackMs` 80）。
 
 - 它只负责**卸载时机**（GSAP 不管这个）：`transitionend` 监听**只认本节点**（`event.target === event.currentTarget`；子元素冒泡不得卸载本节点）+ **超时兜底**（reduced-motion 下不会有 `transitionend`，缺兜底会「关不掉的弹层」）。
@@ -101,7 +103,7 @@
 
 - **载体 = `data-motion` 写在 `<html>` 上**，取值逐字 `"eco"` | `"standard"` | `"rich"`，**默认 `"standard"`**；持久化键逐字 `motion:intensity`（照 `useViewMemory` 范式：纯函数 + 注入 `Storage` + 惰性读取 + 静默降级）。
 - **初值 = 跟随系统**：`prefers-reduced-motion: reduce` ⇒ `"eco"`，否则 `"standard"`。`matchMedia` **必须自带守卫**（`typeof window.matchMedia !== "function"`；jsdom 无此 API）。
-- 🔴 **系统 `prefers-reduced-motion` 优先于档位**：本规范的**强制级**（非可选优化），规格 §8.5（:526）逐字；reduced-motion 下**整体静态**。CSS 里靠**源序**实现（后写覆盖，源序即优先级的实现）⇒ **档位规则块必须写在 reduced-motion 块之前**；顺序写反 = 用户选的档位**盖掉**系统无障碍设置，违反规格 §8.6.1（:552）第 4 条「『活』不得以无障碍为代价」。
+- 🔴 **系统 `prefers-reduced-motion` 优先于档位**：本规范的**强制级**（非可选优化），规格 §8.5（:526）逐字；reduced-motion 下**整体静态**。🔴 **承重机理（R18.1 的因果更正）**：真正让系统赢的是 **reduced-motion 块的每条声明都带 `!important`**（档位块不带）—— 按 CSS Cascade，即使把两块顺序对调，reduced 仍然赢。**档位规则块必须写在 reduced-motion 块之前**这条源序要求仍然成立，但性质是**防御性钦定**（守的是「reduced 块带 `!important`、档位块不带」这两条前提被无意改动）；🔴 **不得**给档位块加 `!important` —— 那会**反转**无障碍优先级，违反规格 §8.6.1（:552）第 4 条「『活』不得以无障碍为代价」。两条机器判据：`ui/primitives/motion-coverage.test.ts` 的源序 describe（行号比对）+ `motion/responseSeams.test.ts` 的 I-2（逐条声明带 `!important`）/ I-3（两块之间零规则块）。
 - **reduced-motion 覆盖率 100%**（规格 §11-5（:741））：名单是**双向的** —— ① 每类原语的**根类**（动效挂在它身上的选择器）必须在名单里；② **每一处 `animation` 声明的选择器原文（含伪元素）必须逐字进名单**。`animation-duration` / `animation-iteration-count` **不是可继承属性** ⇒ 只写宿主基类时伪元素（如 `.ed-skeleton::after`）**拿不到**覆盖（实测仍是 `1.2s / infinite`）。
 - 名单**只许加进 `app/src` 内那一条 reduced-motion 块**（`motion.css`），**不得**新开第二条媒体查询；块**位置唯一**，名单可增长。
 - 新动效落点的类名必须是 **`<既有基类>--<修饰>`** 形状（修饰类与基类同元素、已被同一条规则覆盖，**不进**基类名单；新起一个 `.ed-*` 基类名会撞既有守卫的选择器域）。
