@@ -129,7 +129,26 @@ describe("A3 · 触发真的起了编排（方向 / 范围口径）与属性集�
   });
 });
 
-describe("A4 · 高亮落点的样式接缝（TriTrackAlign.css）", () => {
+describe("A4 · 反向的第二条路「切走再回」（R5.1 逐字）", () => {
+  it("对齐后卸载（切走）⇒ 时间线被收尸；重挂（再回）⇒ 回错位位形、无高亮", async () => {
+    const first = render(<SessionTriTrackView detail={detailOf()} />);
+    expect(rails(), "前置用例有残留 ⇒ 下面的计数会被做假").toBe(0);
+    await waitFor(() => expect(yOf(first.container, "screen")).toBe(8), WAIT);
+    fireEvent.click(codeAt(first.container, MS));
+    await waitFor(() => expect(rails(), "两条非参考轨各 1 条编排时间线").toBe(2), WAIT);
+    expect(highlighted(first.container)).toHaveLength(3);
+
+    first.unmount(); // 切走：容器卸载惰性视图（`SessionViewHost` 的 H2 行为）
+    expect(rails(), "切走后时间线仍在飞 ⇒ 卸载没有收尸").toBe(0);
+    const again = render(<SessionTriTrackView detail={detailOf()} />);
+    await waitFor(() => expect(yOf(again.container, "screen"), "重挂 ⇒ 起始态 = 错位（反向的第二条路）").toBe(8), WAIT);
+    expect([yOf(again.container, "ocr")]).toEqual([-8]);
+    expect(highlighted(again.container), "重挂后残留了共轴高亮").toEqual([]);
+    expect(rails(), "重挂只物化静态位形 ⇒ 零编排时间线").toBe(0);
+  });
+});
+
+describe("A5 · 高亮落点的样式接缝（TriTrackAlign.css）", () => {
   it("选择器 = 修饰类 · 颜色只经 `var(--ed-link)` · **零** transition/animation/@media/z-index/色值字面量", () => {
     expect(CSS, "修饰类没有规则 ⇒ 「高亮」是空话").toContain(`.${COALIGNED_CLASS}`);
     expect(COALIGNED_CLASS, "高亮类必须是 `<基类>--<修饰>` 形状").toBe(`${ITEM_CLASS}--coaligned`);
