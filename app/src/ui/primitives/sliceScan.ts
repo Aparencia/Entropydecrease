@@ -25,7 +25,17 @@ export function stripComments(src: string): string {
   const regexStart = (k: number): boolean => {
     let j = k - 1;
     while (j >= 0 && /\s/.test(src[j])) j--;
-    return j < 0 || "(,=:[!&|?{};+-*%~^<>".includes(src[j]);
+    if (j < 0) return true;
+    // ★ `<` 要**判定收紧**（收口评审 I-1）：白名单里的 `<` 会把**每个 JSX 闭合标签** `</span>` 的 `/`
+    // 判成正则起点（`/` 前最后一个非空白字符就是 `<` 后的标签名 —— 但标签名本身也在白名单外，
+    // 真正吃命的是**前一个标签的 `>`**）⇒ 状态机从那里把「到本行下一个 `/`」之间的内容当正则体
+    // 抹成等长空白 ⇒ 夹在两个闭合标签之间的字面量对**所有共用本仪器的棘轮不可见**
+    // （实测：`NoteRowContextMenu.tsx:175` 的 `color: "#9ca3af"` 被抹掉 ⇒ 弱化灰少算 1）。
+    // 判据：`<` 后**紧跟** `/`（中间无空白）= JSX 闭合标签，不是正则起点；`<` 与 `/` 之间有空白
+    // = 比较运算符后跟正则（`a < /["']/.test(x)`）⇒ **仍按正则处理**（否则会把正则体当代码读）。
+    // 两侧都有夹具自证：`textRatchet.test.ts` ⑥（灰字面量被数到）+ `loadingScan.ts` 的 `isHandwritten` 夹具。
+    if (src[j] === "<") return j + 1 !== k;
+    return "(,=:[!&|?{};+-*%~^<>".includes(src[j]);
   };
   let i = 0;
   while (i < n) {

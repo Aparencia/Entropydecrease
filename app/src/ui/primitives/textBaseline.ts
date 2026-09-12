@@ -11,21 +11,25 @@
  * ★ 计次口径（选定后写死；换算已自证）
  *   域 = `app/src/**` 的 `.ts`/`.tsx` **减** `*.test.ts(x)` **减** `ui/primitives/**`
  *     （原语层是墨度与字阶的真源，不是待收敛的调用点 —— 同 `statusLineBaseline` / T1 的 `prod`）。
- *   **先剥注释**（复用 `sliceScan.ts` 的状态机）。弱化灰取**行**口径（同行多次算 1）；字号越界取
- *   **处**口径（逐次命中）。⚠️ 两口径在本域**恰好等值**（`tmp/t16a/unit-check.mjs` 实测「同一行两次
- *   命中」的行数为 **0** ⇒ 换算系数 **1.0000**）；若将来出现同行两次命中，行口径会**少算** ⇒ 按处重测。
+ *   **先剥注释**（复用 `sliceScan.ts` 的状态机）。弱化灰取**行**口径（同行多次算 1）；字号越界取**处**口径。
+ *   ⚠️ 两口径在本域**恰好等值**（`tmp/t16a/unit-check.mjs` 实测「同行两次命中」= 0 ⇒ 系数 **1.0000**）。
  * ★ 数字来源（同一支探针跑四棵树；机理逐条见 `tmp/t16a/mechanism.md`）
- *   弱化灰行/文件：计划 42e88740 **295/105**（计划文案写 296 ⇒ 手抄噪声）→ 探针 8f5bd9f1 **246/98**
- *   → T16-A HEAD **249/100** → **T16-B 迁移后 63/44**（2026-09-12 T16-B 收紧）。
- *   字号越界处/文件：**604/124 → 576/122 → 558/120**（本单元**未动**：越界值按 R2 原样留在行内）。
- *   迁移账（T16-B，逐处见 `tmp/t16b/migrated.md`）：**249 = 迁移 186 + 例外 63**（例外逐文件理由见
- *   `RESIDUAL`；**不得**再出现「无理由的冻结」）。
+ *   弱化灰行/文件：计划 42e88740 **295/105**（计划写 296 ⇒ **不是手抄噪声**：296 是「朴素剥注释」的真值，
+ *   差 1 来自下面的仪器假阴，见收口评审 I-1/M-6）→ 探针 8f5bd9f1 **246/98** → T16-A HEAD **249/100**
+ *   → **T16-B 迁移后 63/44**（2026-09-12 T16-B 收紧）。字号越界处/文件：**604/124 → 576/122 → 558/120**
+ *   （本单元**未动**：越界值按 R2 原样留在行内）。迁移账（`tmp/t16b/migrated.md`）：**249 = 迁移 186 +
+ *   例外 63**（例外逐文件理由见 `RESIDUAL`；**不得**再出现「无理由的冻结」）。
+ *
+ * ★ **仪器修正后的重冻**（2026-09-12 收口修复单元 · 收口评审 **I-1**）：`stripComments` 曾把 JSX 闭合标签
+ *   `</x>` 的 `/` 当正则起点 ⇒ 两个闭合标签之间的字面量被抹掉（`NoteRowContextMenu.tsx:175`），据实重冻
+ *   **+1**：总量 **63 → 64** / 该文件 **1 → 2**（条目数、锚、字号侧未动；机理详见 `textRatchet` ⑥）。
+ *
  * ★ 冻结粒度 = **文件 → 计数**（同 `nativeButtonBaseline` / `loadingBaseline`）：逐行 key 会在拆件
  *   与行号漂移时假红；棘轮要防的是「永远迁不完」⇒ 总量 + 逐文件只减不增是完整的。
- * 副作用：无（纯数据，被 `textRatchet.test.ts` 读）。边界：**棘轮只许降** —— 真迁走一处要
- *   **手工收紧**（`FROZEN_*_TOTAL` 必须恰等于逐文件之和，由测试断言；常数不许手工改成自洽）。
+ * 副作用：无（纯数据，被 `textRatchet.test.ts` 读）。边界：**棘轮只许降** —— 真迁走一处要**手工收紧**
+ *   （`FROZEN_*_TOTAL` 必须恰等于逐文件之和；常数不许手工改成自洽）。
  */
-export const FROZEN_MUTED_GRAY_TOTAL = 63;
+export const FROZEN_MUTED_GRAY_TOTAL = 64;
 
 /** 弱化灰冻结**文件数**（条目数；迁移清零一个文件 ⇒ 必须删键，条目数随之降） */
 export const FROZEN_MUTED_GRAY_FILES = 44;
@@ -38,18 +42,16 @@ export const FROZEN_FONT_OOB_FILES = 120;
 
 /**
  * 锚（anti-table-swap）：条目数 + 一个具名文件的冻结值；换一张同样「自洽」的表 ⇒ 锚必红。
- * ⚠️ **T16-B 换锚**：T16-A 的锚 `components/LiveActivityPanel.tsx`（9）正是本单元的迁移目标
- * （9 → 2）⇒ 随迁移失效。新锚 = `components/NoteLinkToSystem.tsx`：**5 处全部**是登记例外
- * （B1 硬守卫 + 品牌青三元），**不可能**在没有控制方裁决的情况下下降。
+ * ⚠️ **T16-B 换锚**：T16-A 的锚（`LiveActivityPanel` 9）正是本单元的迁移目标（9 → 2）⇒ 随迁移失效。
+ * 新锚 = `NoteLinkToSystem.tsx`：5 处**全部**是登记例外（B1 硬守卫 + 品牌青三元）⇒ 无裁决不可能下降。
  */
 export const ANCHOR_MUTED_GRAY = { file: "components/NoteLinkToSystem.tsx", count: 5, files: 44 } as const;
 export const ANCHOR_FONT_OOB = { file: "components/action-center/ActionCenterPanel.tsx", count: 19, files: 120 } as const;
 
 /**
  * 相对 `app/src` 的正斜杠路径 → 该文件**允许残留的弱化灰行数上限**（只许降，键不许新增）。
- * ⚠️ 迁移清零一个文件时**删键**（不是改成 0）—— 留 0 值键会让「基线未登记的文件命中 = 0」这条
- * 判据的语义变模糊（`loadingBaseline` 用 0 表示「已交给原语」，本表不采用那个约定）。
- * ★ 每个键都必须有一条 `RESIDUAL` 理由（由 `textRatchet.test.ts` 双向断言）。
+ * ⚠️ 迁移清零一个文件时**删键**（不是改成 0）—— 留 0 值键会让「基线未登记的文件命中 = 0」这条判据的
+ * 语义变模糊（`loadingBaseline` 用 0 表示「已交给原语」，本表不采用那个约定）。每个键都要有理由见 `RESIDUAL`。
  */
 export const FROZEN_MUTED_GRAY_BY_FILE: Readonly<Record<string, number>> = {
   "components/AiProviderSettings.tsx": 1,
@@ -79,7 +81,7 @@ export const FROZEN_MUTED_GRAY_BY_FILE: Readonly<Record<string, number>> = {
   "components/NoteListToolbar.tsx": 1,
   "components/NoteMoveToGroupMenu.tsx": 1,
   "components/NoteReadingView.tsx": 1,
-  "components/NoteRowContextMenu.tsx": 1,
+  "components/NoteRowContextMenu.tsx": 2,
   "components/NoteTreeSection.tsx": 1,
   "components/PracticeQuestionsOverlays.tsx": 1,
   "components/ReadyCheckCard.tsx": 1,
@@ -104,9 +106,8 @@ export const FROZEN_MUTED_GRAY_BY_FILE: Readonly<Record<string, number>> = {
  *   `ternary-no-equivalent` = A 类条件色，非灰支在 `TextTone` 九档**无**语义等价档 ·
  *   `interactive-no-equivalent` = 两者叠加（交互元素 + 品牌青/实底白字）·
  *   `nontext` = `background`/`border`/`stroke`（不是墨度，B19 第 5 条：不迁不动）·
- *   `tag` = 宿主标签不在 `TextTag` 内（`details`）·
- *   `colorMap` = 映射函数体里的 `return "#9ca3af"`（C 类，批 5/7 状态色收敛）·
- *   `b1-non-migrated` = B1/B2 硬守卫的 `NON_MIGRATED_14`（文件整体不迁、不得 import 原语）。
+ *   `tag` = 宿主标签不在 `TextTag` 内（`details`）· `colorMap` = 映射函数体里的 `return "#9ca3af"`
+ *   （C 类，批 5/7 状态色收敛）· `b1-non-migrated` = B1/B2 硬守卫的 `NON_MIGRATED_14`（文件不迁）。
  */
 export type TextResidualKind =
   | "interactive"
@@ -118,9 +119,8 @@ export type TextResidualKind =
   | "b1-non-migrated";
 
 /**
- * 允许残留的**逐文件理由**（照 `loadingBaseline.ts` 的 `RESIDUAL` 范式）。每条都必须：分类合法 ∧
- * 理由非空 ∧ 该文件此刻**仍然命中** —— 防「僵尸豁免」（一处被迁走却还挂在豁免表里，下一个人就会
- * 以为它还在）。键集必须**逐字等于** `FROZEN_MUTED_GRAY_BY_FILE`（两侧都查）。
+ * 允许残留的**逐文件理由**（照 `loadingBaseline.ts` 的 `RESIDUAL` 范式）。每条都必须：分类合法 ∧ 理由
+ * 非空 ∧ 该文件此刻**仍然命中**（防「僵尸豁免」）。键集必须**逐字等于** `FROZEN_MUTED_GRAY_BY_FILE`。
  */
 export const RESIDUAL: readonly { file: string; kind: TextResidualKind; reason: string }[] = [
   { file: "components/AiProviderSettings.tsx", kind: "ternary-no-equivalent", reason: "A 类三元 `color: p.enabled ? \"#0d9488\" : \"#9ca3af\"`：非灰支是品牌青 #0d9488，`TextTone` 九档无等价档；强行迁移要么丢色、要么写行内 style（ADR-033 §4 禁止）、要么给原语加「条件墨度」槽（语义不成立）" },
@@ -150,7 +150,7 @@ export const RESIDUAL: readonly { file: string; kind: TextResidualKind; reason: 
   { file: "components/NoteListToolbar.tsx", kind: "interactive", reason: "原生 `<button onClick title>`（折叠列表）⇒ `Button` 域（批 5/7）" },
   { file: "components/NoteMoveToGroupMenu.tsx", kind: "b1-non-migrated", reason: "B1/B2 硬守卫（同上）：锚定菜单文件整体不迁 ⇒ 「暂无组」空态不迁" },
   { file: "components/NoteReadingView.tsx", kind: "interactive", reason: "原生 `<button onClick title>`（收起大纲）⇒ `Button` 域（批 5/7）" },
-  { file: "components/NoteRowContextMenu.tsx", kind: "b1-non-migrated", reason: "B1/B2 硬守卫（同上）：行右键菜单文件整体不迁 ⇒ 「暂无组」空态不迁" },
+  { file: "components/NoteRowContextMenu.tsx", kind: "b1-non-migrated", reason: "B1/B2 硬守卫（同上）：行右键菜单文件整体不迁 ⇒ 「暂无组」空态不迁；`:175`（移动到组的 ▸ 指示符 `color: \"#9ca3af\"`）亦不迁 —— 该行夹在两个闭合标签之间，曾被剥注释器漏读（收口评审 I-1），修好后本文件由 1 处重冻为 2 处" },
   { file: "components/NoteTreeSection.tsx", kind: "interactive", reason: "原生 `<button onClick title>`（折叠箭头）⇒ `Button` 域（批 5/7）" },
   { file: "components/PracticeQuestionsOverlays.tsx", kind: "interactive", reason: "原生 `<button onClick>`（归档；`{...ghostBtn}` 样式常量）⇒ `Button` 域（批 5/7）" },
   { file: "components/ReadyCheckCard.tsx", kind: "ternary-no-equivalent", reason: "A 类三元 `item.ok ? \"#9ca3af\" : \"#b45309\"`：**灰支是「通过」**、非灰支是失败琥珀，`due`（到期刻度）语义不等价 ⇒ 无档" },

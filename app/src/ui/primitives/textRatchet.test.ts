@@ -41,7 +41,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { readLines, relOf, walkSources } from "./sliceScan";
+import { readLines, relOf, stripComments, walkSources } from "./sliceScan";
 import {
   ANCHOR_FONT_OOB,
   ANCHOR_MUTED_GRAY,
@@ -106,6 +106,8 @@ export function scanFontOobByFile(): Map<string, number> {
 const GRAY = scanMutedGrayByFile();
 const OOB = scanFontOobByFile();
 const sumOf = (m: Map<string, number>): number => [...m.values()].reduce((a, b) => a + b, 0);
+/** 一段文本里的弱化灰字面量**行数**（⑥ 的剥注释夹具用：口径与 `GRAY` 同为行口径） */
+const countIn = (text: string): number => text.split(/\r?\n/).filter((l) => l.includes(MUTED_GRAY)).length;
 /** 逐文件「实际 > 冻结」的回潮清单（键不在基线里 ⇒ 冻结值按 0 算） */
 const regressions = (m: Map<string, number>, frozen: Readonly<Record<string, number>>): string[] =>
   [...m.entries()].filter(([f, n]) => n > (frozen[f] ?? 0)).map(([f, n]) => `${f}: ${frozen[f] ?? 0} → ${n}`);
@@ -151,18 +153,20 @@ describe("棘轮一 · 弱化灰 #9ca3af（只许减 · 迁移后本表须手工
     const positive = ANCHOR_MUTED_GRAY.file;
     expect(GRAY.get(positive) ?? 0, `仪器在 ${positive} 上看不见 #9ca3af ⇒ 扫描静默失效`).toBeGreaterThan(0);
     expect(FROZEN_MUTED_GRAY_BY_FILE[positive]).toBe(GRAY.get(positive));
-    // 词表自证：字面量确实是 `#9ca3af`（不是抄错的码位 ⇒ 词表静默变窄）
+    // ★ 剥注释器**判定收紧**的回归夹具（收口评审 I-1）：闭合标签 `</span>` 的 `/` 曾被 `regexStart`
+    // 判成正则起点 ⇒ 夹在两个闭合标签之间的字面量被抹掉（受害行 `NoteRowContextMenu.tsx:175`，
+    // 弱化灰因此少算 1）。两条**必须同时**成立：闭合标签之间 ⇒ 数得到；`<` 后**带空白**的真正则 ⇒ 跳过。
+    expect(countIn(stripComments('<span>a</span> 到 <i style={{ color: "#9ca3af" }} />\n')), "闭合标签之间的灰字面量被抹掉了").toBe(1);
+    expect(countIn(stripComments('const r = x < /["\']#9ca3af/.test(y);\nconst b = 1;\n')), "正则体没被跳过（`<` 后带空白）").toBe(0);
+    // 词表自证（字面量确实是 `#9ca3af` ⇒ 词表静默变窄时这里红）+ 域内**确实还有命中**（否则下面的棘轮是空真）
     expect(MUTED_GRAY).toBe("#" + "9ca3af");
-    expect(MUTED_GRAY).toHaveLength(7);
-    // 域内**确实还有命中**（否则下面的棘轮是空真）；域本身非空
     expect(GRAY.size, "域内一处弱化灰都没有 ⇒ 基线表是空真").toBeGreaterThan(0);
     expect(sumOf(GRAY), "域内实测总数与冻结总数不符（读数与基线被同时改过）").toBe(FROZEN_MUTED_GRAY_TOTAL);
-    // 域边界：测试文件与原语层都在域外（口径同 T1 的 prod）
-    expect(DOMAIN.some((r) => /\.test\.tsx?$/.test(r)), "测试文件掉进了域内").toBe(false);
-    expect(DOMAIN.some((r) => r.startsWith("ui/primitives/")), "原语层没有被排除出域").toBe(false);
-    expect(DOMAIN.includes("ui/tokens.css"), "域口径漂了：CSS 不该进来").toBe(false);
-    // 本文件在域外（否则 ⑥ 自己的字面量会自命中）
-    expect(DOMAIN.includes("ui/primitives/textRatchet.test.ts")).toBe(false);
+    // 域边界：测试文件、原语层、CSS 都必须在域外（口径同 T1 的 prod）；本文件在域外，否则 ⑥ 自命中
+    for (const rel of [DOMAIN.find((r) => /\.test\.tsx?$/.test(r)), DOMAIN.find((r) => r.startsWith("ui/primitives/")),
+      DOMAIN.find((r) => r.endsWith(".css")), DOMAIN.find((r) => r === "ui/primitives/textRatchet.test.ts")]) {
+      expect(rel, "域边界漂了：测试文件 / 原语层 / CSS / 本文件掉进了域内").toBeUndefined();
+    }
   });
 });
 
