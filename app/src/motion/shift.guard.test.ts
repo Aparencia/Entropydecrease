@@ -22,6 +22,17 @@
  *   `engine.guard.test.ts` 同款用法）；② **文本级扫描，不做 AST** —— 它只能证「字面量在不在」，
  *   不证实现是否真的遵守（评审 I-4 的那条限度）；③ 未按 `*_PX` 命名的位移常量（如 `CARD_LIFT = 12`）
  *   本判据抓不到，只由评审兜 —— **诚实登记，不声称封死**。
+ *   ④ 🔴 **语法洞的剩余边界（R29.2 收窄后仍未关掉的面 · R36.1①）**：读口是**文本正则、不是 TS 解析器**
+ *      （见 ②）。收窄后它认得「`= 字面量 ;`」这一族（可带类型标注、可套 `Number()`、可套括号、可跨行、
+ *      负号按 `Math.abs` 取值）；**仍看不见**的形态逐字如下：**运算表达式**（`8 + 4`）· **三元**
+ *      （`x ? 12 : 4`）· **模板串**（`` `12` ``）· **`as const`**（`12 as const`）· **十六进制**（`0xc`）·
+ *      **右值来自跨文件导入或计算**（`= IMPORTED_PX` / `= BASE * 2`）。另有三条**结构性限度**：
+ *      类型标注里含 `=`（如函数类型 `() => void`）会让读口错位 · 缺分号（ASI）的声明会把右值捕到**下一条**
+ *      声明的 `;` · 右值里含 `;`（字符串 / 模板串内）会被截断。⇒ 这些面**由评审兜**，本判据不声称覆盖。
+ *   ⑤ **正面口径（不许读成全覆盖）**：本判据只保证「**它看得见的形态必须 ≤ 8px**」——**不是**「所有 TS
+ *      形态都被覆盖」。⇒ **有意不做 fail-closed**：非字面量 `_PX` 的**合法**来源包括跨文件导入与计算 ⇒
+ *      判红会把合法写法当犯规 = **假阳性**；本仓口径 **判据错杀比漏判更坏**（它会挡住正当改动）——
+ *      R36.1④ 逐字裁定「**不取 fail-closed**」。剩余边界以 ④ 为准，逐字登记，不假装全覆盖。
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -75,8 +86,10 @@ function shiftViolations(text: string, file: string): string[] {
     .map((s) => `${file}: ${s.call} = ${s.value}px > ${SHIFT_MAX_PX}px`);
 }
 
-/** `export const <name> = <number>` 形态的数值常量（R11.4 的「位移常量」面） */
-const NUMERIC_CONST = /export const ([A-Za-z_$][\w$]*)\s*=\s*(-?\d+(?:\.\d+)?)\s*;/g;
+/** 读口（R29.2 收窄）：`export const <名>[: <标注>] = <右值>;` —— 右值**整段**交给 `LITERAL_RHS` 判形态 */
+const NUMERIC_CONST = /export const ([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*([\s\S]*?);/g;
+/** 字面量右值：裸数字 / `Number(...)` 包装 / 任意层括号（跨行已折叠空白）；**不匹配 ⇒ 跳过、不判红**（文件头 ④⑤） */
+const LITERAL_RHS = /^\(*\s*(?:Number\s*\(\s*)?(-?\d+(?:\.\d+)?)(?:\s*\))?\s*\)*$/;
 const PX_NAME = /_PX$/;
 
 interface NumericConst {
@@ -88,7 +101,9 @@ function numericConstants(text: string, onlyPxNames: boolean): NumericConst[] {
   const out: NumericConst[] = [];
   for (const m of stripComments(text).matchAll(NUMERIC_CONST)) {
     if (onlyPxNames && !PX_NAME.test(m[1])) continue;
-    out.push({ name: m[1], value: Number(m[2]) });
+    const lit = LITERAL_RHS.exec(m[2].replace(/\s+/g, " ").trim());
+    if (lit === null) continue; // 非字面量右值：本读口看不见 —— 剩余边界见文件头 ④（有意不 fail-closed，见 ⑤）
+    out.push({ name: m[1], value: Math.abs(Number(lit[1])) });
   }
   return out;
 }
