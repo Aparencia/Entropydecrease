@@ -17,7 +17,8 @@
  *
  * ② 另判 `EmptyState.css` 的修饰类**内容**（`align-items` + `text-align`）并带反例样本：
  * `style-contract.test.ts` 的全枚举只判「规则存在」，一条空的 `{}` 也能过 —— 那正是"新档位忘了写
- * 排版"的静默失效面。
+ * 排版"的静默失效面。⚠️ 反例样本必须**经同一条取段器**（`bodyOf`）求值，否则退化成对本地字面量的
+ * 自证（恒真、不承重 —— T13–T15 评审 M-8 的原款，已在本单元改成真断言）。
  *
  * 副作用：只挂 React 树 + 只读同目录 `EmptyState.css`。边界：本仓未装 jest-dom ⇒ 原生 DOM API。
  */
@@ -34,11 +35,12 @@ const read = (file: string): string => readFileSync(join(HERE, file), "utf8").re
 const stripComments = (s: string): string => s.replace(/\/\*[\s\S]*?\*\//g, "");
 
 const CSS = stripComments(read("EmptyState.css"));
-/** 取 `.ed-empty--start` 的规则体（`选择器 {` 到第一个 `}`）—— 防「写在别的规则里也算过」 */
-const START_BODY = (() => {
-  const at = CSS.indexOf(".ed-empty--start");
-  return at < 0 ? "" : CSS.slice(at, CSS.indexOf("}", at));
-})();
+/** 取某选择器的规则体（`选择器 {` 到第一个 `}`）—— 防「写在别的规则里也算过」；判据与反例样本共用它 */
+function bodyOf(css: string, sel: string): string {
+  const at = css.indexOf(sel);
+  return at < 0 ? "" : css.slice(at, css.indexOf("}", at));
+}
+const START_BODY = bodyOf(CSS, ".ed-empty--start");
 
 const ACTION = { label: "新建第一篇笔记", onClick: (): void => {} } as const;
 
@@ -74,10 +76,15 @@ describe("② align=\"start\" ⇒ 修饰类 + CSS 内容（带反例样本）", 
     expect(START_BODY, "EmptyState.css 缺 `.ed-empty--start` 规则").not.toBe("");
     expect(START_BODY, "缺横向对齐（align-items）").toContain("align-items: flex-start");
     expect(START_BODY, "缺文本对齐（text-align）").toContain("text-align: start");
-    // 反例守门：一条只写了 align-items 的规则必须**不满足**上面第二条（否则该断言是永真）
-    const mutated = ".ed-empty--start {\n  align-items: flex-start;\n}";
-    expect(mutated).toContain("align-items: flex-start");
-    expect(mutated).not.toContain("text-align: start");
+    // 反例守门（T13–T15 评审 M-8 的结清）：把**同一条取段器** `bodyOf` 喂给一条只写 align-items 的
+    // 合成规则（后面紧跟一条带 `text-align: start` 的无关规则）—— 取段器必须只取到前者。修前那两行
+    // 只对刚刚手写的字面量求值（`mutated` 与 `EmptyState.css` 无关）⇒ 恒真、不承重，取段器越界也照样绿。
+    const mutated = bodyOf(
+      ".ed-empty--start {\n  align-items: flex-start;\n}\n.ed-empty__other {\n  text-align: start;\n}",
+      ".ed-empty--start",
+    );
+    expect(mutated, "取段器没取到合成规则的规则体 ⇒ 反例样本失效").toContain("align-items: flex-start");
+    expect(mutated, "取段器越界取到后面的规则 ⇒ 上面两条断言不承重").not.toContain("text-align: start");
   });
 });
 
@@ -103,11 +110,7 @@ describe("④ 四个槽位在两种对齐下都渲染（对齐档不改结构）
 
 describe("⑤ start 档下**次要槽内部**也左对齐（T2/T3 评审 Minor ② 的结清；批 4 T13）", () => {
   /** 取 `.ed-empty--start > .ed-empty__secondary` 的规则体（选择器到第一个 `}`） */
-  const SECONDARY_START_BODY = (() => {
-    const sel = ".ed-empty--start > .ed-empty__secondary";
-    const at = CSS.indexOf(sel);
-    return at < 0 ? "" : CSS.slice(at, CSS.indexOf("}", at));
-  })();
+  const SECONDARY_START_BODY = bodyOf(CSS, ".ed-empty--start > .ed-empty__secondary");
 
   it("`.ed-empty__secondary` 自身仍是居中行（默认档形态逐字不变）", () => {
     // 锚点带前导换行 ⇒ 命中**基础规则**本身，不会落到 `--start > __secondary` 那条覆盖上
