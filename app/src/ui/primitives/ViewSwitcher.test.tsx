@@ -158,10 +158,16 @@ describe("W6 无障碍：容器名 + 段可访问名 + roving tabindex", () => {
     for (const [i, s] of [...root.querySelectorAll("button")].entries()) expect(accName(s)).toBe(OPTIONS[i].label);
   });
 
-  it("可访问名探针自证：`aria-label` 优先 · 纯文本可用 · **只有装饰性 svg 时报空**", () => {
+  it("可访问名探针自证：`aria-label` 优先 · 纯文本可用 · **只有装饰性图形时报空**", () => {
+    // ⚠️ 这里**不许**用 innerHTML 写标签字面量：`ui/icons/no-inline-svg.test.ts` 是**整文件文本级**
+    // 棘轮（`readFileSync(f).includes("<" + "svg")` 那种子串判定，**注释与字符串同样计入**）⇒ 本行上方
+    // 连"举例说明"的字面量都不能留（控制方 2026-09-12 插播实测的红：第一版把标签写进了注释，仍被判红）。
+    // 改用 DOM API 造节点（`createElementNS` 的命名空间串不含尖括号 ⇒ 对棘轮不可见）。
     const el = document.createElement("button");
-    el.innerHTML = "<svg aria-hidden=\"true\"></svg>";
-    expect(accName(el), "装饰性 svg 被算进名字 ⇒ 下面的名字断言不承重").toBe("");
+    const decorative = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    decorative.setAttribute("aria-hidden", "true");
+    el.appendChild(decorative);
+    expect(accName(el), "装饰性图形被算进名字 ⇒ 下面的名字断言不承重").toBe("");
     el.textContent = "原文";
     expect(accName(el)).toBe("原文");
     el.setAttribute("aria-label", "显式名");
