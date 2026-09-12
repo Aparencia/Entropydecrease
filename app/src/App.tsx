@@ -41,7 +41,16 @@ const KnowledgePage = lazy(() => import("./pages/KnowledgePage"));
 // v0.18.0：学习目标页（意图层——独立 Tab，零叙事元素）
 const GoalsPage = lazy(() => import("./pages/GoalsPage"));
 // REQ-274（v0.19.4）：全局 AI 对话面板（丙案——按需唤起 + 内容保活）
-import AiConversationDock from "./components/AiConversationDock";
+// 批 2 包体治理：从静态 import 改为按需 import，并在它之前加一道「首开挂载」闸门。
+// @ai-context: 原语义（见文件末尾 dock 渲染处的注释）是「常驻挂载——开合仅切 display，
+//   选中态/后台任务保活」。本任务**只**把「首次打开之前」变成不挂载：dockOpen 为真过
+//   一次 ⇒ dockMounted 永为真 ⇒ 之后的 open/close 仍是纯 display 切换，保活语义逐字保留
+//   （控制方 2026-09-12 裁决 2：唯一被允许的行为差异就是首访挂载时序）。
+// @ai-context: 收益来自它的静态依赖链 AiConversationDock → TaskConversationView →
+//   ChatMessageMarkdown → rehype-katex + katex/dist/katex.min.css。实测这条链把
+//   vendor-katex + vendor-md（79,916 + 50,618 = 130,534 字节 gzip）钉在首屏；摘掉后
+//   首屏 gzip 227.08 → 92.79 kB（预算 200 kB，来源 docs/standards/performance.md:28）。
+const AiConversationDock = lazy(() => import("./components/AiConversationDock"));
 import AppErrorBoundary from "./components/AppErrorBoundary";
 // 批 2 包体治理：两个窗口变体面板从静态 import 改为按需 import（各自独立 chunk）。
 // @ai-context: 这两个面板只在**自己的窗口**里渲染（App() 顶部的 ?float=1 / ?overlay=1 早返回），
@@ -181,6 +190,15 @@ function MainShell() {
   const [focusChatTaskId, setFocusChatTaskId] = useState<number | null>(null);
   // REQ-274：对话面板开合 + 「在对话页继续」直达会话（消费后清空）
   const [dockOpen, setDockOpen] = useState(false);
+  // 批 2：首次打开之前的挂载闸门（打开过即常驻，见 import 处的 @ai-context）。
+  // @ai-context: 用 effect 而不是「渲染期 if (dockOpen) setDockMounted(true)」——渲染期改
+  //   state 会让 React 19 多跑一轮渲染（StrictMode 下更明显）；代价只是首开首帧 dock 仍
+  //   缺席（本来也要等它的 chunk 下载），无观感回归。与 mountedPages 同一模式。
+  // 副作用：仅置真、无回落路径 ⇒ 一旦挂载过就永不卸载（TD-004 保活）。
+  const [dockMounted, setDockMounted] = useState(false);
+  useEffect(() => {
+    if (dockOpen) setDockMounted(true);
+  }, [dockOpen]);
   const [focusChatId, setFocusChatId] = useState<number | null>(null);
   // 全局采集状态（ADR-007：与页面解耦，徽标常驻导航栏）。
   // 批 2b：capturing/recovering/paused 三份本地状态删除——采集控制单一状态源
@@ -473,20 +491,27 @@ function MainShell() {
           <SettingsPage active={page === "settings"} />
         </PageSlot>
       </main>
-      {/* REQ-274：全局 AI 对话面板（常驻挂载——开合仅切 display，选中态/后台任务保活） */}
-      <AiConversationDock
-        open={dockOpen}
-        onClose={() => setDockOpen(false)}
-        onOpenChat={(chatId) => { setFocusChatId(chatId); setPage("chat"); }}
-        onOpenTaskInChat={(taskId) => { setFocusChatTaskId(taskId); setPage("chat"); }}
-        onOpenSessions={(id) => { setFocusSessionId(id); setPage("sessions"); }}
-        onOpenNote={(id) => openNotePlain(id)}
-        onOpenRefineWorkbench={(sessionId, taskId) => {
-          setFocusSessionId(sessionId);
-          setFocusRefineTaskId(taskId);
-          setPage("sessions");
-        }}
-      />
+      {/* REQ-274：全局 AI 对话面板（常驻挂载——开合仅切 display，选中态/后台任务保活）。
+          批 2：闸门只加在**首开之前** —— dockMounted 一旦为真永不复位，此后 open/close
+          仍是纯 display 切换（保活语义逐字保留）；独立 Suspense(fallback=null) 与 PageSlot
+          同理由：chunk 首次到达前不渲染任何东西，加载失败由外层 AppErrorBoundary 兜底。 */}
+      {dockMounted && (
+        <Suspense fallback={null}>
+          <AiConversationDock
+            open={dockOpen}
+            onClose={() => setDockOpen(false)}
+            onOpenChat={(chatId) => { setFocusChatId(chatId); setPage("chat"); }}
+            onOpenTaskInChat={(taskId) => { setFocusChatTaskId(taskId); setPage("chat"); }}
+            onOpenSessions={(id) => { setFocusSessionId(id); setPage("sessions"); }}
+            onOpenNote={(id) => openNotePlain(id)}
+            onOpenRefineWorkbench={(sessionId, taskId) => {
+              setFocusSessionId(sessionId);
+              setFocusRefineTaskId(taskId);
+              setPage("sessions");
+            }}
+          />
+        </Suspense>
+      )}
       </div>
   );
 }
