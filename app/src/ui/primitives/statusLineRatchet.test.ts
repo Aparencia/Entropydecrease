@@ -7,8 +7,12 @@
  *   **不该**染上语义色）。没有棘轮，「还没迁完」就退化成「永远在迁」。
  *
  * 四条判据：
- *   ① 迁移面**冻结**（49 文件，只许增不许减）—— 迁走了文件要**主动**把它登记进来；
- *   ② 三红字面量**逐文件 ≤ 冻结值** + **总数 ≤ 116** + 新增文件里**不得出现**三红字面量；
+ *   ① 迁移面**冻结**（49 文件，只许增不许减）+ **逐文件 `<StatusLine` 处数下界**（② 的牙齿，
+ *      T13–T15 评审 M-7 的结清 —— 只判「出现过」时，把 5 处收敛成 1 处也照样绿）；
+ *   ② 三红字面量**逐文件 ≤ 冻结值** + **总数 ≤ 114** + 新增文件里**不得出现**三红字面量；
+ *      ⚠️ 计数**先剥注释**（`sliceScan.stripComments`，与三个兄弟棘轮同口径 —— 评审 M-2 的结清：
+ *      原实现读原文，于是注释里列举色值的两处（`ClassroomBanners.tsx:13` / `utils/refineDiff.ts:13`）
+ *      被算成命中，纯注释改动会假红）。
  *   ③ `error` 档必须走 `--ed-stamp` **文字色**（不是别的档、不是底色）—— `StatusLine.tsx` 的
  *      用色契约与控制方 2026-09-11 裁决③ 同源；`StatusLine.css` 里**连底色属性名都不出现**
  *      （「错误色绝不进按钮底色」因此是结构保证，不是纪律）；
@@ -30,6 +34,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { FROZEN_RED_BY_FILE, FROZEN_RED_TOTAL } from "./statusLineBaseline";
+// 剥注释仪器：三个兄弟棘轮（loading / emptyState / confirm）都用它 ⇒ 口径必须同源，不许本地重写
+import { stripComments } from "./sliceScan";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = join(HERE, "..", "..");
@@ -83,13 +89,26 @@ function walk(prefix = "", out: string[] = []): string[] {
 const PROD = walk().filter((r) => !r.startsWith("ui/primitives/"));
 const read = (rel: string): string => readFileSync(join(SRC, ...rel.split("/")), "utf8");
 
-/** 逐文件三红计数（按**出现次数**，同一行两次算 2 —— 与基线生成器同口径） */
+/**
+ * 逐文件 `<StatusLine` 处数**下界**（① 的牙齿，评审 M-7 的结清）。只写 > 1 的 8 个，其余一律 1；
+ * 下界是「迁移面真的把错误行交给了原语」的最小证据 —— 加处数不红（那不是回潮），掉到下界以下必红。
+ */
+const MIN_CALLS: Readonly<Record<string, number>> = {
+  "components/GroupDeleteConfirm.tsx": 5,
+  "components/EnrichPanel.tsx": 4,
+  "components/AiRefineCard.tsx": 2, "components/AiServicePanel.tsx": 2, "components/GoalDetail.tsx": 2,
+  "components/ModelManagementPanel.tsx": 2, "components/RefineLaunchDialog.tsx": 2,
+  "components/RefineWorkbench.tsx": 2,
+};
+
+/** 一段文本里三红十六进制字面量的**出现次数**（同一行两次算 2 —— 与基线生成器同口径） */
+const countIn = (text: string): number => RED_HEX.reduce((n, h) => n + (text.split(h).length - 1), 0);
+
+/** 逐文件三红计数：**先剥注释**（M-2 —— 注释里列举色值不算命中，与三个兄弟棘轮同口径） */
 function redCounts(): Map<string, number> {
   const map = new Map<string, number>();
   for (const rel of PROD) {
-    const text = read(rel);
-    let n = 0;
-    for (const h of RED_HEX) n += text.split(h).length - 1;
+    const n = countIn(stripComments(read(rel)));
     if (n > 0) map.set(rel, n);
   }
   return map;
@@ -99,19 +118,25 @@ const CSS = read("ui/primitives/StatusLine.css");
 const TSX = read("ui/primitives/StatusLine.tsx");
 
 describe("状态行棘轮（B11 · T15）", () => {
-  it("① 迁移面 49 文件：逐条在盘上、都真的用了 StatusLine、且与回退账不重叠", () => {
+  it("① 迁移面 49 文件：逐条在盘上、`<StatusLine` 处数 ≥ 下界、且与回退账不重叠", () => {
     expect(MIGRATED).toHaveLength(49);
     expect(new Set(MIGRATED).size, "迁移面有重复项").toBe(49);
     expect([...MIGRATED].sort(), "迁移面未按字典序（对拍会假红）").toEqual([...MIGRATED]);
     const missing = MIGRATED.filter((rel) => !PROD.includes(rel));
     expect(missing, `迁移面里这些文件在盘上不存在（改名 / 迁移后本行先红）：\n${missing.join("\n")}`).toEqual([]);
-    const noUse = MIGRATED.filter((rel) => !/<StatusLine[\s/>]/.test(read(rel)));
-    expect(noUse, `登记为「已迁移」但没有 <StatusLine>（迁移面是虚的）：\n${noUse.join("\n")}`).toEqual([]);
+    const thin = MIGRATED.map((rel) => [rel, (stripComments(read(rel)).match(/<StatusLine[\s/>]/g) ?? []).length] as const)
+      .filter(([rel, n]) => n < (MIN_CALLS[rel] ?? 1))
+      .map(([rel, n]) => `${rel}: 实测 ${n} < 下界 ${MIN_CALLS[rel] ?? 1}`);
+    expect(thin, `登记为「已迁移」但 \`<StatusLine\` 处数掉到下界以下（迁移面是虚的）：\n${thin.join("\n")}`).toEqual([]);
+    // 下界表不许有僵尸键 / 漏键（49 个迁移面文件里 > 1 的恰 8 个）
+    const keys = Object.keys(MIN_CALLS);
+    expect(keys.filter((k) => !MIGRATED.includes(k)), "下界表里有不在迁移面的键").toEqual([]);
+    expect(keys.filter((k) => (MIN_CALLS[k] ?? 0) < 2), "下界表里的值必须 > 1（=1 是默认值）").toEqual([]);
     const overlap = MIGRATED.filter((rel) => REVERTED_BY_B1_B2.includes(rel));
     expect(overlap, `回退账里的文件不许同时算进迁移面（两个账本必须互斥）：\n${overlap.join("\n")}`).toEqual([]);
   });
 
-  it("② 三红只许减：逐文件 ≤ 冻结值 · 总数 ≤ 116 · 新增文件里不得出现三红", () => {
+  it("② 三红只许减：逐文件 ≤ 冻结值 · 总数 ≤ 114 · 新增文件里不得出现三红", () => {
     const grown = [...COUNTS.entries()].filter(([f, n]) => n > (FROZEN_RED_BY_FILE[f] ?? 0))
       .map(([f, n]) => `${f}: ${FROZEN_RED_BY_FILE[f] ?? 0} → ${n}`);
     expect(grown, `这些文件的三红字面量**涨了**（棘轮只许降；真迁移了请手工收紧 statusLineBaseline）：\n${grown.join("\n")}`).toEqual([]);
@@ -147,9 +172,12 @@ describe("状态行棘轮（B11 · T15）", () => {
     expect(/\baria-live\s*=/.test(TSX), "StatusLine 重复声明了 aria-live（role 已隐含，会制造第二个真源）").toBe(false);
   });
 
-  it("④ 仪器自证：七值可读、正/负样本、域边界（原语层在域外）", () => {
+  it("④ 仪器自证：七值可读、剥注释口径、正/负样本、域边界（原语层在域外）", () => {
     expect(RED_HEX).toHaveLength(7);
     expect(RED_HEX.every((h) => /^#[0-9a-f]{6}$/.test(h)), "词表里有非法十六进制").toBe(true);
+    // 剥注释口径自证（M-2）：字符串里的三红算命中、行/块注释里的**不算** —— 两条各一，防口径单侧失效
+    expect(countIn(stripComments('const a = "#b91c1c"; // #dc2626\n/* #ef4444 */')), "注释里的三红被计入了").toBe(1);
+    expect(countIn(stripComments("// #b91c1c\n/* #dc2626 #ef4444 */")), "全是注释却仍有命中").toBe(0);
     // 正样本：域内确实还有命中（基线非空；否则下面的棘轮是空真）
     expect(COUNTS.size, "域内一处三红都没有 ⇒ 基线表是空真").toBeGreaterThan(0);
     expect([...COUNTS.values()].reduce((a, b) => a + b, 0), "域内三红总数与基线不符").toBe(FROZEN_RED_TOTAL);

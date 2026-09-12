@@ -6,12 +6,17 @@
  *   走「切片 + 棘轮」：**本表冻结迁移后的实测值，只许减**。
  *
  * 口径：域 = `app/src/**` 的 `.ts`/`.tsx` 减 `*.test.ts(x)` **减 `ui/primitives/**`**
- *   （原语层是语义色的真源，不是待收敛的调用点；同 T1 的 `prod` 口径）。字面量 = 七个三红十六进制
+ *   （原语层是语义色的真源，不是待收敛的调用点；同 T1 的 `prod` 口径。`ui/icons/**` **不**减 ——
+ *   图标也是调用点）。字面量 = 七个三红十六进制
  *   （`#e11d48`/`#dc2626`/`#ef4444`/`#b91c1c`/`#d32f2f`/`#c62828`/`#f43f5e`），
- *   **按出现次数**计（同一行两次算 2）。
+ *   **按出现次数**计（同一行两次算 2；**不是**按行）。
+ *   ⚠️ **先剥注释**（`sliceScan.stripComments` 状态机，与三个兄弟棘轮同口径 —— T13–T15 评审 M-2）：
+ *   注释里列举色值（本仓有先例：`ClassroomBanners.tsx` / `utils/refineDiff.ts` 的 `@ai-context`）
+ *   **不算命中**；不剥注释会把「解释为什么用这个色」判成违规。冻结值即此口径下的实测值。
  *
- * ⚠️ 本表是**迁移后的实测快照**（2026-09-12，T15 收口时重测），不是迁移前的基线：迁移后仍剩下的
- *   是**切片外的存量**（含 T15 因 B1/B2 守卫回退的 6 处）。数字来自 `tmp/t15rec` 的探针，可复算。
+ * ⚠️ 本表是**迁移后的实测快照**（2026-09-12，T15 收口时重测；同日 fix 单元按剥注释口径重新冻结），
+ *   不是迁移前的基线：迁移后仍剩下的是**切片外的存量**（含 T15 因 B1/B2 守卫回退的 6 处）。
+ *   数字来自 `tmp/t15rec` 的探针，可复算（fix 单元用 `tmp/fix-t13t15/scan-red.mjs` 独立复算过）。
  *   **真迁走一处 ⇒ 手工收紧这里**（棘轮只许降）。
  */
 export const FROZEN_RED_BY_FILE: Readonly<Record<string, number>> = {
@@ -26,10 +31,10 @@ export const FROZEN_RED_BY_FILE: Readonly<Record<string, number>> = {
   "components/NotePreviewView.tsx": 3,
   "components/NoteRowContextMenu.tsx": 3,
   "components/RefineWorkbench.tsx": 3,
-  "utils/refineDiff.ts": 3,
+  "utils/refineDiff.ts": 2,
   "components/AiTaskPanel.tsx": 2,
   "components/CaptureFloatPanel.tsx": 2,
-  "components/ClassroomBanners.tsx": 2,
+  "components/ClassroomBanners.tsx": 1,
   "components/InterviewSteps.tsx": 2,
   "components/LiveActivityPanel.tsx": 2,
   "components/NoteLinkToSystem.tsx": 2,
@@ -85,4 +90,4 @@ export const FROZEN_RED_BY_FILE: Readonly<Record<string, number>> = {
 };
 
 /** 全仓三红十六进制字面量的**冻结总数**（= 上面逐文件之和的独立校验和，只许降） */
-export const FROZEN_RED_TOTAL = 116;
+export const FROZEN_RED_TOTAL = 114;
