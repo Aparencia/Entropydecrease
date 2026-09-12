@@ -30,6 +30,7 @@ import { layoutCanvas } from "../utils/layoutCanvas";
 import CanvasNodeQuestion from "./CanvasNodeQuestion";
 import CanvasNodeConcept from "./CanvasNodeConcept";
 import CanvasNodeModel from "./CanvasNodeModel";
+import { StatusLine } from "../ui/primitives";
 
 interface Props {
   systemId: number;
@@ -442,7 +443,7 @@ function CanvasFlow({
           </Panel>
         </ReactFlow>
       </div>
-      {status && <p data-testid="canvas-status" style={{ padding: "4px 10px", fontSize: 12, color: "#dc2626" }}>{status}</p>}
+      {status && <StatusLine kind="error" testId="canvas-status">{status}</StatusLine>}
     </div>
   );
 }

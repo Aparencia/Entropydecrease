@@ -12,7 +12,7 @@
  *              （弹窗随即关闭，内部 setStatus 一帧即卸载——死代码）。
  */
 import { useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Modal, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { DOMAIN_OPTIONS } from "../utils/domainOptions";
 import NoteColorPicker from "./NoteColorPicker";
@@ -111,9 +111,9 @@ export default function GroupCreateDialog({ onClose, onCreated }: Props) {
         {busy ? "创建中…" : "创建"}
       </button>
       {status && (
-        <p data-testid="group-create-status" style={{ marginTop: 8, fontSize: 12, color: status.error ? "#dc2626" : "#0f766e" }}>
-          {status.text}
-        </p>
+        <div style={{ marginTop: 8 }}>
+          <StatusLine kind={status.error ? "error" : "ok"} testId="group-create-status">{status.text}</StatusLine>
+        </div>
       )}
     </Modal>
   );

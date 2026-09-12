@@ -11,7 +11,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ConfirmDialog } from "../ui/primitives";
+import { ConfirmDialog, StatusLine } from "../ui/primitives";
 
 interface BackupSummary {
   archivePath: string;
@@ -101,7 +101,7 @@ export default function BackupPanel() {
           从备份恢复…
         </button>
       </div>
-      {error && <div style={{ fontSize: 11, color: "#dc2626" }}>{error}</div>}
+      {error && <StatusLine kind="error">{error}</StatusLine>}
       {!error && info && <div style={{ fontSize: 11, color: "#0f766e" }}>{info}</div>}
       <div style={{ fontSize: 10, color: "#9ca3af" }}>
         备份保存在应用数据目录 backups/（本地优先：数据不出本机）；如需异地保存请自行拷贝备份文件

@@ -29,6 +29,7 @@ import {
   type GraphSnapshot,
 } from "../utils/graphSnapshot";
 import { isColorId, onColorText, paletteHex, type ThemeMode } from "../utils/colorPalette";
+import { StatusLine } from "../ui/primitives";
 
 /** 图谱节点 data（RF 节点 data 契约——跳转/着色所需全部字段）
  * 注意：type 而非 interface——RF v12 Node<T> 约束 Record<string, unknown>，
@@ -178,12 +179,17 @@ function GraphFlow({ onOpenNote, onOpenGroup, onOpenSystem, refreshToken }: Prop
       </div>
 
       {status && (
-        <div data-testid="graph-error" style={{ padding: "8px 12px", fontSize: 12, color: "#dc2626", display: "flex", alignItems: "center", gap: 8 }}>
+        <StatusLine
+          kind="error"
+          testId="graph-error"
+          action={
+            <button data-testid="graph-retry" onClick={() => void load()} style={{ fontSize: 11, cursor: "pointer", padding: "2px 8px", borderRadius: 4, border: "1px solid #fca5a5", background: "#fff" }}>
+              重试
+            </button>
+          }
+        >
           {status}
-          <button data-testid="graph-retry" onClick={() => void load()} style={{ fontSize: 11, cursor: "pointer", padding: "2px 8px", borderRadius: 4, border: "1px solid #fca5a5", background: "#fff" }}>
-            重试
-          </button>
-        </div>
+        </StatusLine>
       )}
 
       {empty ? (

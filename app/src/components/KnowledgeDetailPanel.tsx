@@ -22,6 +22,7 @@ import KnowledgeLinkSection from "./KnowledgeLinkSection";
 import DiscoverySuggestSection from "./DiscoverySuggestSection";
 import KnowledgeDecisionForm from "./KnowledgeDecisionForm";
 import KnowledgeDecisionLog from "./KnowledgeDecisionLog";
+import { StatusLine } from "../ui/primitives";
 
 interface Props {
   /** 面板宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 320=历史值） */
@@ -255,7 +256,7 @@ export default function KnowledgeDetailPanel({ width = 320, system, nodes, conce
         )}
       </div>
 
-      {err && <p data-testid="detail-error" style={{ padding: "6px 12px", fontSize: 12, color: "#dc2626", borderTop: "1px solid #f3f4f6" }}>{err}</p>}
+      {err && <StatusLine kind="error" testId="detail-error">{err}</StatusLine>}
 
       {decisionFormOpen && (
         <KnowledgeDecisionForm

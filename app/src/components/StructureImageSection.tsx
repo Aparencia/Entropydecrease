@@ -14,7 +14,7 @@ import { listen } from "@tauri-apps/api/event";
 import type { StructureImageRecord } from "../types";
 import { fmtMs } from "../utils/fmt";
 import ImagePreviewOverlay from "./ImagePreviewOverlay";
-import { Button, EmptyState } from "../ui/primitives";
+import { Button, EmptyState, StatusLine } from "../ui/primitives";
 
 /** kind 徽标文案（全栈统一术语） */
 const KIND_LABEL: Record<string, string> = {
@@ -94,7 +94,7 @@ export default function StructureImageSection({ sessionId, baseUrl }: { sessionI
         <Button variant="secondary" size="md" busy={loading} onClick={() => void refresh()}>
           {loading ? "加载中…" : "刷新"}
         </Button>
-        {error && <span style={{ fontSize: 11, color: "#dc2626" }}>{error}</span>}
+        {error && <StatusLine kind="error">{error}</StatusLine>}
         {!error && info && <span style={{ fontSize: 11, color: "#6b7280" }}>{info}</span>}
       </div>
       {images.length === 0 && !loading && (

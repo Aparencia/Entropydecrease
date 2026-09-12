@@ -17,7 +17,7 @@ import type {
 } from "../types/knowledge";
 import { linkTargetTypeLabel } from "../types/knowledge";
 import type { NoteGroup } from "../types/notes";
-import { EmptyState } from "../ui/primitives";
+import { EmptyState, StatusLine } from "../ui/primitives";
 
 interface Props {
   systemId: number;
@@ -226,7 +226,7 @@ export default function KnowledgeLinkSection({ systemId, entityType, entityId, l
         <button data-testid="link-submit" onClick={() => void linkTarget()} disabled={!validTarget || exists} style={{ alignSelf: "flex-start", fontSize: 12, cursor: "pointer", padding: "4px 12px", borderRadius: 4, border: "1px solid #0f766e", background: !validTarget || exists ? "#f9fafb" : "#f0fdfa", color: !validTarget || exists ? "#9ca3af" : "#0f766e" }}>
           挂引用
         </button>
-        {status && <p style={{ fontSize: 11, color: "#dc2626" }}>{status}</p>}
+        {status && <StatusLine kind="error">{status}</StatusLine>}
       </div>
     </div>
   );

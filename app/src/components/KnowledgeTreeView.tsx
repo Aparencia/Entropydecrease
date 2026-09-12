@@ -15,7 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { KnowledgeNode, KnowledgeLink, KnowledgeNodeType } from "../types/knowledge";
 import { nodeTypeColor, nodeTypeLabel } from "../types/knowledge";
-import { Button } from "../ui/primitives";
+import { Button, StatusLine } from "../ui/primitives";
 
 interface Props {
   systemId: number;
@@ -299,7 +299,7 @@ export default function KnowledgeTreeView({ systemId, nodes, links, selectedNode
         {roots.map((r) => renderNode(r, 0))}
       </div>
 
-      {status && <p style={{ padding: "6px 10px", fontSize: 12, color: "#dc2626" }}>{status}</p>}
+      {status && <StatusLine kind="error">{status}</StatusLine>}
     </div>
   );
 }

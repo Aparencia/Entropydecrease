@@ -9,7 +9,7 @@
  *              判定的唯一事实源在后端 goal_interview.rs）。
  */
 import { useEffect, useState } from "react";
-import { Button, Modal } from "../ui/primitives";
+import { Button, Modal, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { Goal, GoalPlanView, MilestoneDraft } from "../types/goals";
 import type { InterviewAnswers } from "../utils/goalInterview";
@@ -215,7 +215,7 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
         </>
       )}
 
-      {err && <p data-testid="dialog-error" style={{ fontSize: 11, color: "#dc2626", margin: "6px 0 0" }}>{err}</p>}
+      {err && <div style={{ margin: "6px 0 0" }}><StatusLine kind="error" testId="dialog-error">{err}</StatusLine></div>}
 
       <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "flex-end", alignItems: "center" }}>
         <span style={{ fontSize: 10, color: "#9ca3af", marginRight: "auto" }}>

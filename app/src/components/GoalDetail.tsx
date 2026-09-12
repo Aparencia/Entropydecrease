@@ -14,7 +14,7 @@ import InterviewDialog from "./InterviewDialog";
 import GraduateDialog from "./GraduateDialog";
 import RetroTimeline from "./RetroTimeline";
 import GoalPlanApprovalDialog from "./GoalPlanApprovalDialog";
-import { ConfirmDialog, EmptyState, Loading, Skeleton } from "../ui/primitives";
+import { ConfirmDialog, EmptyState, Loading, Skeleton, StatusLine } from "../ui/primitives";
 
 interface Props {
   goalId: number;
@@ -83,7 +83,7 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
     }
   };
 
-  if (err && !detail) return <div style={{ padding: 24, fontSize: 13, color: "#dc2626" }}>{err}</div>;
+  if (err && !detail) return <div style={{ padding: 24 }}><StatusLine kind="error">{err}</StatusLine></div>;
   if (!detail) {
     // 批 4 T14：详情面板结构已知（目标 + 里程碑 + 准则）⇒ 骨架占位；可读语义由 `Loading` 给
     // （骨架整组 aria-hidden —— 只留骨架等于把"在等什么"从无障碍树里删掉）。
@@ -364,7 +364,7 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
       <SectionTitle>回顾流（创建 → 里程碑 → 结算 → 毕业）</SectionTitle>
       <RetroTimeline goalId={goalId} />
 
-      {err && <p style={{ fontSize: 11, color: "#dc2626", marginTop: 8 }}>{err}</p>}
+      {err && <div style={{ marginTop: 8 }}><StatusLine kind="error">{err}</StatusLine></div>}
       {editing && (
         <InterviewDialog
           mode="interview"

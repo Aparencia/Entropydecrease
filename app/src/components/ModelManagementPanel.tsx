@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Button } from "../ui/primitives";
+import { Button, StatusLine } from "../ui/primitives";
 import StructureModelSetting from "./StructureModelSetting";
 // L11 去重：HealthSnapshot/StreamingModelStatus/DownloadProgress 单一定义源在 types/system.ts
 import type { DownloadProgress, HealthSnapshot, OcrDeviceStatus, StreamingModelStatus } from "../types";
@@ -116,7 +116,11 @@ export default function ModelManagementPanel() {
       <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>
         🧩 模型管理（全部模型按需下载 · 未下载自动降级）
       </div>
-      {error && <div style={{ fontSize: 11, color: "#dc2626", marginBottom: 6 }}>{error}</div>}
+      {error && (
+        <div style={{ marginBottom: 6 }}>
+          <StatusLine kind="error">{error}</StatusLine>
+        </div>
+      )}
 
       {/* 转写模型：流式主链路 + 离线重打分 */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7, flexWrap: "wrap" }}>
@@ -165,7 +169,7 @@ export default function ModelManagementPanel() {
           </Button>
         )}
         {speakerState === "failed" && speaker?.error && (
-          <span style={{ fontSize: 10.5, color: "#dc2626" }}>{speaker.error}</span>
+          <StatusLine kind="error">{speaker.error}</StatusLine>
         )}
       </div>
 

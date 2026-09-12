@@ -23,7 +23,7 @@ import type {
 import RefineWorkbench from "./RefineWorkbench";
 import RefineLaunchDialog from "./RefineLaunchDialog";
 import { overrideFromInfo } from "../utils/refineStrategy";
-import { Button } from "../ui/primitives";
+import { Button, StatusLine } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6 };
 
@@ -202,12 +202,19 @@ export default function AiRefineCard({
 
       {/* 失败（降级可见 + 原因引导 + 重试） */}
       {phase === "failed" && failure && (
-        <div style={{ fontSize: 12, color: "#b91c1c", marginBottom: 6 }}>
-          ❌ {failureGuide(failure, "本地规则版保留")}
-          <div style={{ marginTop: 6 }}>
-            <button style={{ ...btn, border: "1px solid #d1d5db" }} onClick={reset}>重试</button>
-            <span style={{ marginLeft: 8, color: "#6b7280" }}>本地规则版保留（不丢不假）</span>
-          </div>
+        <div style={{ marginBottom: 6 }}>
+          {/* 批 4 T15：错误行交 `StatusLine`（`error` 档走 `--ed-stamp`）；动作由 `action` 槽给 */}
+          <StatusLine
+            kind="error"
+            action={
+              <>
+                <button style={{ ...btn, border: "1px solid #d1d5db" }} onClick={reset}>重试</button>
+                <span style={{ marginLeft: 8, color: "#6b7280" }}>本地规则版保留（不丢不假）</span>
+              </>
+            }
+          >
+            ❌ {failureGuide(failure, "本地规则版保留")}
+          </StatusLine>
         </div>
       )}
 
@@ -250,7 +257,7 @@ export default function AiRefineCard({
         </div>
       )}
 
-      {msg && <div style={{ fontSize: 11, color: msg.startsWith("已") ? "#0d9488" : "#dc2626", marginTop: 4 }}>{msg}</div>}
+      {msg && <StatusLine kind={msg.startsWith("已") ? "ok" : "error"}>{msg}</StatusLine>}
 
       {/* v0.17.0：策略发起对话框（目标/档位/旋钮/预览/成本/授权） */}
       {showLaunch && (

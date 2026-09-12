@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiUsageRecord, DiffOp, NoteVersion, NoteVersionSource } from "../types";
 import RefineWorkbench from "./RefineWorkbench";
-import { ConfirmDialog } from "../ui/primitives";
+import { ConfirmDialog, StatusLine } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "4px 8px", cursor: "pointer", fontSize: 11, borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" };
 
@@ -191,7 +191,7 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
             </div>
           )}
 
-          {msg && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>{msg}</div>}
+          {msg && <StatusLine kind="error">{msg}</StatusLine>}
         </div>
       )}
 

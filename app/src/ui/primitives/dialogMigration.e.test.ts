@@ -11,9 +11,12 @@
  * 三条跨文件判据（外加 E 组自己的 4 条）：
  *   ① `DIALOG_20` 的 20 个文件：barrel 名字表含 `Modal` ∧ 无深导入 ∧ 无自建遮罩 ∧ 无 `keydown`
  *      监听 ∧ 无裸数字 z-index；且**源码 0 处** `role="dialog"`（20/20 的角色归原语唯一持有）。
- *   ② `CROSS_LINE_34 − DIALOG_20 == NON_MIGRATED_14` ∧ 该差集**在盘上仍成立** —— 后半条同时是
- *      **B1 / B2** 的守卫：登记为「不迁」的 14 个不许被顺手迁掉（判据取「barrel 里含 `Modal`」，
- *      叶子原语不算绕过，理由见该条注释）。
+ *   ② `CROSS_LINE_34 − DIALOG_20 == NON_MIGRATED_14` ∧ 该差集**在盘上仍成立**（那 14 个今日仍是跨行
+ *      `fixed`∧`inset:0`、且**都不 import 原语层**）—— 后半条同时是 **B1 / B2** 的守卫：
+ *      登记为「不迁」的 14 个不许被顺手迁掉。
+ *      ⚠️ **2026-09-12 T15 恢复**：本判据曾被 T13 收窄成「barrel 含 `Modal`」—— **控制方裁定 B1/B2
+ *      优先、守卫不许改窄** ⇒ 判据回**原文强度**，那 3 处用法逐字回退自绘（T12 先例）⇒ **本域今日例外
+ *      = 0**。「不迁」是 B1/B2 的定义，不是可逐文件议价的建议。
  *   ③ `ADR033_28 ⊆ CROSS_LINE_34` ∧ `|ADR033_28| = 28` ∧ `ADR033_28 == CROSS_LINE_34 − 6`
  *      （6 = 跨行口径相对同行口径的新增项：`fixed` 与 `inset:0` 分写两行的文件）。
  *
@@ -243,14 +246,13 @@ describe("② 34 − 20 = 14：不迁的 14 条逐字登记，且今日盘上仍
     // B7 的拆件把 `pages/ChatPage.tsx` 里的**同一段**锚定菜单搬到 `components/chat/ChatLaunchMenu.tsx`
     // ⇒ 盘上集合 = 登记表（`ChatLaunchMenu` 为成员、`ChatPage` 不再命中）。这不是放宽：两侧都逐字列名。
     expect(DISK_CROSS_LINE, "盘上跨行 `fixed`∧`inset:0` 的文件集与登记的 14 条不符").toEqual([...NON_MIGRATED_14]);
-    // B1/B2 的守卫（**收窄后**）：判据 = 登记为「不迁」的 14 个，barrel 名字表里不得出现 `Modal`。
-    // 为什么不判「文件里出现 `ui/primitives` 字样」：T13 的空态迁移按 B6 让其中三个锚定菜单 import 了
-    // `EmptyState`/`Button` —— 叶子原语既不是弹层机制也不是「自建第二套对话框」（ADR-033 §7 的适用对象
-    // 是对话框类，B1 逐字排除它们）⇒ 旧判据会把 B6 授权的迁移误报成绕过 B1。
-    const usesModal = NON_MIGRATED_14.filter((rel) => BARREL_NAMES(rel).includes("Modal"));
-    expect(usesModal, `登记为「不迁」的文件开始用 Modal 了（B1 / B2 被绕过）：\n${usesModal.join("\n")}`).toEqual([]);
-    // 收窄不能变成空转：域内必须真的有文件被判为「用了 Modal」（阳性对照）
-    expect(BARREL_NAMES("components/RefineWorkbench.tsx").includes("Modal"), "阳性对照失效：判据读不出 Modal").toBe(true);
+    // B1/B2 的守卫（**2026-09-12 T15 恢复原文强度**）：登记为「不迁」的 14 个，**源码不得出现
+    // `ui/primitives`**（barrel 与深导入一并禁止）。判据从「barrel 含 `Modal`」恢复成这句：用 `Modal`
+    // 当代理等于把「不迁」降级成「不迁弹层机制」，而 B1/B2 说的是这 14 个**整体不迁**（B4 让位于 B1/B2）。
+    const usingPrimitives = NON_MIGRATED_14.filter((rel) => stripped(rel).includes("ui/primitives"));
+    expect(usingPrimitives, `登记为「不迁」的文件开始用原语了（B1 / B2 被绕过）：\n${usingPrimitives.join("\n")}`).toEqual([]);
+    // 判据不能变成空转：域外必须有文件被判为「用了原语」（阳性对照 —— 仪器读得出这个词）
+    expect(stripped("components/RefineWorkbench.tsx").includes("ui/primitives"), "阳性对照失效：判据读不出 ui/primitives").toBe(true);
   });
 });
 

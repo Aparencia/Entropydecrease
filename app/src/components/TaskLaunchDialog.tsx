@@ -9,7 +9,7 @@
  *              勾选需求在笔记页 EnrichPanel 完整呈现）。
  */
 import { useEffect, useMemo, useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Modal, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { AiSettingsView, AiTaskState, RefineEstimateView } from "../types";
@@ -121,7 +121,11 @@ export default function TaskLaunchDialog({ kind, sessions, notes, initialTargetI
           补充默认九子项（深度 d1~d3 + 广度 b1~b6）
         </div>
       )}
-      {status && <div data-testid="task-launch-error" style={{ color: "#dc2626", marginBottom: 8 }}>{status}</div>}
+      {status && (
+        <div style={{ marginBottom: 8 }}>
+          <StatusLine kind="error" testId="task-launch-error">{status}</StatusLine>
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button data-testid="task-launch-cancel" style={BTN} onClick={onClose} disabled={busy}>取消</button>
         <button

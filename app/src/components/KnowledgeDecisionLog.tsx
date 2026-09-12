@@ -16,7 +16,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { DecisionKind, KnowledgeDecision } from "../types/knowledge";
 import { countUsedRefs, parseUsedRefs } from "../types/knowledge";
-import { EmptyState } from "../ui/primitives";
+import { EmptyState, StatusLine } from "../ui/primitives";
 
 interface Props {
   systemId: number;
@@ -79,7 +79,7 @@ export default function KnowledgeDecisionLog({ systemId, conceptId, onChanged }:
         ))}
       </div>
 
-      {status && <p data-testid="decision-log-status" style={{ fontSize: 11, color: "#dc2626", margin: "0 0 4px" }}>{status}</p>}
+      {status && <StatusLine kind="error" testId="decision-log-status">{status}</StatusLine>}
 
       {activeList.length === 0 ? (
         tab === "decision" ? (

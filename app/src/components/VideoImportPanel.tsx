@@ -10,7 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { ImportProgress } from "../types";
-import { Button } from "../ui/primitives";
+import { Button, StatusLine } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
 
@@ -107,7 +107,11 @@ export default function VideoImportPanel({ onOpenSessions }: { onOpenSessions?: 
           )}
         </div>
       )}
-      {error && <p style={{ fontSize: 11, color: "#dc2626", margin: "6px 0 0", wordBreak: "break-all" }}>{error}</p>}
+      {error && (
+        <div style={{ margin: "6px 0 0", wordBreak: "break-all" }}>
+          <StatusLine kind="error">{error}</StatusLine>
+        </div>
+      )}
       {sessionId && (
         <p style={{ fontSize: 11, color: "#2563eb", margin: "6px 0 0" }}>
           ✅ 已导入会话，可到「会话」页查看时间轴

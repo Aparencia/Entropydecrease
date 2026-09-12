@@ -9,7 +9,7 @@
  *              全部可空；card 背面由后端按卡面契约 compose（§三），前端只提交字段。
  */
 import { useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Modal, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { Flashcard } from "../types";
 
@@ -71,7 +71,11 @@ export default function ModelCardCreateDialog({ groupId, groupName, onClose, onC
       <button data-testid="model-card-submit" onClick={() => void submit()} disabled={busy} style={{ ...submitBtn, opacity: busy ? 0.6 : 1 }}>
         {busy ? "创建中…" : "创建概念卡"}
       </button>
-      {status && <p data-testid="model-card-status" style={{ marginTop: 8, fontSize: 12, color: status.error ? "#dc2626" : "#0f766e" }}>{status.text}</p>}
+      {status && (
+        <div style={{ marginTop: 8 }}>
+          <StatusLine kind={status.error ? "error" : "ok"} testId="model-card-status">{status.text}</StatusLine>
+        </div>
+      )}
     </Modal>
   );
 }

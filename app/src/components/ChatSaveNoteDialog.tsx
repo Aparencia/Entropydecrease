@@ -8,7 +8,7 @@
  *              （onOpenNote 已由 ChatPage 透传）+ 关闭；失败红字不关窗（改后再试）。
  */
 import { useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Modal, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note, NoteGroup } from "../types";
 
@@ -113,7 +113,9 @@ export default function ChatSaveNoteDialog({ initialTitle, content, groups, onOp
             共 {content.length} 字符 · 对话以提问引用 + AI 回答全文的完整形式保存
           </div>
           {status && (
-            <div data-testid="chat-note-error" style={{ color: "#dc2626", marginBottom: 8 }}>{status}</div>
+            <div style={{ marginBottom: 8 }}>
+              <StatusLine kind="error" testId="chat-note-error">{status}</StatusLine>
+            </div>
           )}
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button data-testid="chat-note-cancel" style={BTN_BASE} onClick={onClose} disabled={busy}>取消</button>

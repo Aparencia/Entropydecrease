@@ -13,7 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 // M8：轮询/事件双通道/卡住检测抽入共用 hook（与 AiRefineCard 同源）
 import { useAiTaskPolling } from "../hooks/useAiTaskPolling";
 import { failureGuide } from "./aiTaskFailure";
-import { Button } from "../ui/primitives";
+import { Button, StatusLine } from "../ui/primitives";
 import type {
   AiEnrichResult,
   AiSettingsView,
@@ -260,16 +260,16 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
             {est.estCostYuan === 0 && est.priceKnown === false && <span style={{ color: "#d97706" }}>（该模型单价未登记，费用可能不准确）</span>}
           </div>
           {balance && (
-            <div style={{ color: balance.lowBalanceWarning ? "#dc2626" : "#374151" }}>
+            <StatusLine kind={balance.lowBalanceWarning ? "error" : "info"}>
               当前余额：<strong>¥{balance.balance.totalBalance.toFixed(2)}</strong>
               {balance.lowBalanceWarning && <span style={{ marginLeft: 6 }}>⚠️ {balance.lowBalanceWarning}</span>}
-            </div>
+            </StatusLine>
           )}
           {/* F3-D：成本硬拦截提示——余额不足时启动会被后端拒绝 */}
           {balance && est.estCostYuan > 0 && balance.balance.totalBalance < est.estCostYuan * 1.2 && (
-            <div style={{ color: "#b91c1c", marginTop: 2 }}>
+            <StatusLine kind="warn">
               ⚠️ 余额不足本次预估（含安全系数）——启动将被拦截，请充值或切换免费档模型
-            </div>
+            </StatusLine>
           )}
           <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
             <button style={{ ...btn, background: "#0d9488", color: "#fff", border: "none" }} onClick={() => void start()}>
@@ -289,10 +289,12 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
 
       {/* 失败 */}
       {phase === "failed" && failure && (
-        <div style={{ fontSize: 12, color: "#b91c1c" }}>
+        <StatusLine
+          kind="error"
+          action={<button style={{ ...btn, marginLeft: 8, border: "1px solid #d1d5db" }} onClick={reset}>重试</button>}
+        >
           ❌ {failureGuide(failure, "未落任何补充内容")}
-          <button style={{ ...btn, marginLeft: 8, border: "1px solid #d1d5db" }} onClick={reset}>重试</button>
-        </div>
+        </StatusLine>
       )}
 
       {/* 结果预览（扩展区预览 + 采纳/撤销） */}
@@ -319,7 +321,7 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
         </div>
       )}
 
-      {msg && <div style={{ fontSize: 11, color: msg.startsWith("已") ? "#0d9488" : "#dc2626", marginTop: 4 }}>{msg}</div>}
+      {msg && <StatusLine kind={msg.startsWith("已") ? "ok" : "error"}>{msg}</StatusLine>}
     </div>
   );
 }

@@ -20,7 +20,7 @@ import GoalCard from "../components/GoalCard";
 import GoalDetail from "../components/GoalDetail";
 import InterviewDialog from "../components/InterviewDialog";
 import { ReportBody } from "../components/GraduateDialog";
-import { Button } from "../ui/primitives";
+import { Button, StatusLine } from "../ui/primitives";
 
 const HOT_DOMAINS = ["学 Python", "练听力", "画水彩"];
 
@@ -92,7 +92,7 @@ export default function GoalsPage() {
           <ColumnBar icon="🎯" title="目标列表" onClick={goalsCol.expand} />
         ) : (
         <div style={{ width: goalsCol.width, overflow: "auto", padding: 12, borderRight: "1px solid #e5e7eb", boxSizing: "border-box", flexShrink: 0 }}>
-          {err && <p style={{ fontSize: 12, color: "#dc2626" }}>{err}</p>}
+          {err && <StatusLine kind="error">{err}</StatusLine>}
           {loaded && cards.length === 0 && (
             <div style={{ padding: 24, textAlign: "center" }}>
               <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 8px" }}>定一个学习目标——不是「我要学 xx」，是「用它做什么」。</p>

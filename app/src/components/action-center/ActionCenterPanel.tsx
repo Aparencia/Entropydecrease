@@ -20,7 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import SopRunOverlay from "../SopRunOverlay";
 import { PracticeOverlay, QuestionsOverlay } from "../PracticeQuestionsOverlays";
-import { Button, EmptyState } from "../../ui/primitives";
+import { Button, EmptyState, StatusLine } from "../../ui/primitives";
 
 /** 响应结构（SopTemplate/ActionQueueRow/CompletionEvent 均 serde camelCase——字段须 camel 读取） */
 interface SopTemplateView {
@@ -395,7 +395,7 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
         </div>
 
         {msg && <div style={{ fontSize: 12, color: "#047857", background: "#ecfdf5", border: "1px solid #6ee7b7", borderRadius: 6, padding: "6px 10px", marginBottom: 8 }}>{msg}</div>}
-        {err && <div style={{ fontSize: 12, color: "#dc2626", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 6, padding: "6px 10px", marginBottom: 8 }}>{err}</div>}
+        {err && <div style={{ marginBottom: 8 }}><StatusLine kind="error">{err}</StatusLine></div>}
 
         {tab === "queue" ? (
           <>

@@ -13,7 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AiAuditEntry, AiSettingsView, RefineStrategyMeta } from "../types";
 import RefineStrategyPicker from "./RefineStrategyPicker";
 import { draftFromPrefs, prefsFromDraft, type StrategyDraft } from "../utils/refineStrategy";
-import { Button, EmptyState } from "../ui/primitives";
+import { Button, EmptyState, StatusLine } from "../ui/primitives";
 
 /** 通用小按钮样式（与各设置面板一致） */
 const btn: React.CSSProperties = {
@@ -266,7 +266,7 @@ export default function AiServicePanel() {
                 <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {a.upload_summary}
                 </span>
-                <span style={{ color: a.result === "ok" ? "#0d9488" : "#dc2626" }}>{a.result}</span>
+                <StatusLine kind={a.result === "ok" ? "ok" : "error"}>{a.result}</StatusLine>
               </div>
             ))}
           </div>
@@ -275,9 +275,7 @@ export default function AiServicePanel() {
 
       {/* 状态消息 */}
       {msg && (
-        <div style={{ fontSize: 11, color: msg.kind === "ok" ? "#0d9488" : "#dc2626", marginTop: 4 }}>
-          {msg.text}
-        </div>
+        <StatusLine kind={msg.kind === "ok" ? "ok" : "error"}>{msg.text}</StatusLine>
       )}
     </div>
   );

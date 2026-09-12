@@ -35,7 +35,7 @@ import KnowledgeSampleView from "../components/KnowledgeSampleView";
 import KnowledgeGraphView from "../components/KnowledgeGraphView";
 // 批 3 T8：列规格（体系列/详情列两行的宽·夹取·阈值）改从 `shell/columnRegistry` 取
 import { columnSpec } from "../shell/columnRegistry";
-import { EmptyState } from "../ui/primitives";
+import { EmptyState, StatusLine } from "../ui/primitives";
 
 type MiddleView = "tree" | "canvas" | "concept" | "model" | "graph";
 
@@ -285,7 +285,7 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup, 
             </div>
           )}
         </div>
-        {status && <p data-testid="page-status" style={{ padding: "6px 10px", fontSize: 12, color: "#dc2626" }}>{status}</p>}
+        {status && <StatusLine kind="error" testId="page-status">{status}</StatusLine>}
       </div>
       )}
       <ColumnResizer onResize={leftCol.resizeBy} onReset={leftCol.resetWidth} />

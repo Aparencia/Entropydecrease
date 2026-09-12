@@ -39,7 +39,7 @@ import GroupCreateDialog from "./GroupCreateDialog";
 // REQ-287：多选拖拽载荷读取（text/note-ids JSON + 单 id 兜底）
 import { crateDndReadIds } from "./NoteTreeSection";
 import { blobToBase64 } from "../utils/blobToBase64";
-import { EmptyState } from "../ui/primitives";
+import { EmptyState, StatusLine } from "../ui/primitives";
 
 interface Props {
   /** 列宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 240=历史值） */
@@ -465,7 +465,7 @@ export default function GroupSidebar({
         )}
       </div>
 
-      {status && <p style={{ padding: 8, fontSize: 12, color: "#dc2626" }}>{status}</p>}
+      {status && <StatusLine kind="error">{status}</StatusLine>}
       {notice && <p data-testid="group-notice" style={{ padding: 8, fontSize: 12, color: "#0f766e" }}>{notice}</p>}
 
       {/* ⓘ 弹层（受控单开；key=group.id——切组重置内部表单态，

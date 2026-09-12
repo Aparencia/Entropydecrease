@@ -13,7 +13,7 @@
  *              的 `showPass2` 条件挂载）⇒ `open` 恒为 `true`。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Button, Modal, EmptyState, Loading } from "../ui/primitives";
+import { Button, Modal, EmptyState, Loading, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -184,8 +184,8 @@ export default function SecondPassPanel({ sessionId, onChanged, onClose }: Props
         </div>
       )}
       {err && (
-        <div style={{ fontSize: 12, color: "#dc2626", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 6, padding: "6px 10px", marginBottom: 8 }}>
-          {err}
+        <div style={{ marginBottom: 8 }}>
+          <StatusLine kind="error">{err}</StatusLine>
         </div>
       )}
 

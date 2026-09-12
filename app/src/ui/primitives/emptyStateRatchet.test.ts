@@ -121,11 +121,16 @@ const SLICE_REASONS: Readonly<Record<string, string>> = Object.fromEntries([
 const SLICE: readonly string[] = Object.keys(SLICE_REASONS).sort();
 
 /**
- * **例外表**（切片内**不迁**的 5 处）。锚点 = 该行**原文里的独特片段**（不是行号）。
+ * **例外表**（切片内**不迁**的 8 处）。锚点 = 该行**原文里的独特片段**（不是行号）。
  *
- * 为什么用片段而不是行号：这 5 处里有 2 个文件同时落在 T14（加载态切片）的改动面上 ⇒ 行号会随
+ * 为什么用片段而不是行号：这 8 处里有 2 个文件同时落在 T14（加载态切片）的改动面上 ⇒ 行号会随
  * 别人的提交漂移（`ReviewPage` 实测 147 → 148），写死行号会在无关改动上假红。片段必须**恰好命中
  * 1 行**且该行命中词表；片段被删改即红（防腐烂），行号漂移不再误伤。
+ *
+ * ★ **2026-09-12 T15 恢复**：末 3 条（`NoteLinkToSystem` / `NoteMoveToGroupMenu` / `NoteRowContextMenu`）
+ *   原在 T13 里**已迁**，但它们是 `dialogMigration.e` 的 `NON_MIGRATED_14` ⇒ 按控制方裁决
+ *   **B1/B2 优先、守卫不许改窄**，这 3 处**逐字回退自绘**（T12 的 2 个白名单文件同款先例），
+ *   于是从「已收口」变回「登记不迁」。**这不是棘轮放宽**：迁移面净减 3 处，代价如实入账。
  */
 const EXCEPTIONS: readonly { readonly file: string; readonly anchor: string; readonly why: string }[] = [
   { file: "components/KnowledgeDecisionForm.tsx", anchor: "{title}：暂无", why: "内联字段的复选列表标签（随表单字段就地渲染，不是独立空态块；迁原语会引入整块空气与居中，破坏表单行）" },
@@ -133,6 +138,9 @@ const EXCEPTIONS: readonly { readonly file: string; readonly anchor: string; rea
   { file: "components/TaskLaunchDialog.tsx", anchor: "if (rows.length === 0) setStatus(", why: "落进 `setStatus(...)` 的状态行（对话框内联提示），不是被渲染的空态块；改渲染面要动 dialog 结构" },
   { file: "components/VocabManager.tsx", anchor: "需先有会话 OCR 记录", why: "`setMessage(...)` 的消息串（显示在消息行），不是空态块" },
   { file: "pages/ReviewPage.tsx", anchor: "`共 ${totalDue} 张到期`", why: "头部统计行的三元分支（`review-total-due` 那一行），是计数标签不是空态" },
+  { file: "components/NoteMoveToGroupMenu.tsx", anchor: "暂无组——左侧「＋ 新建组」创建后即可归组", why: "B1/B2 锚定菜单（`NON_MIGRATED_14`）：守卫禁止该文件 import 原语层 ⇒ 按控制方裁决回退自绘（T12 先例），文案逐字保留" },
+  { file: "components/NoteRowContextMenu.tsx", anchor: "暂无组——左侧「＋ 新建组」", why: "B1/B2 锚定菜单（`NON_MIGRATED_14`）：同上，守卫不许改窄 ⇒ 回退自绘而不是改守卫" },
+  { file: "components/NoteLinkToSystem.tsx", anchor: "暂无体系——笔记无法挂接。", why: "B1/B2 锚定菜单（`NON_MIGRATED_14`）：同上；其 `EmptyState`+`Button` 是 T13 按 B6 引入的，随守卫恢复一并回退" },
 ];
 
 /** **余量文件**（批 4 不迁，冻结给批 5/7）—— 逐文件区间 `[min, max]`，**只许减**（同探针的 5 文件） */
@@ -184,8 +192,8 @@ describe("空态切片棘轮（B11）", () => {
     expect(describeHits(SLICE.flatMap((f) => unmigratedOf(f))), "切片内仍有未走 EmptyState 的空态").toEqual("");
   });
 
-  it("③ 例外 5 处：锚点片段恰好命中 1 行、该行确实命中词表、理由非空、且尚未走原语", () => {
-    expect(EXCEPTIONS).toHaveLength(5);
+  it("③ 例外 8 处：锚点片段恰好命中 1 行、该行确实命中词表、理由非空、且尚未走原语", () => {
+    expect(EXCEPTIONS).toHaveLength(8);
     for (const e of EXCEPTIONS) {
       const lines = readFileSync(join(SRC, ...e.file.split("/")), "utf8").split(/\r?\n/);
       const idx = lines.map((l, i) => (l.includes(e.anchor) ? i + 1 : 0)).filter((n) => n > 0);

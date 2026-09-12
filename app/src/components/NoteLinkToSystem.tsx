@@ -19,7 +19,6 @@ import type {
   KnowledgeConcept, KnowledgeLink, KnowledgeModel, KnowledgeNode, KnowledgeSystem,
 } from "../types/knowledge";
 import LinkEntityPicker, { type LinkRow } from "./LinkEntityPicker";
-import { Button, EmptyState } from "../ui/primitives";
 
 /** 挂接目标类型：问题节点 / 概念 / 模型（spec §3.3 三选一） */
 export type LinkEntityType = "node" | "concept" | "model";
@@ -256,17 +255,19 @@ export default function NoteLinkToSystem({ noteId, onChanged, onGotoKnowledgeSys
             }}
           >
           {domainSystems.length === 0 ? (
-            <EmptyState
-              title="暂无体系——"
-              description="笔记无法挂接。"
-              testId="note-link-empty"
-              align="start"
-              secondary={onGotoKnowledgeSystem ? (
-                <Button variant="secondary" size="sm" testId="note-link-goto-system" onClick={onGotoKnowledgeSystem}>
+            <div data-testid="note-link-empty" style={{ fontSize: 12, color: "#9ca3af", display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
+              <span>暂无体系——笔记无法挂接。</span>
+              {/* TD-2026-09-05-A：引导按钮（跳体系页并打开建体系向导） */}
+              {onGotoKnowledgeSystem && (
+                <button
+                  data-testid="note-link-goto-system"
+                  onClick={onGotoKnowledgeSystem}
+                  style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e", cursor: "pointer" }}
+                >
                   ➕ 去体系页创建（向导）
-                </Button>
-              ) : undefined}
-            />
+                </button>
+              )}
+            </div>
           ) : (
             <>
               <select

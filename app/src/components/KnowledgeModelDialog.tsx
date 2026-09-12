@@ -8,7 +8,7 @@
  * @ai-context: 不预填内容（预填＝假燃料）——所有输入从空字符串开始。
  */
 import { useState } from "react";
-import { isImeComposing, Modal } from "../ui/primitives";
+import { isImeComposing, Modal, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 
 interface Props {
@@ -141,8 +141,8 @@ export default function KnowledgeModelDialog({ systemId, onCreated, onClose }: P
         </p>
 
         {error && (
-          <div data-testid="model-dialog-error" style={{ fontSize: 12, color: "#dc2626", marginTop: 10, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "6px 10px", lineHeight: 1.5 }}>
-            {error}
+          <div style={{ marginTop: 10 }}>
+            <StatusLine kind="error" testId="model-dialog-error">{error}</StatusLine>
           </div>
         )}
       </div>

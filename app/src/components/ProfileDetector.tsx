@@ -22,6 +22,7 @@ import type {
 // 审查修复（领域枚举漂移）：共享常量替换本地定义——与 Rust ALL_DOMAINS 20 类
 // 同口径（新建组/改判共用），本地重复定义删除
 import { DOMAIN_OPTIONS } from "../utils/domainOptions";
+import { StatusLine } from "../ui/primitives";
 
 /** 形态标签映射（Rust ContentForm::label 同源） */
 export const FORM_LABELS: Record<ContentForm, string> = {
@@ -362,7 +363,7 @@ export default function ProfileDetector({
               })()}
             </div>
           )}
-          {error && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>{error}</div>}
+          {error && <StatusLine kind="error">{error}</StatusLine>}
         </div>
       )}
     </div>

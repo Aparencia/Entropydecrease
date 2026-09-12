@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button } from "../ui/primitives";
+import { Button, StatusLine } from "../ui/primitives";
 
 interface InboxView {
   running: boolean;
@@ -77,7 +77,7 @@ export function WebInboxPanel() {
         </span>
       </div>
       {msg && <div style={{ fontSize: 11, color: "#047857", marginBottom: 4 }}>{msg}</div>}
-      {err && <div style={{ fontSize: 11, color: "#dc2626", marginBottom: 4 }}>{err}</div>}
+      {err && <StatusLine kind="error">{err}</StatusLine>}
       <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
         {!view?.running ? (
           <Button variant="primary" size="md" onClick={() => void start()}>▶ 启动收件服务</Button>

@@ -19,7 +19,7 @@
  *              两栏的**独立滚动 + 同步滚动**保留（见 `PANE_MAX_H` 的 Why）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, EmptyState, Loading, Skeleton } from "../ui/primitives";
+import { Modal, EmptyState, Loading, Skeleton, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiRefineResult, DiffOp, MarkdownDiffOps, RefineStrategyInfo, RefineStrategyMeta, WorkbenchData } from "../types";
 import { escapeHtml } from "../utils/html";
@@ -296,7 +296,7 @@ export default function RefineWorkbench({
   if (status === "error") {
     return (
       <Modal open onClose={onClose} title="精修工作台" size="l" testId="refine-workbench">
-        <p style={{ color: "#dc2626", fontSize: 13 }}>{errMsg}</p>
+        <StatusLine kind="error">{errMsg}</StatusLine>
       </Modal>
     );
   }
@@ -347,7 +347,7 @@ export default function RefineWorkbench({
       <button style={{ ...headerBtn, border: "1px solid #d1d5db" }} onClick={onClose}>
         放弃
       </button>
-      {msg && <span style={{ fontSize: 11, color: msg.startsWith("✅") ? "#0d9488" : "#dc2626" }}>{msg}</span>}
+      {msg && <StatusLine kind={msg.startsWith("✅") ? "ok" : "error"}>{msg}</StatusLine>}
     </>
   );
 

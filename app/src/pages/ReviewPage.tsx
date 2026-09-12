@@ -20,7 +20,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { NoteGroup } from "../types/notes";
 import ReviewSessionPanel from "../components/review/ReviewSessionPanel";
 import { dueGroupRows, scopeDueCount, scopeLabel } from "../utils/reviewStats";
-import { Loading, Skeleton } from "../ui/primitives";
+import { Loading, Skeleton, StatusLine } from "../ui/primitives";
 
 interface Props {
   /** 页面是否可见（App 层 display 门控同步透传——切回时重载到期统计） */
@@ -208,7 +208,7 @@ export default function ReviewPage({ active, focusGroupId, onFocusGroupConsumed 
             </div>
           </div>
         )}
-        {status && <p data-testid="review-status" style={{ fontSize: 12, color: "#dc2626" }}>{status}</p>}
+        {status && <StatusLine kind="error" testId="review-status">{status}</StatusLine>}
         {loaded && !status && scopeDue <= 0 && (
           <div data-testid="review-empty" style={{ textAlign: "center", padding: "56px 0", maxWidth: 480, margin: "0 auto" }}>
             <p style={{ fontSize: 15, fontWeight: 600, color: "#374151" }}>{emptyTitle}</p>

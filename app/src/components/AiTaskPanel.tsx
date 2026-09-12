@@ -15,7 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AiEnrichResult, AiRefineResult, AiTaskRecord } from "../types";
 // 低5（审查）：类别词经 entityLabel.kindWord 单一来源（不带 id 的语义词）
 import { kindWord } from "../utils/entityLabel";
-import { Button, EmptyState } from "../ui/primitives";
+import { Button, EmptyState, StatusLine } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "3px 8px", fontSize: 11, borderRadius: 5, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" };
 
@@ -216,7 +216,7 @@ export default function AiTaskPanel() {
         </div>
       )}
 
-      {msg && <div style={{ fontSize: 11, color: msg.startsWith("已") ? "#0d9488" : "#dc2626", marginTop: 4 }}>{msg}</div>}
+      {msg && <StatusLine kind={msg.startsWith("已") ? "ok" : "error"}>{msg}</StatusLine>}
     </div>
   );
 }

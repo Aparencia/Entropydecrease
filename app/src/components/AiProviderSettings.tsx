@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiProviderInput, AiProviderView } from "../types";
-import { ConfirmDialog, Button, EmptyState } from "../ui/primitives";
+import { ConfirmDialog, Button, EmptyState, StatusLine } from "../ui/primitives";
 
 const btn: React.CSSProperties = {
   padding: "5px 10px",
@@ -249,9 +249,7 @@ export default function AiProviderSettings() {
       )}
 
       {msg && (
-        <div style={{ fontSize: 11, color: msg.kind === "ok" ? "#0d9488" : "#dc2626", marginTop: 4 }}>
-          {msg.text}
-        </div>
+        <StatusLine kind={msg.kind === "ok" ? "ok" : "error"}>{msg.text}</StatusLine>
       )}
 
       {/* 危险动作确认（§5.3）：原文两处 `window.confirm` 的文案逐字拆为 title（问句）/ message / impacts */}

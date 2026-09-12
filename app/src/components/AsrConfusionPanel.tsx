@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button, EmptyState, Loading } from "../ui/primitives";
+import { Button, EmptyState, Loading, StatusLine } from "../ui/primitives";
 
 interface AsrPairView {
   wrong: string;
@@ -99,8 +99,8 @@ export function AsrConfusionPanel() {
         </div>
       )}
       {err && (
-        <div style={{ fontSize: 11, color: "#dc2626", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 6, padding: "4px 8px", marginBottom: 6 }}>
-          {err}
+        <div style={{ marginBottom: 6 }}>
+          <StatusLine kind="error">{err}</StatusLine>
         </div>
       )}
       <div style={{ fontSize: 12, marginBottom: 4 }}>

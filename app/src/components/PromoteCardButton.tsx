@@ -13,6 +13,7 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Flashcard } from "../types";
 import type { KnowledgeSystem, PromoteResult, PromoteAction } from "../types/knowledge";
+import { StatusLine } from "../ui/primitives";
 
 interface Props {
   /** 待升格的卡（仅 kind==='model' 传入；front=概念名，back=三问） */
@@ -99,7 +100,11 @@ export default function PromoteCardButton({ card }: Props) {
         </div>
       )}
 
-      {status && <p data-testid="promote-status" style={{ marginTop: 6, fontSize: 12, color: status.error ? "#dc2626" : "#0f766e" }}>{status.text}</p>}
+      {status && (
+        <div style={{ marginTop: 6 }}>
+          <StatusLine kind={status.error ? "error" : "ok"} testId="promote-status">{status.text}</StatusLine>
+        </div>
+      )}
     </div>
   );
 }

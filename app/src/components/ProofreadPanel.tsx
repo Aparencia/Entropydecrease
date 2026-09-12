@@ -11,7 +11,7 @@
  *              （`SessionDetailPanel` 的 `showProofread` 条件挂载）⇒ `open` 恒为 `true`。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Button, Modal, EmptyState } from "../ui/primitives";
+import { Button, Modal, EmptyState, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { RefineDraftView, SecondPassView } from "./SecondPassPanel";
 
@@ -125,8 +125,8 @@ export default function ProofreadPanel({ sessionId, onClose }: Props) {
         </div>
       )}
       {err && (
-        <div style={{ fontSize: 12, color: "#dc2626", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 6, padding: "6px 10px", marginBottom: 8 }}>
-          {err}
+        <div style={{ marginBottom: 8 }}>
+          <StatusLine kind="error">{err}</StatusLine>
         </div>
       )}
 

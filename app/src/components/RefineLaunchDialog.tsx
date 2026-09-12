@@ -14,7 +14,7 @@
  *              的 `kind` 分支）⇒ `open` 恒为 `true`，本组件每次由父层条件挂载。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, Loading, Modal, Skeleton } from "../ui/primitives";
+import { Button, Loading, Modal, Skeleton, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiSettingsView, BalanceView, RefineEstimateView, RefineStrategyMeta } from "../types";
 import {
@@ -262,9 +262,9 @@ export default function RefineLaunchDialog({
             设为默认
           </button>
           {visionSavedNote && (
-            <span data-testid="vision-saved-note" style={{ width: "100%", fontSize: 11, color: visionSavedNote.startsWith("已") ? "#047857" : "#dc2626" }}>
-              {visionSavedNote}
-            </span>
+            <div style={{ width: "100%" }}>
+              <StatusLine kind={visionSavedNote.startsWith("已") ? "ok" : "error"} testId="vision-saved-note">{visionSavedNote}</StatusLine>
+            </div>
           )}
         </div>
       )}
@@ -293,7 +293,7 @@ export default function RefineLaunchDialog({
           <Skeleton lines={2} />
         </div>
       )}
-      {msg && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 6 }}>{msg}</div>}
+      {msg && <div style={{ marginTop: 6 }}><StatusLine kind="error">{msg}</StatusLine></div>}
     </Modal>
   );
 }

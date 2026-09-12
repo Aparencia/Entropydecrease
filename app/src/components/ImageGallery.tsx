@@ -13,7 +13,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import ImagePreviewOverlay from "./ImagePreviewOverlay";
 import StructureImageSection from "./StructureImageSection";
-import { Button, EmptyState } from "../ui/primitives";
+import { Button, EmptyState, StatusLine } from "../ui/primitives";
 
 export default function ImageGallery({ sessionId }: { sessionId: number }) {
   const [images, setImages] = useState<string[]>([]);
@@ -72,7 +72,7 @@ export default function ImageGallery({ sessionId }: { sessionId: number }) {
         <Button variant="secondary" size="md" busy={loading} onClick={() => void refresh()}>
           {loading ? "加载中…" : "⟳ 刷新"}
         </Button>
-        {error && <span style={{ fontSize: 11, color: "#dc2626" }}>{error}</span>}
+        {error && <StatusLine kind="error">{error}</StatusLine>}
       </div>
       {images.length === 0 && !loading && (
         <EmptyState title="暂无图片（实时捕获中画面变化会自动归档；Ctrl+Shift+S 手动截图置顶）" compact align="start" />

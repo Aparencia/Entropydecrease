@@ -19,7 +19,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Flashcard } from "../../types/notes";
 import PromoteCardButton from "../PromoteCardButton";
-import { Loading, Skeleton } from "../../ui/primitives";
+import { Loading, Skeleton, StatusLine } from "../../ui/primitives";
 
 /** 四档评分按钮（文案=回忆质量自评） */
 const RATINGS: { value: string; label: string; color: string }[] = [
@@ -223,7 +223,7 @@ export default function ReviewSessionPanel({ groupId, groupName, active = true, 
               )}
             </div>
           )}
-          {status && <p style={{ marginTop: 8, fontSize: 12, color: "#dc2626" }}>{status}</p>}
+          {status && <div style={{ marginTop: 8 }}><StatusLine kind="error">{status}</StatusLine></div>}
         </div>
       </div>
     </div>

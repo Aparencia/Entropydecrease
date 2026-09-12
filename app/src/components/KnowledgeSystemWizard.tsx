@@ -18,7 +18,7 @@
  *              底栏「取消」仍直连 `onClose`（原行为：取消不确认）。
  */
 import { useMemo, useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Modal, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { KnowledgeSystem, KnowledgeNodeType } from "../types/knowledge";
@@ -261,8 +261,8 @@ export default function KnowledgeSystemWizard({ onClose, onCreated }: Props) {
 
         {/* 逐行红色错误提示 */}
         {error && (
-          <div data-testid="wizard-error" style={{ fontSize: 12, color: "#dc2626", marginTop: 10, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "6px 10px", lineHeight: 1.5 }}>
-            {error}
+          <div style={{ marginTop: 10 }}>
+            <StatusLine kind="error" testId="wizard-error">{error}</StatusLine>
           </div>
         )}
       </div>

@@ -16,7 +16,7 @@
  *              busy 门（`running || showWorkbench` 时不关）现在是**唯一的**关闭门。
  */
 import { useCallback, useState } from "react";
-import { Button, Modal } from "../ui/primitives";
+import { Button, Modal, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { useAiTaskPolling } from "../hooks/useAiTaskPolling";
 import type { AiRefineResult, AiTaskState } from "../types";
@@ -187,9 +187,13 @@ export default function NoteAiDialog({
               </div>
             )}
             {msg && (
-              <div style={{ marginTop: 8, fontSize: 12, color: "#dc2626" }}>
-                {msg}
-                <button style={{ padding: "4px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6, marginLeft: 8, border: "1px solid #d1d5db" }} onClick={handleClose}>关闭</button>
+              <div style={{ marginTop: 8 }}>
+                <StatusLine
+                  kind="error"
+                  action={<button style={{ padding: "4px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6, marginLeft: 8, border: "1px solid #d1d5db" }} onClick={handleClose}>关闭</button>}
+                >
+                  {msg}
+                </StatusLine>
               </div>
             )}
             {showWorkbench && result && (

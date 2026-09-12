@@ -11,7 +11,7 @@
  *              的树形缩进视图（父锚点可视化），非平铺下拉。
  */
 import { useMemo, useState } from "react";
-import { Button, EmptyState } from "../ui/primitives";
+import { Button, EmptyState, StatusLine } from "../ui/primitives";
 
 export interface LinkRow {
   id: number;
@@ -137,7 +137,7 @@ export default function LinkEntityPicker({
           已选「{selected.label.slice(0, 16)}」——输入新名称可在其下新建{kindLabel}
         </div>
       )}
-      {err && <div style={{ fontSize: 11, color: "#dc2626" }}>{err}</div>}
+      {err && <StatusLine kind="error">{err}</StatusLine>}
     </div>
   );
 }

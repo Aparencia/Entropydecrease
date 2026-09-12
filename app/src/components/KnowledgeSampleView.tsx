@@ -13,6 +13,7 @@ import type { ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { SAMPLE_SYSTEM } from "../utils/knowledgeSample";
 import type { KnowledgeSystem } from "../types/knowledge";
+import { StatusLine } from "../ui/primitives";
 
 interface Props {
   /** 复制完成回调（父级刷新体系列表并选中新体系） */
@@ -131,7 +132,7 @@ export default function KnowledgeSampleView({ onCopied, onNeedGlobal, refreshGlo
       >
         {busy ? "复制中…" : "📋 复制为我的体系"}
       </button>
-      {err && <div style={{ fontSize: 11, color: "#dc2626", marginTop: 6 }}>{err}</div>}
+      {err && <div style={{ marginTop: 6 }}><StatusLine kind="error">{err}</StatusLine></div>}
     </div>
   );
 }

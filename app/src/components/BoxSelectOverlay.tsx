@@ -9,6 +9,7 @@
 import { useRef, useState } from "react";
 import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
+import { StatusLine } from "../ui/primitives";
 
 interface Props {
   src: string;
@@ -193,7 +194,7 @@ export default function BoxSelectOverlay({ src, sessionId, firstSeenMs, onDone, 
           <div style={{ fontSize: 11, color: "#6b7280" }}>
             区域 {Math.round(confirm.w * 100)}% × {Math.round(confirm.h * 100)}%（相对整屏）
           </div>
-          {error && <div style={{ fontSize: 11, color: "#dc2626" }}>{error}</div>}
+          {error && <StatusLine kind="error">{error}</StatusLine>}
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={() => { setConfirm(null); setBox(null); }}

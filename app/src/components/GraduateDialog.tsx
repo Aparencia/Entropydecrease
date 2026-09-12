@@ -7,7 +7,7 @@
  * @ai-context: 未达标时按钮不可达（GoalDetail 禁用）；本对话框只管确认流。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Button, Modal } from "../ui/primitives";
+import { Button, Modal, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { GraduationReport, GoalDetailView, GoalProgressView } from "../types/goals";
 
@@ -99,7 +99,7 @@ export default function GraduateDialog({ goalId, onClose, onGraduated }: Props) 
               <div key={i} style={{ color: c.met ? "#047857" : "#9ca3af" }}>{c.met ? "✓" : "○"} {c.label}：{c.detail}</div>
             ))}
           </div>
-          {err && <p data-testid="graduate-error" style={{ fontSize: 11, color: "#dc2626" }}>{err}</p>}
+          {err && <StatusLine kind="error" testId="graduate-error">{err}</StatusLine>}
         </>
       )}
     </Modal>

@@ -13,7 +13,7 @@
  *              application 且 conceptId 提供时默认带上 conceptIds=[conceptId]（挂概念）。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Modal, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   KnowledgeConcept, KnowledgeDecision, KnowledgeModel, KnowledgeNode,
@@ -212,7 +212,7 @@ export default function KnowledgeDecisionForm({ mode, systemId, conceptId, onSav
           <RefCheckboxList title="碎片" items={fragments.map((f) => ({ id: f.id, label: f.text }))} checked={(id) => refs.fragmentId === id} onToggle={(id) => toggleSingle("fragmentId", id)} dataPrefix="ref-fragment" />
         </div>
 
-        {err && <div data-testid="form-error" style={{ fontSize: 12, color: "#dc2626", marginTop: 10, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "6px 10px", lineHeight: 1.5 }}>{err}</div>}
+        {err && <div style={{ marginTop: 10 }}><StatusLine kind="error" testId="form-error">{err}</StatusLine></div>}
       </div>
     </Modal>
   );

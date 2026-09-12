@@ -23,7 +23,6 @@ import type { Note, NoteGroup } from "../types";
 import type { MoveNoteResult } from "../types/notes";
 import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
-import { EmptyState } from "../ui/primitives";
 
 interface Props {
   note: Note;
@@ -200,7 +199,7 @@ export default function NoteRowContextMenu({
             </button>
             <div style={{ maxHeight: 260, overflowY: "auto" }}>
               {groups.length === 0 && (
-                <EmptyState title="暂无组——" description="左侧「＋ 新建组」" compact align="start" />
+                <div style={{ fontSize: 12, color: "#9ca3af", padding: "4px 10px" }}>暂无组——左侧「＋ 新建组」</div>
               )}
               {groups.map((g) => {
                 const active = g.id === currentId;

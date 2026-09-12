@@ -8,7 +8,7 @@
  *              清理登记（丢弃项）诚实展示，绝不静默。
  */
 import { useMemo, useState } from "react";
-import { Button, Modal } from "../ui/primitives";
+import { Button, Modal, StatusLine } from "../ui/primitives";
 import type { GoalPlanView } from "../types/goals";
 
 interface Props {
@@ -168,7 +168,7 @@ export default function GoalPlanApprovalDialog({ view, onConfirm, onClose, onUse
         </>
       )}
 
-      {err && <p data-testid="plan-error" style={{ fontSize: 11, color: "#dc2626", margin: "6px 0 0" }}>{err}</p>}
+      {err && <div style={{ margin: "6px 0 0" }}><StatusLine kind="error" testId="plan-error">{err}</StatusLine></div>}
     </Modal>
   );
 }

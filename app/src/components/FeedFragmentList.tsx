@@ -16,7 +16,7 @@ import type { Fragment, Note, NoteGroup } from "../types";
 // REQ-316（批 7）：碎片删除/升笔记返回契约（源空组清理留痕数据源）
 import type { DeleteFragmentResult, PromoteNoteResult } from "../types/notes";
 import { fragmentPreview, promoteTitleFor } from "../utils/inbox";
-import { ConfirmDialog } from "../ui/primitives";
+import { ConfirmDialog, StatusLine } from "../ui/primitives";
 
 interface Props {
   /** 列宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 320=历史值） */
@@ -278,7 +278,7 @@ export default function FeedFragmentList({ width = 320, onChanged, onPromoted, o
           </div>
         ))}
 
-        {err && <p data-testid="inbox-error" style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>{err}</p>}
+        {err && <StatusLine kind="error" testId="inbox-error">{err}</StatusLine>}
       </div>
 
       <ConfirmDialog

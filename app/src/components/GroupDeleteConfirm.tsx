@@ -8,7 +8,7 @@
  *              （数据不可恢复后果透明可见）。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Modal } from "../ui/primitives";
+import { Modal, StatusLine } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { NoteGroup } from "../types";
 
@@ -101,16 +101,20 @@ export default function GroupDeleteConfirm({ group, onClose, onDeleted }: Props)
       {!impact ? (
         <div data-testid="group-delete-loading" style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.8 }}>
           {loadError ? (
-            <>
-              <span style={{ color: "#dc2626" }}>{loadError}</span>
-              <button
-                data-testid="group-delete-retry"
-                onClick={() => void load()}
-                style={{ ...BTN, marginLeft: 8 }}
-              >
-                重试
-              </button>
-            </>
+            <StatusLine
+              kind="error"
+              action={
+                <button
+                  data-testid="group-delete-retry"
+                  onClick={() => void load()}
+                  style={{ ...BTN, marginLeft: 8 }}
+                >
+                  重试
+                </button>
+              }
+            >
+              {loadError}
+            </StatusLine>
           ) : (
             "正在统计影响面…"
           )}
@@ -119,9 +123,9 @@ export default function GroupDeleteConfirm({ group, onClose, onDeleted }: Props)
         <div data-testid="group-delete-impact" style={{ fontSize: 12, color: "#374151", lineHeight: 1.9 }}>
           <div>📄 组内笔记：{impact.notes} 条 → 移入「全部笔记」不删除</div>
           <div>⚡ 组内碎片：{impact.fragments} 条 → 移出归组不删除</div>
-          {impact.cards > 0 && <div style={{ color: "#b91c1c" }}>🎴 闪卡：{impact.cards} 张 → <b>将级联删除</b></div>}
-          {impact.settlements > 0 && <div style={{ color: "#b91c1c" }}>🧹 结算历史：{impact.settlements} 条 → <b>将级联删除</b></div>}
-          {impact.contracts > 0 && <div style={{ color: "#b91c1c" }}>📅 周契约：{impact.contracts} 份 → <b>将级联删除</b></div>}
+          {impact.cards > 0 && <StatusLine kind="error">🎴 闪卡：{impact.cards} 张 → <b>将级联删除</b></StatusLine>}
+          {impact.settlements > 0 && <StatusLine kind="error">🧹 结算历史：{impact.settlements} 条 → <b>将级联删除</b></StatusLine>}
+          {impact.contracts > 0 && <StatusLine kind="error">📅 周契约：{impact.contracts} 份 → <b>将级联删除</b></StatusLine>}
           {impact.systemRefs > 0 && <div style={{ color: "#b45309" }}>🕸 体系引用：{impact.systemRefs} 处 → 引用解除</div>}
           {!hasCascade && <div style={{ color: "#0f766e" }}>无级联删除项——内容均保留，安全删除</div>}
 
@@ -134,7 +138,11 @@ export default function GroupDeleteConfirm({ group, onClose, onDeleted }: Props)
         </div>
       )}
 
-      {status && impact && <p data-testid="group-delete-status" style={{ marginTop: 8, fontSize: 12, color: "#dc2626" }}>{status}</p>}
+      {status && impact && (
+        <div style={{ marginTop: 8 }}>
+          <StatusLine kind="error" testId="group-delete-status">{status}</StatusLine>
+        </div>
+      )}
     </Modal>
   );
 }
