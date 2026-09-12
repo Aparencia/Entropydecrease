@@ -45,6 +45,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { Button } from "./Button";
 import { Modal } from "./Modal";
+import type { ModalTier } from "./Modal";
 import { Text } from "./Text";
 import "./ConfirmDialog.css";
 
@@ -80,6 +81,13 @@ export interface ConfirmDialogProps {
   cancelLabel?: string;
   /** 动作进行中：两个按钮都不可点（`aria-disabled` + 降级），但不卸载、不改变退出语义 */
   busy?: boolean;
+  /**
+   * 层级，透传给 `Modal` 的 `tier`（默认 `"modal"` = 300）。
+   * **何时该传 `modalNested`（400）**：本确认框**被另一个弹层承载**时（如
+   * `InterviewDialog → GoalPlanApprovalDialog` 那类「弹层内再弹」）—— 不传就与外层同档 300，
+   * 叠放顺序退化成 DOM 序、外层遮罩会压住它。ADR-033 后果④的观察项，批 4 T2 结清。
+   */
+  tier?: ModalTier;
   /** 用户确认（危险动作；调用点应同步置 `busy` 以挡住重复触发） */
   onConfirm: () => void;
   /** 用户取消 / ESC / 点遮罩 —— **所有退出路径都归到这里** */
@@ -102,6 +110,7 @@ export function ConfirmDialog({
   confirmLabel = "确认",
   cancelLabel = "取消",
   busy = false,
+  tier = "modal",
   onConfirm,
   onCancel,
   testId,
@@ -163,6 +172,7 @@ export function ConfirmDialog({
       onClose={handleCloseIntent}
       title={title}
       size={CONFIRM_SIZE}
+      tier={tier}
       testId={testId}
       footer={footer}
     >

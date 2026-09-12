@@ -31,7 +31,8 @@
  *    （15 冒泡 + 1 捕获），另 3 个（`App.tsx:203` · `useClassroomShortcuts.ts:37` ·
  *    `useClassroomFloat.ts:73`）**不处理 Escape** —— 不要把它写成"19 处 ESC"。
  *    `closeOnEsc=false` 时**仍然消费**（弹层是最上层，ESC 不该穿透到下层），只是不调用 `onClose`。
- * ⑤ **不做 body 滚动锁**：现状 20 个弹层也没有（属批 4 的观察项，已登记在报告的「未做」）。
+ * ⑤ **body 滚动锁在 `presence.mounted` 上**（批 4 T2 结清，B6：20 个调用点共用 ⇒ 改原语）：
+ *    引用计数 + 原值快照，见 `useBodyScrollLock`；未挂载时**不碰** `document.body` 的样式。
  * ⑥ **不消费 `isImeComposing`**：计划 Task 7 Step 1 明确"本批只建不接"—— 需要 IME 守卫的是
  *    「Enter 提交」，那是调用点的动作（`Modal` 自己不定义提交）。
  */
@@ -89,6 +90,41 @@ function isInnermost(entry: { depth: number }): boolean {
   return top === entry;
 }
 
+/** 当前持锁的弹层（`Set` 即引用计数：关内层时集合非空 ⇒ 不解锁） */
+const scrollLockOwners = new Set<object>();
+/** 首个持锁者记下的**原值快照**（`null` = 当前没持锁）。恢复成 `""` 会抹掉宿主页设过的 overflow */
+let savedBodyOverflow: string | null = null;
+
+/**
+ * body 滚动锁（批 4 T2；B6 缺口 A：20 个弹层共用 ⇒ 锁在原语里，调用点零改动）。
+ *
+ * Why 引用计数：弹层内再弹（`tier="modalNested"` 的 `ConfirmDialog`）时，**内层关闭不能解锁** ——
+ *   外层还在屏上，背景一旦能滚就会跳一下。
+ * Why 原值快照：恢复成 `""` 会把别人（或宿主页）设过的 `overflow` 一并抹掉 —— 那是"看不见的破坏"。
+ * Why 门控是 `presence.mounted` 而**不是** `open`：`open=false` 后仍有 160ms 退场，那段时间面板还在屏上，
+ *   提前解锁等于"弹层还在、背景却能滚"（与 §5.2 第 2 条「退场相位必须禁指针事件」同源）。
+ * Why 单个 effect：加锁与解锁都在同一个 effect 的 body/cleanup 里 —— 拆成两个的话，退场中
+ *   `open` 反向回到 `true` 时 cleanup 会先解锁、再（因依赖未变而）不加回来，锁就永久丢了。
+ */
+function useBodyScrollLock(locked: boolean): void {
+  const ownerRef = useRef<object>({});
+  useEffect(() => {
+    // SSR / 预渲染：`document` 不在；effects 在服务端本来也不跑，这行只为类型与语义收口
+    if (typeof document === "undefined") return;
+    const owner = ownerRef.current;
+    if (!locked) return;
+    if (scrollLockOwners.size === 0) savedBodyOverflow = document.body.style.overflow;
+    scrollLockOwners.add(owner);
+    document.body.style.overflow = "hidden";
+    return () => {
+      scrollLockOwners.delete(owner);
+      if (scrollLockOwners.size > 0) return;
+      document.body.style.overflow = savedBodyOverflow ?? "";
+      savedBodyOverflow = null;
+    };
+  }, [locked]);
+}
+
 /**
  * ESC 接管（模块级栈 + `document` 冒泡监听）。
  * `closeOnEsc` / `onClose` 走 ref 镜像：若把它们放进 effect 依赖，父层每次重渲染都会"出栈再入栈"，
@@ -139,6 +175,7 @@ export function Modal({
 
   useEscapeToClose(open, depth, closeOnEsc, onClose);
   useFocusTrap(open && presence.mounted, panelRef);
+  useBodyScrollLock(presence.mounted);
 
   if (!presence.mounted) return null;
   // SSR / 预渲染：`createPortal` 需要真实容器（本仓无 SSR，但预渲染下一行都不能崩）
