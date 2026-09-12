@@ -78,10 +78,12 @@ describe("列键名冻结（改名 = 用户列宽静默丢失）", () => {
   });
 
   it("① 阴性样本：改名 / 重排 / 读不到注册表 各必红（走同一条判据）", () => {
-    const renamed = COLUMN_KEYS.map((k) => (k === "notes-list" ? "notes-list-v2" : k));
+    // 样本取自**冻结清单**而不是被测模块：注册表坏掉时样本仍成立 ⇒ 红的必然只有正式断言
+    // （若样本取自 `COLUMN_KEYS`，改名变异会让这条「阴性样本」用例跟着一起红，归因变浑）。
+    const renamed = FROZEN_KEYS.map((k) => (k === "notes-list" ? "notes-list-v2" : k));
     expect(keyDiff(renamed)).toEqual(["[4] notes-list → notes-list-v2"]);
 
-    const swapped = [...COLUMN_KEYS.slice(0, 4), COLUMN_KEYS[5], COLUMN_KEYS[4], ...COLUMN_KEYS.slice(6)];
+    const swapped = [...FROZEN_KEYS.slice(0, 4), FROZEN_KEYS[5], FROZEN_KEYS[4], ...FROZEN_KEYS.slice(6)];
     expect(keyDiff(swapped)).toEqual(["[4] notes-list → notes-outline", "[5] notes-outline → notes-list"]);
 
     // 0 命中（注册表读空/路径写错）时必须全红，不能是空转判据
