@@ -34,26 +34,6 @@
  *    必须先把 `style` 摘掉，否则改类不会有观感变化。
  */
 
-:root {
-  /* 响应层（<200ms）：单属性、无时序的交互回执 ⇒ 一律 CSS transition（规格 §8.2 判据） */
-  --ed-dur-micro: 120ms;
-  /* 弹层遮罩与面板进出场：出场比进场快（规格 §8.4「进出场：弹层 200/160」） */
-  --ed-dur-overlay-in: 200ms;
-  --ed-dur-overlay-out: 160ms;
-  /* Toast 进出场（规格 §8.4「Toast 180/140」） */
-  --ed-dur-toast-in: 180ms;
-  --ed-dur-toast-out: 140ms;
-  /* 循环环境动效：骨架微光（规格 §8.4「--dur-skeleton 1200ms」） */
-  --ed-dur-skeleton: 1200ms;
-  /* 面板 / 视图 / 列折叠（规格 §8.4「--dur-card 220ms」） */
-  --ed-dur-card: 220ms;
-  /* 显影 / 编排层（规格 §8.4「--dur-reveal 500ms」） */
-  --ed-dur-reveal: 500ms;
-  /* 页面切换（规格 §8.4「--dur-page 150ms」） */
-  --ed-dur-page: 150ms;
-  /* 缓动：全站唯一曲线（规格 §8.4「--ease cubic-bezier(0.2,0,0,1)」） */
-  --ed-ease: cubic-bezier(0.2, 0, 0, 1);
-}
 
 /* ★ 名单 = 12 个 `.ed-*` **基类** + **每一处 `animation` 声明的选择器原文**（含伪元素）。
    ⚠️ 为什么伪元素必须逐字列出（T11 评审用 headless Chromium `--force-prefers-reduced-motion` 实测的 Critical）：

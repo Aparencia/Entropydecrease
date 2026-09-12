@@ -72,6 +72,18 @@
   /* 壳层纵向基准（规格 §1 决策 16）：顶栏高度 —— 页面用 calc(100vh - var(--ed-nav-h)) 消费 */
   --ed-nav-h: 56px;
 
+  /* 动效（规格 §8.4）：9 个时长 + 1 个缓动 —— 批 6 从 primitives/motion.css 的临时接缝迁入，值逐字不变 */
+  --ed-dur-micro: 120ms;
+  --ed-dur-overlay-in: 200ms;
+  --ed-dur-overlay-out: 160ms;
+  --ed-dur-toast-in: 180ms;
+  --ed-dur-toast-out: 140ms;
+  --ed-dur-skeleton: 1200ms;
+  --ed-dur-card: 220ms;
+  --ed-dur-reveal: 500ms;
+  --ed-dur-page: 150ms;
+  --ed-ease: cubic-bezier(0.2, 0, 0, 1);
+
   /* 图标 */
   --ed-icon-stroke: 1.75;
 }

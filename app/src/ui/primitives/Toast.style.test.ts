@@ -10,7 +10,7 @@
  *      —— transition 只许出现在 `opacity` / `transform` 上；高度/内边距/位置过渡会触发重排，
  *      也会让多条 toast 的堆叠逐帧抖动。第二个 `it` 用**变异样本**证明该判据有区分度。
  *   ② 进出场时长逐字取 `--ed-dur-toast-in/out`（180 / 140，**出场比进场快**）且各带同值兜底字面量
- *      —— 批 6 的动效 token 真源落地后删 `motion.css` 的变量块即生效。
+ *      —— 批 6 T5 已把真源迁进生成器并删掉 `motion.css` 的变量块（兜底字面量使删块即生效）。
  *   ③ 与其它原语同向的纪律：类名 ↔ CSS 规则一致 · 零颜色字面量 · 零 `z-index`（层级是 TS 标尺的
  *      职责）· `--ed-stamp` 不进任何 `background` 声明（规格 §4.1「绝不用于按钮」）。
  *   ④ **退场时长的两个真源对拍**（T9 评审 I-3）：`Toast.tsx` 的 `EXIT_MS` 与 `motion.css` 的
@@ -32,7 +32,8 @@ const stripComments = (s: string): string => s.replace(/\/\*[\s\S]*?\*\//g, "");
 
 const CLEAN = stripComments(read("Toast.css"));
 const TSX = read("Toast.tsx");
-const MOTION_CSS = read("motion.css");
+/** 批 6 T5 起，时长 token 的**唯一真源产物**是 `ui/tokens.css`（`motion.css` 的临时变量块已删） */
+const TOKENS_CSS = read("../tokens.css");
 
 /** 颜色字面量（与 `style-seams.test.ts` 同一口径：本层不得出现，颜色只经 `var(--ed-*)`） */
 const COLOR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\b(?:rgb|hsl)a?\(/;
@@ -113,20 +114,21 @@ describe("③ 纪律判据（与批 0-D 其它原语同向）", () => {
 
 describe("④ 退场时长的两个真源对拍（T9 评审 I-3）", () => {
   /**
-   * `Toast.tsx` 的 `EXIT_MS` 与 `motion.css` 的 `--ed-dur-toast-out` 是**并列的真源**：前者还是
+   * `Toast.tsx` 的 `EXIT_MS` 与 `tokens.css` 的 `--ed-dur-toast-out` 是**并列的真源**：前者还是
    * `usePresence` 兜底窗口的一半（`EXIT_MS + timeoutSlackMs(80)` = 220ms）。若将来有人只把 token
    * 调大（如 260ms）而 `EXIT_MS` 不动 ⇒ 名义过渡比兜底还长，**退场演到一半就被兜底计时器摘掉**，
    * 而没有任何断言会红。故把两者钉成同一个数字。
    *
    * 边界（本条**不覆盖**）：① 只判"两个数字相等"，不判 CSS 是否真的引用了该变量（那是 ② 的职责）；
    * ② `usePresence` 的 slack 默认值（80）不在此判据内 —— 改它须连 `usePresence.test.tsx` 一起改；
-   * ③ 若批 6 把时长搬进 token 真源并删掉 `motion.css` 的变量块，本条会红，届时按新的唯一真源改写。
+   * ③ 批 6 T5 已把时长搬进 token 真源（`gen-tokens.mjs` ⇒ `tokens.css`）并删掉 `motion.css` 的变量块 ⇒
+   *    本条的源已随之改读 `tokens.css`（**判据本体的两个数字与不变式一字未改**，只换真源文件）。
    */
   it("`const EXIT_MS` == `--ed-dur-toast-out`（否则兜底窗口会把退场中途摘掉）", () => {
     const exitMs = /const EXIT_MS = (\d+);/.exec(TSX)?.[1];
-    const tokenMs = /--ed-dur-toast-out:\s*(\d+)ms;/.exec(MOTION_CSS)?.[1];
+    const tokenMs = /--ed-dur-toast-out:\s*(\d+)ms;/.exec(TOKENS_CSS)?.[1];
     expect(exitMs, "Toast.tsx 缺 `const EXIT_MS = <n>;`").toBeDefined();
-    expect(tokenMs, "motion.css 缺 `--ed-dur-toast-out: <n>ms;`").toBeDefined();
+    expect(tokenMs, "生成物 tokens.css 缺 `--ed-dur-toast-out: <n>ms;`").toBeDefined();
     expect(Number(exitMs), "退场名义时长必须与 --ed-dur-toast-out 同值（兜底窗口 = EXIT_MS + 80）").toBe(Number(tokenMs));
   });
 });

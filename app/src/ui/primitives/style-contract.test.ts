@@ -9,8 +9,8 @@
  *      本文件用 `Record<Union, …>` 全枚举（**编译期双向**）+ 档数冗余（**运行期**）钉住它。
  *   ③ **退场时长三方对拍**：JS 兜底窗口与 CSS 过渡时长漂移时不会有任何报错（T9 评审 I-3）。
  *
- * 副作用：只读磁盘（同目录），不修改任何文件。**只 import 类型**（`import type`）—— 运行时不加载任何
- * React 组件 / `.css`，故本文件留在 vitest 的默认 node 环境（无 DOM 也能跑）。
+ * 副作用：只读磁盘（同目录 + 唯一真源产物 `ui/tokens.css`），不修改任何文件。组件与样式表**只 import
+ * 类型**（`import type`）—— 运行时不加载它们，故本文件留在 vitest 的默认 node 环境（无 DOM 也能跑）。
  *
  * 边界：① 判据只覆盖 `app/src/ui/primitives/` 一层（其余 `.ed-*` 名属既有代码，见 `style-seams.test.ts`
  * 的 `NON_PRIMITIVE_ED_NAMES`）；② 判据前**先剥注释**、先归一 EOL（本仓无 `.gitattributes` 且
@@ -208,7 +208,7 @@ describe("契约完整性锚：类型联合 ↔ CSS 类规则（给联合加一�
  * 退场时长**三方对拍**（T9 评审 I-3 的通用化 —— 原来只有 Toast 一条无判据）：
  * JS 侧兜底窗口（`usePresence` 的 `exitMs`）与 CSS 侧过渡时长**必须是同一个数**，否则不会有任何报错：
  * JS 早了 = 过渡被截断（看不见出场）；JS 晚了 = 节点多残留一截（那段时间还能被点到，正是退场误触面）。
- * 三方 = 组件常量 `EXIT_MS` / 组件 CSS 的 `var(--ed-…, <n>ms)` 兜底字面量 / `motion.css` 的定值。
+ * 三方 = 组件常量 `EXIT_MS` / 组件 CSS 的 `var(--ed-…, <n>ms)` 兜底字面量 / 唯一真源产物 `tokens.css` 的定值。
  * 新增原语时在表里加一行即可（表非空断言防"表被清空 = 守卫静默关掉"）。
  */
 const DURATION_PAIRS: ReadonlyArray<readonly [module: string, css: string]> = [
@@ -216,8 +216,8 @@ const DURATION_PAIRS: ReadonlyArray<readonly [module: string, css: string]> = [
   ["Toast.tsx", "Toast.css"],
 ];
 
-describe("退场时长三方对拍：组件常量 == 组件 CSS 兜底字面量 == motion.css 定值", () => {
-  const motion = stripComments(read("motion.css"));
+describe("退场时长三方对拍：组件常量 == 组件 CSS 兜底字面量 == tokens.css 定值", () => {
+  const tokens = stripComments(read("../tokens.css"));
   it("`const EXIT_MS` 与 `[data-phase=\"exit\"]` 的 `transition-duration` token 逐条相等", () => {
     expect(DURATION_PAIRS.length).toBeGreaterThanOrEqual(2);
     for (const [mod, css] of DURATION_PAIRS) {
@@ -230,7 +230,7 @@ describe("退场时长三方对拍：组件常量 == 组件 CSS 兜底字面量 
       expect(decl, `${css} 的退场规则必须写 \`transition-duration: var(--ed-dur-…, <n>ms)\``).not.toBeNull();
       const jsMs = Number(constant?.[1]);
       expect(jsMs, `${mod} 的 EXIT_MS 与 ${css} 的兜底字面量不一致（漂移不报错，只表现为截断或残留）`).toBe(Number(decl?.[2]));
-      expect(motion, `motion.css 的 --${decl?.[1]} 定值必须等于 ${jsMs}ms`).toContain(`--${decl?.[1]}: ${jsMs}ms;`);
+      expect(tokens, `tokens.css 的 --${decl?.[1]} 定值必须等于 ${jsMs}ms`).toContain(`--${decl?.[1]}: ${jsMs}ms;`);
     }
   });
 });

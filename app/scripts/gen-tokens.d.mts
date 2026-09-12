@@ -3,7 +3,8 @@
  *
  * Why：生成器是 `.mjs`（**纯 node 必须能跑**，故不能是 `.ts`），而 `tsc` 默认对 `.mjs` 报 TS7016
  * （「implicitly has an 'any' type」）—— 该错误会随 `npm run build`（`tsc && vite build`）使构建失败。
- * `src/ui/tokens.drift.test.ts` 需要 `renderAll()` / `CONTRAST_BASELINE` / `normalizeEol()` 来守住产物。
+ * `src/ui/tokens.drift.test.ts` 需要 `renderAll()` / `CONTRAST_BASELINE` / `normalizeEol()` 来守住产物；
+ * `src/ui/primitives/style-seams.test.ts`（批 6 T5 起）还需要 `DURATION_TOKENS` / `EASING_TOKENS`。
  *
  * 纪律：本文件是**类型契约**，不含运行时值 —— 声明与生成器实现不可能在运行时分叉。
  *
@@ -58,6 +59,29 @@ export declare const SCALE_SOURCE: {
   readonly iconStroke: number;
   readonly iconSizes: readonly number[];
 };
+
+/** 动效时长源数据（规格 §8.4）；`name` 不含 `--ed-dur-` 前缀，`ms` 为纯数字 */
+export interface DurationToken {
+  readonly name: string;
+  readonly ms: number;
+  readonly usage: string;
+}
+
+/** 缓动源数据（规格 §8.4）；`name` 不含 `--ed-` 前缀 */
+export interface EasingToken {
+  readonly name: string;
+  readonly value: string;
+  readonly usage: string;
+}
+
+/** 批 6 T5 起：动效时长真源（9 条）—— 迁移自 primitives/motion.css 的临时接缝 */
+export declare const DURATION_TOKENS: readonly DurationToken[];
+
+/** 批 6 T5 起：缓动真源（今日 1 条；T8 追加双基调两条） */
+export declare const EASING_TOKENS: readonly EasingToken[];
+
+/* 注：合并名册 `MOTION_TOKENS` 只存在于**产物** `src/ui/tokens.gen.ts`（由 `renderTs()` 生成），
+   生成器本身不导出它 —— 故此处**不得**声明，否则 import 方在编译期可通过、运行期取到 undefined。 */
 
 /** 纯渲染：返回两份产物的完整文本，不触磁盘 */
 export declare function renderAll(): { css: string; ts: string };

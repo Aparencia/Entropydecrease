@@ -57,5 +57,62 @@ export const SCALE_TOKENS = {
   iconSizes: [16,20,24],
 } as const;
 
+export interface DurationToken {
+  /** 不含 `--ed-dur-` 前缀；完整变量名 = `--ed-dur-` + name */
+  readonly name: string;
+  readonly ms: number;
+  readonly usage: string;
+}
+
+export interface EasingToken {
+  /** 不含 `--ed-` 前缀（今日只有全站唯一曲线 `ease`） */
+  readonly name: string;
+  readonly value: string;
+  readonly usage: string;
+}
+
+/** 动效时长（规格 §8.4）—— 值**逐字**来自批 0-D 的临时接缝 primitives/motion.css，批 6 迁入此处 */
+export const DURATION_TOKENS = [
+  { name: "micro", ms: 120, usage: "响应层：单属性、无时序的交互回执（规格 §8.2 判据）" },
+  { name: "overlay-in", ms: 200, usage: "弹层遮罩与面板进场（规格 §8.4「进出场：弹层 200/160」）" },
+  { name: "overlay-out", ms: 160, usage: "弹层遮罩与面板出场 —— 出场比进场快（规格 §8.4）" },
+  { name: "toast-in", ms: 180, usage: "Toast 进场（规格 §8.4「Toast 180/140」）" },
+  { name: "toast-out", ms: 140, usage: "Toast 出场 —— 出场比进场快（规格 §8.4）" },
+  { name: "skeleton", ms: 1200, usage: "循环环境动效：骨架微光（规格 §8.4「--dur-skeleton 1200ms」）" },
+  { name: "card", ms: 220, usage: "面板 / 视图 / 列折叠（规格 §8.4「--dur-card 220ms」）；今日 0 生产消费者，波 C 首次消费" },
+  { name: "reveal", ms: 500, usage: "显影 / 编排层（规格 §8.4「--dur-reveal 500ms」）；今日 0 生产消费者，波 C 首次消费" },
+  { name: "page", ms: 150, usage: "页面切换（规格 §8.4「--dur-page 150ms」）；今日 0 生产消费者，波 C 首次消费" },
+] as const satisfies readonly DurationToken[];
+
+/** 时长短名的字面量联合：门面收窄入参用（拼错必须编译期报错，不是运行期静默取不到值） */
+export type DurationTokenName = (typeof DURATION_TOKENS)[number]["name"];
+
+/** 缓动曲线（规格 §8.4）—— 批 6 的 T8 会追加双基调的两条，只许追加 */
+export const EASING_TOKENS = [
+  { name: "ease", value: "cubic-bezier(0.2, 0, 0, 1)", usage: "全站唯一曲线（规格 §8.4）" },
+] as const satisfies readonly EasingToken[];
+
+/**
+ * 时长 + 缓动的**合并名册**：`name` 是不含前缀的短名（`dur-micro` / `ease`），
+ * `cssVar` 是 CSS 变量全名，`value` 是 CSS 里的字面量（时长带 `ms` 单位）。
+ *
+ * Why：消费方（守卫 / GSAP / 文档回写）要的正是「变量全名 ↔ 定值」这一层；两份数据同源派生，
+ * 故合并名册不可能与上面两份分叉。
+ */
+export const MOTION_TOKENS = [
+  { name: "dur-micro", cssVar: "--ed-dur-micro", kind: "duration", value: "120ms" },
+  { name: "dur-overlay-in", cssVar: "--ed-dur-overlay-in", kind: "duration", value: "200ms" },
+  { name: "dur-overlay-out", cssVar: "--ed-dur-overlay-out", kind: "duration", value: "160ms" },
+  { name: "dur-toast-in", cssVar: "--ed-dur-toast-in", kind: "duration", value: "180ms" },
+  { name: "dur-toast-out", cssVar: "--ed-dur-toast-out", kind: "duration", value: "140ms" },
+  { name: "dur-skeleton", cssVar: "--ed-dur-skeleton", kind: "duration", value: "1200ms" },
+  { name: "dur-card", cssVar: "--ed-dur-card", kind: "duration", value: "220ms" },
+  { name: "dur-reveal", cssVar: "--ed-dur-reveal", kind: "duration", value: "500ms" },
+  { name: "dur-page", cssVar: "--ed-dur-page", kind: "duration", value: "150ms" },
+  { name: "ease", cssVar: "--ed-ease", kind: "easing", value: "cubic-bezier(0.2, 0, 0, 1)" },
+] as const;
+
+export type MotionTokenName = (typeof MOTION_TOKENS)[number]["name"];
+
 export const THEMES = ["light", "dark"] as const;
 export type ThemeName = (typeof THEMES)[number];

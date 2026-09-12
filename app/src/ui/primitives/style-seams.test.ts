@@ -6,8 +6,9 @@
  *   ① 字阶/字族的 `var(--ed-x, 兜底字面量)` 的兜底值必须等于真源 `SCALE_TOKENS`
  *      （生成器改档后不重跑本层，兜底值会静默退回旧档 —— 未定义变量不报错）；
  *   ② `Text.tsx` 产出的每个类，`Text.css` 里必须有对应规则（类名拼错 = 静默无样式，编译期全绿）；
- *   ③ `motion.css` 的 10 个动效变量、**`app/src` 内唯一一条** reduced-motion 块，以及规格 §8.4 的
- *      「位移上限 8px」—— 批 6 要靠前两者删块接管，靠第三者不越界；
+ *   ③ 动效 token 的**唯一真源**（`tokens.css`，由 `scripts/gen-tokens.mjs` 生成；`motion.css` 里恒 0 条
+ *      `--ed-*` 定义 —— 批 6 已把临时接缝迁走）、**`app/src` 内唯一一条** reduced-motion 块，以及规格
+ *      §8.4 的「位移上限 8px」—— 批 6 靠前者钉真源与封回归，靠后两者守住覆盖与不越界；
  *   ④ `Surface.css` 的**盒子口径**（控制方 2026-09-11 裁决）：基类必须自带
  *      `box-sizing: border-box` 且**只声明一次** —— `padded` + `bordered` + `width:100%` 在
  *      content-box 下溢出 26px，而本仓**没有全局 CSS reset**，盒子原语不自己声明就没人声明。
@@ -23,6 +24,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { SCALE_TOKENS } from "../tokens";
+import { DURATION_TOKENS, EASING_TOKENS, renderAll } from "../../../scripts/gen-tokens.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const normalizeEol = (s: string): string => s.replace(/\r\n/g, "\n");
@@ -159,9 +161,13 @@ describe("token 兜底字面量 == 真源（生成器改档后不重跑本层会
   });
 });
 
-describe("motion.css 接缝契约（批 6 删块即接管，故名字与取值必须钉住）", () => {
+describe("动效 token 真源契约（批 6 起临时接缝已迁走 ⇒ 钉唯一真源 + 封回归路径）", () => {
   it("规格 §8.4 的 10 个动效变量落值，一个不多一个不少", () => {
     const clean = stripComments(MOTION_CSS);
+    expect(
+      clean.match(/--ed-[a-z0-9-]+\s*:/g) ?? [],
+      "批 6 已把真源迁进 scripts/gen-tokens.mjs：motion.css 不得再有任何 --ed-* 定义",
+    ).toEqual([]);
     const expected: ReadonlyArray<readonly [string, string]> = [
       ["--ed-dur-micro", "120ms"],
       ["--ed-dur-overlay-in", "200ms"],
@@ -175,8 +181,11 @@ describe("motion.css 接缝契约（批 6 删块即接管，故名字与取值�
       ["--ed-dur-page", "150ms"],
       ["--ed-ease", "cubic-bezier(0.2, 0, 0, 1)"],
     ];
-    for (const [name, value] of expected) expect(clean).toContain(`${name}: ${value};`);
-    expect(clean.match(/--ed-[a-z0-9-]+\s*:/g)).toHaveLength(expected.length);
+    const source = stripComments(renderAll().css);
+    for (const [name, value] of expected) expect(source).toContain(`${name}: ${value};`);
+    // 真源侧计数：把「一个不多一个不少」钉在生成器的名单上（不再钉临时接缝）
+    expect(DURATION_TOKENS).toHaveLength(9);
+    expect(EASING_TOKENS).toHaveLength(1);
   });
 
   it("规格 §8.4：原语 CSS 的位移一律 ≤ 8px（8px 是注释不变量，本条是它的机器判据）", () => {

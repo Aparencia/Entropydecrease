@@ -76,6 +76,37 @@ export const SHADOW_TOKENS = [
   { name: "shadow-2", light: "0 2px 4px rgba(28,25,23,.06), 0 12px 32px rgba(28,25,23,.14)", dark: "0 0 0 1px rgba(255,255,255,.06)", usage: "高层：Modal / 浮窗（亮档投影；暗档反相描边）" },
 ];
 
+/**
+ * 动效时长 token（规格 §8.4）—— 批 6 从 `src/ui/primitives/motion.css` 的临时接缝**逐字迁入**（R2.3）。
+ *
+ * Why 进真源：`motion.css` 的那段 `:root{}` 是批 0-D 的**临时**落点（当时还没有动效真源），文件头逐字
+ * 承诺「批 6 的动效 token 真源完成后整块删除」。迁移后本文件是时长/缓动的**唯一真源**（R1.1 单一真源，
+ * 绝不双写）：`motion.css` 里不再允许出现 `--ed-*` 定义，由 `style-seams.test.ts` 的回归封条守。
+ * 值**逐字照抄**临时块、一个不改；消费点写的是 `var(--ed-dur-x, <同值字面量>)` ⇒ 删块即生效、零规则改动。
+ *
+ * 边界：`ms` 是**纯数字**（`renderCss` 负责拼 `ms` 单位）；`usage` 只进 TS 产物，不进 CSS。
+ */
+export const DURATION_TOKENS = [
+  { name: "micro", ms: 120, usage: "响应层：单属性、无时序的交互回执（规格 §8.2 判据）" },
+  { name: "overlay-in", ms: 200, usage: "弹层遮罩与面板进场（规格 §8.4「进出场：弹层 200/160」）" },
+  { name: "overlay-out", ms: 160, usage: "弹层遮罩与面板出场 —— 出场比进场快（规格 §8.4）" },
+  { name: "toast-in", ms: 180, usage: "Toast 进场（规格 §8.4「Toast 180/140」）" },
+  { name: "toast-out", ms: 140, usage: "Toast 出场 —— 出场比进场快（规格 §8.4）" },
+  { name: "skeleton", ms: 1200, usage: "循环环境动效：骨架微光（规格 §8.4「--dur-skeleton 1200ms」）" },
+  { name: "card", ms: 220, usage: "面板 / 视图 / 列折叠（规格 §8.4「--dur-card 220ms」）；今日 0 生产消费者，波 C 首次消费" },
+  { name: "reveal", ms: 500, usage: "显影 / 编排层（规格 §8.4「--dur-reveal 500ms」）；今日 0 生产消费者，波 C 首次消费" },
+  { name: "page", ms: 150, usage: "页面切换（规格 §8.4「--dur-page 150ms」）；今日 0 生产消费者，波 C 首次消费" },
+];
+
+/**
+ * 缓动 token（规格 §8.4「`--ease cubic-bezier(0.2,0,0,1)`」）—— 与时长**分开列**：
+ * 变量名是 `--ed-ease`（没有 `dur-` 段），而时长恒为 `--ed-dur-<name>`，两者的拼法不同名。
+ * 批 6 的 T8 会在此追加双基调的两条缓动（`data-tone` 的仪器 / 纸），**只许追加、不许改本条**。
+ */
+export const EASING_TOKENS = [
+  { name: "ease", value: "cubic-bezier(0.2, 0, 0, 1)", usage: "全站唯一曲线（规格 §8.4）" },
+];
+
 /** 非颜色 token：两档共用（规范 §4.2） */
 export const SCALE_SOURCE = {
   fontFamilyBody: '"Source Han Serif SC", "Songti SC", SimSun, serif',
@@ -161,6 +192,10 @@ ${SHADOW_TOKENS.map((t) => `  --ed-${t.name}: ${t.light}; /* ${t.usage} */`).joi
   /* 壳层纵向基准（规格 §1 决策 16）：顶栏高度 —— 页面用 calc(100vh - var(--ed-nav-h)) 消费 */
   --ed-nav-h: ${SCALE_SOURCE.navHeight}px;
 
+  /* 动效（规格 §8.4）：9 个时长 + 1 个缓动 —— 批 6 从 primitives/motion.css 的临时接缝迁入，值逐字不变 */
+${DURATION_TOKENS.map((t) => `  --ed-dur-${t.name}: ${t.ms}ms;`).join("\n")}
+${EASING_TOKENS.map((t) => `  --ed-${t.name}: ${t.value};`).join("\n")}
+
   /* 图标 */
   --ed-icon-stroke: ${SCALE_SOURCE.iconStroke};
 }
@@ -178,6 +213,21 @@ function renderTs() {
   const colorRows = COLOR_TOKENS.map(
     (t) => `  { name: ${JSON.stringify(t.name)}, light: ${JSON.stringify(t.light)}, dark: ${JSON.stringify(t.dark)}, usage: ${JSON.stringify(t.usage)} },`,
   ).join("\n");
+  const durationRows = DURATION_TOKENS.map(
+    (t) => `  { name: ${JSON.stringify(t.name)}, ms: ${t.ms}, usage: ${JSON.stringify(t.usage)} },`,
+  ).join("\n");
+  const easingRows = EASING_TOKENS.map(
+    (t) => `  { name: ${JSON.stringify(t.name)}, value: ${JSON.stringify(t.value)}, usage: ${JSON.stringify(t.usage)} },`,
+  ).join("\n");
+  // 合并名册：与上面两份同源派生（同一份 DURATION_TOKENS/EASING_TOKENS 数据），不是第二份手写数据
+  const motionRows = [
+    ...DURATION_TOKENS.map(
+      (t) => `  { name: ${JSON.stringify(`dur-${t.name}`)}, cssVar: ${JSON.stringify(`--ed-dur-${t.name}`)}, kind: "duration", value: ${JSON.stringify(`${t.ms}ms`)} },`,
+    ),
+    ...EASING_TOKENS.map(
+      (t) => `  { name: ${JSON.stringify(t.name)}, cssVar: ${JSON.stringify(`--ed-${t.name}`)}, kind: "easing", value: ${JSON.stringify(t.value)} },`,
+    ),
+  ].join("\n");
   return `${TS_HEADER}export interface ColorToken {
   /** 不含 \`--ed-\` 前缀；完整变量名用 \`cssVar(name)\` 组装 */
   readonly name: string;
@@ -213,6 +263,46 @@ export const SCALE_TOKENS = {
   navHeight: ${SCALE_SOURCE.navHeight},
   iconSizes: ${JSON.stringify(SCALE_SOURCE.iconSizes)},
 } as const;
+
+export interface DurationToken {
+  /** 不含 \`--ed-dur-\` 前缀；完整变量名 = \`--ed-dur-\` + name */
+  readonly name: string;
+  readonly ms: number;
+  readonly usage: string;
+}
+
+export interface EasingToken {
+  /** 不含 \`--ed-\` 前缀（今日只有全站唯一曲线 \`ease\`） */
+  readonly name: string;
+  readonly value: string;
+  readonly usage: string;
+}
+
+/** 动效时长（规格 §8.4）—— 值**逐字**来自批 0-D 的临时接缝 primitives/motion.css，批 6 迁入此处 */
+export const DURATION_TOKENS = [
+${durationRows}
+] as const satisfies readonly DurationToken[];
+
+/** 时长短名的字面量联合：门面收窄入参用（拼错必须编译期报错，不是运行期静默取不到值） */
+export type DurationTokenName = (typeof DURATION_TOKENS)[number]["name"];
+
+/** 缓动曲线（规格 §8.4）—— 批 6 的 T8 会追加双基调的两条，只许追加 */
+export const EASING_TOKENS = [
+${easingRows}
+] as const satisfies readonly EasingToken[];
+
+/**
+ * 时长 + 缓动的**合并名册**：\`name\` 是不含前缀的短名（\`dur-micro\` / \`ease\`），
+ * \`cssVar\` 是 CSS 变量全名，\`value\` 是 CSS 里的字面量（时长带 \`ms\` 单位）。
+ *
+ * Why：消费方（守卫 / GSAP / 文档回写）要的正是「变量全名 ↔ 定值」这一层；两份数据同源派生，
+ * 故合并名册不可能与上面两份分叉。
+ */
+export const MOTION_TOKENS = [
+${motionRows}
+] as const;
+
+export type MotionTokenName = (typeof MOTION_TOKENS)[number]["name"];
 
 export const THEMES = ["light", "dark"] as const;
 export type ThemeName = (typeof THEMES)[number];
