@@ -9,6 +9,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { Text } from "../ui/primitives";
 
 /** 电平段数 */
 const SEGMENTS = 12;
@@ -79,9 +80,9 @@ export default function AudioLevelMeter() {
         </div>
         {clipping && <span style={{ fontSize: 10, color: "#dc2626", flexShrink: 0 }}>削波!</span>}
       </div>
-      <div style={{ fontSize: 9, color: "#9ca3af", marginTop: 2 }}>
+      <Text as="div" tone="ink-3" style={{ fontSize: 9, marginTop: 2 }}>
         电平跳动 = 正在采集课程声音（无跳动请检查系统声音/播放器）
-      </div>
+      </Text>
     </div>
   );
 }

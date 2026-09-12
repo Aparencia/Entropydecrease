@@ -14,7 +14,7 @@ import type { AiTaskRecord, ChatSession } from "../types";
 // 2026-09-09 批 1：任务标题统一按类别解析（taskRefLabel——会话级/笔记级
 // 精修 ref_id 语义不同；enrich 恒笔记级），侧栏与对话页/dock 同口径
 import { taskRefLabel } from "../utils/entityLabel";
-import { EmptyState } from "../ui/primitives";
+import { EmptyState, Text } from "../ui/primitives";
 // 批 3（规格 §6.2「AI 对话侧栏：接入列基础设施」）：列宽不再写死——
 // 规格住在 shell/columnRegistry，运行时由页面里的 useColumnLayout 执行
 import { columnSpec } from "../shell/columnRegistry";
@@ -131,7 +131,7 @@ export default function ChatSidebar(props: ChatSidebarProps) {
               {s.retrieval && <span title="学习库问答模式">📚 </span>}
               {s.title}
             </span>
-            {s.model && <span style={{ fontSize: 10, color: "#9ca3af" }}>{s.model.split("/").pop()}</span>}
+            {s.model && <Text tone="ink-3" style={{ fontSize: 10 }}>{s.model.split("/").pop()}</Text>}
             <span
               role="button"
               title="重命名"
@@ -155,9 +155,9 @@ export default function ChatSidebar(props: ChatSidebarProps) {
         {/* 2026-09-09 批 1 语义说明：本段是精修/补充任务（来源会话/笔记）的
             只读轨迹视图，不是 💬 聊天会话——点选打开任务对话、结果可采纳 */}
         {tasks.length > 0 && (
-          <div style={{ fontSize: 10.5, color: "#9ca3af", lineHeight: 1.6, padding: "0 8px 6px" }}>
+          <Text as="div" tone="ink-3" style={{ fontSize: 10.5, lineHeight: 1.6, padding: "0 8px 6px" }}>
             精修/补充任务的轨迹（来源：会话或笔记）——非聊天会话；完成结果可采纳
-          </div>
+          </Text>
         )}
         {tasks.map((t) => {
           const refName = taskRefLabel(t, sessionTitles, noteTitles);
@@ -178,7 +178,7 @@ export default function ChatSidebar(props: ChatSidebarProps) {
               <span style={{ fontSize: 10, color: stateBadge, fontWeight: 600 }}>
                 {t.state === "succeeded" ? "✓" : t.state === "failed" ? "✗" : "…"}
               </span>
-              <span style={{ fontSize: 10, color: "#9ca3af" }}>{fmtTime(t.createdAt)}</span>
+              <Text tone="ink-3" style={{ fontSize: 10 }}>{fmtTime(t.createdAt)}</Text>
             </div>
           );
         })}

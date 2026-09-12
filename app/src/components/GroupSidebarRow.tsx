@@ -17,6 +17,7 @@ import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
 import SystemBadge from "./SystemBadge";
 import NoteColorPicker from "./NoteColorPicker";
+import { Text } from "../ui/primitives";
 
 interface Props {
   group: NoteGroup;
@@ -132,7 +133,7 @@ export default function GroupSidebarRow({
             📌
           </span>
         )}
-        <span style={{ fontSize: 11, color: "#9ca3af" }}>{group.noteCount}</span>
+        <Text tone="ink-3" style={{ fontSize: 11 }}>{group.noteCount}</Text>
       </div>
       {/* 第二行：体系徽标 + 路由理由小字（ⓘ 弹层明细） */}
       <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3, paddingLeft: 16 }}>

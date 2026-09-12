@@ -27,7 +27,7 @@ import { useFloatWindow } from "../hooks/useFloatWindow";
 // 批 2b：本窗独立的采集控制实例（provider 由 App ?float=1 分支包入）
 import { useCaptureControl } from "../hooks/useLiveCaptureControl";
 import { AUTO_RESUME_HINTS, pauseReasonLabel } from "../hooks/liveCaptureState";
-import { Button } from "../ui/primitives";
+import { Button, Text } from "../ui/primitives";
 
 function fmtTime(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -204,13 +204,13 @@ export default function CaptureFloatPanel() {
       {/* 中部：最近转写 */}
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "6px 10px" }}>
         {transcripts.slice(-SHOW_TRANSCRIPT).length === 0 && partials.length === 0 && (
-          <p style={{ margin: 0, color: "#9ca3af" }}>等待识别…</p>
+          <Text as="p" tone="ink-3" style={{ margin: 0 }}>等待识别…</Text>
         )}
         {transcripts.slice(-SHOW_TRANSCRIPT).map((t) => (
           <div key={t.id} style={{ display: "flex", gap: 6, alignItems: "baseline", lineHeight: 1.5, marginBottom: 2 }}>
-            <span style={{ fontSize: 10, color: "#9ca3af", width: 36, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+            <Text tone="ink-3" style={{ fontSize: 10, width: 36, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
               {fmtTime(t.time)}
-            </span>
+            </Text>
             <span style={{ color: t.source === "subtitle" ? "#0f766e" : "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {t.text}
             </span>
@@ -219,9 +219,9 @@ export default function CaptureFloatPanel() {
         {partials.slice(-2).map((p) => (
           <div key={p.id} style={{ display: "flex", gap: 6, alignItems: "baseline", lineHeight: 1.5, marginBottom: 2 }}>
             <span style={{ fontSize: 10, width: 36, flexShrink: 0 }} />
-            <span style={{ color: p.committed ? "#374151" : "#9ca3af", fontStyle: p.committed ? "normal" : "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <Text tone={p.committed ? "ink-2" : "ink-3"} style={{ fontStyle: p.committed ? "normal" : "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {p.text}
-            </span>
+            </Text>
           </div>
         ))}
       </div>

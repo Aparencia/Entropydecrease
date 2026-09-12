@@ -8,6 +8,7 @@
  */
 import type { KbHit } from "../types";
 import { firstMarkedTerm, hitLabel, isNoteHit } from "../utils/kbHits";
+import { Text } from "../ui/primitives";
 
 interface Props {
   hits: KbHit[];
@@ -56,9 +57,9 @@ export default function CitationChips({ hits, onOpenNote, title = "📚 本地�
               }}
             >
               <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
-              <span style={{ color: "#9ca3af", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 }}>
+              <Text tone="ink-3" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 }}>
                 {(h.snippet ?? "").replace(/==/g, "")}
-              </span>
+              </Text>
             </button>
           );
         })}

@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { KbDiscoveryResult, KbHit } from "../types";
 import { hitLabel } from "../utils/kbHits";
-import { EmptyState } from "../ui/primitives";
+import { EmptyState, Text } from "../ui/primitives";
 
 interface Props {
   systemId: number;
@@ -122,9 +122,9 @@ export default function DiscoverySuggestSection({ systemId, conceptId, onChanged
     <div data-testid="discovery-suggest" style={{ marginTop: 8 }}>
       <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>
         📎 相关素材建议
-        <span style={{ fontSize: 11, fontWeight: 400, color: "#9ca3af", marginLeft: 6 }}>
+        <Text tone="ink-3" style={{ fontSize: 11, marginLeft: 6 }}>
           本地检索候选 · 人工确认后经引用通道落库（零双写）
-        </span>
+        </Text>
       </div>
       <button onClick={() => void load(false)} disabled={busy} style={{ fontSize: 11, color: "#0d9488", cursor: "pointer", border: "none", background: "none", padding: 0 }}>
         {busy ? "计算中…" : result ? "⟳ 重新建议" : "🔍 生成建议"}

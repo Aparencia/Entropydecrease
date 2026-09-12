@@ -12,6 +12,7 @@ import {
   COMMITMENT_OPTIONS, DRIVER_OPTIONS, HORIZON_OPTIONS, LEVEL_OPTIONS,
   SCENARIO_OPTIONS, TIER_OPTIONS,
 } from "../utils/goalInterview";
+import { Text } from "../ui/primitives";
 
 interface StepProps {
   a: InterviewAnswers;
@@ -55,7 +56,7 @@ export function StepScenario({ a, setA }: StepProps) {
         placeholder="或直接说你想用它做什么…"
         style={{ width: "100%", padding: "6px 8px", fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box" }}
       />
-      <p style={{ fontSize: 11, color: "#9ca3af", margin: "6px 0 0" }}>这一问必答——说不清场景，目标会退化成「假燃料」列表。</p>
+      <Text as="p" tone="ink-3" style={{ fontSize: 11, margin: "6px 0 0" }}>这一问必答——说不清场景，目标会退化成「假燃料」列表。</Text>
     </div>
   );
 }
@@ -128,7 +129,7 @@ export function StepFeasibility({ a, setA, groups, }: StepProps & { groups: { id
       </div>
       <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>已有关联素材（可多选——绑定到目标）</div>
       {groups.length === 0 && (
-        <p style={{ fontSize: 11, color: "#9ca3af", margin: "0 0 6px" }}>暂无笔记组——目标可稍后从详情页绑定。</p>
+        <Text as="p" tone="ink-3" style={{ fontSize: 11, margin: "0 0 6px" }}>暂无笔记组——目标可稍后从详情页绑定。</Text>
       )}
       <div style={{ maxHeight: 120, overflow: "auto", marginBottom: 10 }}>
         {groups.map((g) => (
@@ -178,7 +179,7 @@ export function StepDeclaration({ name, declaration, drafts, onDraftChange }: De
       </div>
       {drafts.map((d, i) => (
         <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
-          <span style={{ fontSize: 12, color: "#9ca3af", width: 54 }}>{d.dueWeeks === 0 ? "无期限" : `第${d.dueWeeks}周`}</span>
+          <Text size={5} tone="ink-3" style={{ width: 54 }}>{d.dueWeeks === 0 ? "无期限" : `第${d.dueWeeks}周`}</Text>
           <input
             data-testid={`draft-title-${i}`}
             value={d.title}

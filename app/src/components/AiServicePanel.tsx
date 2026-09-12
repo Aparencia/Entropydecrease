@@ -13,7 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AiAuditEntry, AiSettingsView, RefineStrategyMeta } from "../types";
 import RefineStrategyPicker from "./RefineStrategyPicker";
 import { draftFromPrefs, prefsFromDraft, type StrategyDraft } from "../utils/refineStrategy";
-import { Button, EmptyState, StatusLine } from "../ui/primitives";
+import { Button, EmptyState, StatusLine, Text } from "../ui/primitives";
 
 /** 通用小按钮样式（与各设置面板一致） */
 const btn: React.CSSProperties = {
@@ -164,7 +164,7 @@ export default function AiServicePanel() {
         {view?.enabled ? (
           <span style={{ color: "#0d9488", fontWeight: 600 }}>● 已开启</span>
         ) : (
-          <span style={{ color: "#9ca3af" }}>○ 默认关闭</span>
+          <Text tone="ink-3">○ 默认关闭</Text>
         )}
       </div>
 

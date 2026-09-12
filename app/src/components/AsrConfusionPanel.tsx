@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button, EmptyState, Loading, StatusLine } from "../ui/primitives";
+import { Button, EmptyState, Loading, StatusLine, Text } from "../ui/primitives";
 
 interface AsrPairView {
   wrong: string;
@@ -89,9 +89,9 @@ export function AsrConfusionPanel() {
     <div>
       <div style={{ fontSize: 12, color: "#374151", marginBottom: 8 }}>
         <b>ASR 同音混淆闭环</b>{" "}
-        <span style={{ color: "#9ca3af", fontSize: 11 }}>
+        <Text tone="ink-3" style={{ fontSize: 11 }}>
           画像来自离线精修采纳流；确认=纠错规则（共现才替换）+ 反哺热词；asr_confusion.json 可校准
-        </span>
+        </Text>
       </div>
       {msg && (
         <div style={{ fontSize: 11, color: "#047857", background: "#ecfdf5", border: "1px solid #6ee7b7", borderRadius: 6, padding: "4px 8px", marginBottom: 6 }}>
@@ -106,7 +106,7 @@ export function AsrConfusionPanel() {
       <div style={{ fontSize: 12, marginBottom: 4 }}>
         待确认候选（{candidates.length}）
         {view != null && view.dismissed_count > 0 && (
-          <span style={{ color: "#9ca3af", fontSize: 11, marginLeft: 6 }}>已忽略 {view.dismissed_count} 条</span>
+          <Text tone="ink-3" style={{ fontSize: 11, marginLeft: 6 }}>已忽略 {view.dismissed_count} 条</Text>
         )}
       </div>
       {candidates.length === 0 ? (
@@ -122,11 +122,11 @@ export function AsrConfusionPanel() {
               <span style={{ background: "#fff7ed", border: "1px solid #fdba74", borderRadius: 4, padding: "1px 6px" }}>
                 {c.wrong}
               </span>
-              <span style={{ color: "#9ca3af" }}>→</span>
+              <Text tone="ink-3">→</Text>
               <span style={{ background: "#ecfdf5", border: "1px solid #6ee7b7", borderRadius: 4, padding: "1px 6px" }}>
                 {c.right}
               </span>
-              <span style={{ color: "#9ca3af", fontSize: 11 }}>×{c.count}</span>
+              <Text tone="ink-3" style={{ fontSize: 11 }}>×{c.count}</Text>
               <span style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
                 <button style={{ ...rowBtn, color: "#047857", borderColor: "#6ee7b7" }} onClick={() => void confirm(c.wrong, c.right)}>
                   确认纠错+热词

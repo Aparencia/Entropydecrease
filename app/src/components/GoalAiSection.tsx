@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiSettingsView } from "../types/ai";
+import { Text } from "../ui/primitives";
 
 const TIERS = [
   { id: "light", label: "轻量（~4K，快而省）" },
@@ -57,9 +58,9 @@ export default function GoalAiSection() {
           />
           开启（默认关）
         </label>
-        <span style={{ marginLeft: "auto", fontSize: 11, color: "#9ca3af" }}>
+        <Text tone="ink-3" style={{ marginLeft: "auto", fontSize: 11 }}>
           {tier === "standard" ? "标准档 ~10K" : TIERS.find((t) => t.id === tier)?.label}
-        </span>
+        </Text>
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <select
@@ -71,7 +72,7 @@ export default function GoalAiSection() {
         >
           {TIERS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
         </select>
-        <span style={{ fontSize: 11, color: "#9ca3af" }}>预算硬顶·成本/轨迹可查·失败自动回退规则草案</span>
+        <Text tone="ink-3" style={{ fontSize: 11 }}>预算硬顶·成本/轨迹可查·失败自动回退规则草案</Text>
       </div>
       {msg && <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 0" }}>{msg}</p>}
     </div>

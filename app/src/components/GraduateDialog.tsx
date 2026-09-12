@@ -7,7 +7,7 @@
  * @ai-context: 未达标时按钮不可达（GoalDetail 禁用）；本对话框只管确认流。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Button, Modal, StatusLine } from "../ui/primitives";
+import { Button, Modal, StatusLine, Text } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { GraduationReport, GoalDetailView, GoalProgressView } from "../types/goals";
 
@@ -91,12 +91,12 @@ export default function GraduateDialog({ goalId, onClose, onGraduated }: Props) 
           {detail && p && (
             <div style={{ fontSize: 12, color: "#374151", background: "#fafaf9", padding: 10, borderRadius: 6, marginBottom: 8, lineHeight: 2 }}>
               里程碑 {p.milestoneDone}/{p.milestoneTotal} · 组结算 {p.settlementsCount} 次 · 复习活跃 {p.reviewDays90} 天 · 弱项 {p.weakGroups.length} 组
-              <div style={{ fontSize: 11, color: "#9ca3af" }}>确认后将生成完整报告：里程碑明细/子组结算/复习统计/成果物清单（组·笔记·闪卡·概念）</div>
+              <Text as="div" tone="ink-3" style={{ fontSize: 11 }}>确认后将生成完整报告：里程碑明细/子组结算/复习统计/成果物清单（组·笔记·闪卡·概念）</Text>
             </div>
           )}
           <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 8 }}>
             {detail?.criteria.map((c, i) => (
-              <div key={i} style={{ color: c.met ? "#047857" : "#9ca3af" }}>{c.met ? "✓" : "○"} {c.label}：{c.detail}</div>
+              <Text as="div" tone={c.met ? "ok" : "ink-3"} key={i}>{c.met ? "✓" : "○"} {c.label}：{c.detail}</Text>
             ))}
           </div>
           {err && <StatusLine kind="error" testId="graduate-error">{err}</StatusLine>}
@@ -120,14 +120,14 @@ export function ReportBody({ report }: { report: GraduationReport }) {
         {report.milestones.map((m, i) => (
           <div key={i}>{m.status === "skipped" ? "○ 跳过" : m.status === "done" ? "✓" : "○"} {m.title}</div>
         ))}
-        <div style={{ color: "#9ca3af" }}>{done}/{total} 达成</div>
+        <Text as="div" tone="ink-3">{done}/{total} 达成</Text>
       </div>
       <Section>组结算</Section>
       <div style={{ marginBottom: 8 }}>
         {report.groupSettlements.map((s, i) => (
           <div key={i}>{s.groupName}：{s.settlementCount} 次（最近 {s.lastSettledAt ? new Date(s.lastSettledAt * 1000).toISOString().slice(0, 10) : "—"}）</div>
         ))}
-        <div style={{ color: "#9ca3af" }}>共 {sumSettlements} 次（含归档组历史）</div>
+        <Text as="div" tone="ink-3">共 {sumSettlements} 次（含归档组历史）</Text>
       </div>
       <Section>复习统计</Section>
       <div style={{ marginBottom: 8 }}>

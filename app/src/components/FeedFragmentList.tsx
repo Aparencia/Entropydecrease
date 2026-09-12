@@ -16,7 +16,7 @@ import type { Fragment, Note, NoteGroup } from "../types";
 // REQ-316（批 7）：碎片删除/升笔记返回契约（源空组清理留痕数据源）
 import type { DeleteFragmentResult, PromoteNoteResult } from "../types/notes";
 import { fragmentPreview, promoteTitleFor } from "../utils/inbox";
-import { ConfirmDialog, StatusLine } from "../ui/primitives";
+import { ConfirmDialog, StatusLine, Text } from "../ui/primitives";
 
 interface Props {
   /** 列宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 320=历史值） */
@@ -186,17 +186,17 @@ export default function FeedFragmentList({ width = 320, onChanged, onPromoted, o
   return (
     <div style={{ width, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minWidth: 0 }}>
       <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
-        📥 收件箱 <span style={{ fontWeight: 400, fontSize: 11, color: "#9ca3af" }}>碎片（{fragments.length}）· 原料层</span>
+        📥 收件箱 <Text tone="ink-3" style={{ fontSize: 11 }}>碎片（{fragments.length}）· 原料层</Text>
         <button onClick={onCollapse} style={{ marginLeft: "auto", fontSize: 12, cursor: "pointer", border: "none", background: "none", color: "#9ca3af" }} title="折叠收件箱">⟨</button>
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
         {loaded && fragments.length === 0 && (
-          <div data-testid="inbox-empty" style={{ marginTop: 32, textAlign: "center", color: "#9ca3af", fontSize: 12, padding: "0 16px", lineHeight: 1.8 }}>
+          <Text as="div" size={5} tone="ink-3" testId="inbox-empty" style={{ marginTop: 32, textAlign: "center", padding: "0 16px", lineHeight: 1.8 }}>
             <div style={{ fontSize: 28, marginBottom: 8 }}>🧩</div>
             一句灵感，三种归宿——<br />
             升为笔记沉淀它，升为闪卡复习它，或删除它。
-          </div>
+          </Text>
         )}
 
         {fragments.map((f) => (

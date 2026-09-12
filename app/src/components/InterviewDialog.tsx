@@ -9,7 +9,7 @@
  *              判定的唯一事实源在后端 goal_interview.rs）。
  */
 import { useEffect, useState } from "react";
-import { Button, Modal, StatusLine } from "../ui/primitives";
+import { Button, Modal, StatusLine, Text } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { Goal, GoalPlanView, MilestoneDraft } from "../types/goals";
 import type { InterviewAnswers } from "../utils/goalInterview";
@@ -175,9 +175,9 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
           <select value={horizon} onChange={(e) => setHorizon(e.target.value)} style={{ ...inputStyle, width: 200 }}>
             {HORIZON_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
-          <p style={{ fontSize: 11, color: "#9ca3af", margin: "8px 0 0" }}>
+          <Text as="p" tone="ink-3" style={{ fontSize: 11, margin: "8px 0 0" }}>
             判据走默认档（里程碑 + ≥1 组结算 + 近 90 天复习活跃）；可随时从详情页重新访谈。
-          </p>
+          </Text>
         </div>
       ) : (
         <>
@@ -191,13 +191,13 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
             style={inputStyle}
           />
           {/* 折线指示（步骤 0-4） */}
-          <div style={{ fontSize: 11, color: "#9ca3af", margin: "10px 0" }}>
+          <Text as="div" tone="ink-3" style={{ fontSize: 11, margin: "10px 0" }}>
             {["意图", "现状", "判据", "素材", "宣言"].map((t, i) => (
               <span key={t} style={{ marginRight: 12, color: i <= step ? "#0f766e" : "#9ca3af", fontWeight: i === step ? 700 : 400 }}>
                 {i + 1}.{t}{i === 3 ? "" : " ›"}
               </span>
             ))}
-          </div>
+          </Text>
           <div style={{ minHeight: 190 }}>
             {step === 0 && <StepScenario a={a} setA={patch} />}
             {step === 1 && <StepLevelDriver a={a} setA={patch} />}
@@ -218,9 +218,9 @@ export default function InterviewDialog({ mode, groups, onClose, onCreated, goal
       {err && <div style={{ margin: "6px 0 0" }}><StatusLine kind="error" testId="dialog-error">{err}</StatusLine></div>}
 
       <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "flex-end", alignItems: "center" }}>
-        <span style={{ fontSize: 10, color: "#9ca3af", marginRight: "auto" }}>
+        <Text tone="ink-3" style={{ fontSize: 10, marginRight: "auto" }}>
           {!quickMode && step === 4 && "确认后即创建——里程碑/判据可从详情页调整"}
-        </span>
+        </Text>
         {!quickMode && step > 0 && (
           <Button variant="secondary" size="md" onClick={() => setStep((s) => s - 1)}>上一步</Button>
         )}

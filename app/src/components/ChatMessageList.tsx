@@ -14,6 +14,7 @@ import type { ChatMessage, KbHit } from "../types";
 import ChatMessageMarkdown from "./ChatMessageMarkdown";
 import CitationChips from "./CitationChips";
 import { parseKbMeta } from "../utils/kbHits";
+import { Text } from "../ui/primitives";
 
 export interface StreamingState {
   /** 流式累积文本（非 null = 流式生成中） */
@@ -62,9 +63,9 @@ export default function ChatMessageList({ messages, streaming, onRegenerate, onE
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 16px" }}>
       {messages.length === 0 && !streaming && (
-        <div style={{ textAlign: "center", color: "#9ca3af", marginTop: 80, fontSize: 13 }}>
+        <Text as="div" size={4} tone="ink-3" style={{ textAlign: "center", marginTop: 80 }}>
           开始你的第一句话——例如「用通俗的语言解释一下什么是梯度下降」
-        </div>
+        </Text>
       )}
       {messages.map((m) => {
         const isUser = m.role === "user";
@@ -104,14 +105,14 @@ export default function ChatMessageList({ messages, streaming, onRegenerate, onE
                 </div>
               ) : (
                 <div style={{ borderRadius: "10px 10px 10px 2px" }}>
-                  <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 2, display: "flex", gap: 8 }}>
+                  <Text as="div" tone="ink-3" style={{ fontSize: 11, marginBottom: 2, display: "flex", gap: 8 }}>
                     <span>🤖 {m.model ?? "AI"}</span>
                     <span>{fmtTime(m.createdAt)}</span>
                     {m.status === "aborted" && <span style={{ color: "#b45309" }}>已停止</span>}
                     {parseUsage(m.usageJson).tokens != null && (
                       <span>{parseUsage(m.usageJson).tokens} tokens</span>
                     )}
-                  </div>
+                  </Text>
                   <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px" }}>
                     <ChatMessageMarkdown content={m.content} />
                     {/* v0.19.1：引用 chips（answer 与 hits-only 引导同款展示） */}

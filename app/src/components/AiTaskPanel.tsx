@@ -15,7 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AiEnrichResult, AiRefineResult, AiTaskRecord } from "../types";
 // 低5（审查）：类别词经 entityLabel.kindWord 单一来源（不带 id 的语义词）
 import { kindWord } from "../utils/entityLabel";
-import { Button, EmptyState, StatusLine } from "../ui/primitives";
+import { Button, EmptyState, StatusLine, Text } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "3px 8px", fontSize: 11, borderRadius: 5, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" };
 
@@ -148,7 +148,7 @@ export default function AiTaskPanel() {
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
         <span style={{ fontWeight: 600, fontSize: 12 }}>🗂 AI 任务中心</span>
         <Button variant="secondary" size="sm" onClick={() => void load()}>刷新</Button>
-        <span style={{ fontSize: 11, color: "#9ca3af" }}>历史任务持久化保存——重启后可查看/采纳结果</span>
+        <Text tone="ink-3" style={{ fontSize: 11 }}>历史任务持久化保存——重启后可查看/采纳结果</Text>
       </div>
 
       {tasks.length === 0 ? (
@@ -168,9 +168,9 @@ export default function AiTaskPanel() {
                 </span>
                 <span style={{ color: "#374151", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {kindWord(t.opType === "refine" ? "session" : "note")}
-                  {t.model && <span style={{ color: "#9ca3af" }}> · {t.model}</span>}
+                  {t.model && <Text tone="ink-3"> · {t.model}</Text>}
                 </span>
-                <span style={{ color: "#9ca3af", width: 52, textAlign: "right" }}>{fmtMs(t.elapsedMs)}</span>
+                <Text tone="ink-3" style={{ width: 52, textAlign: "right" }}>{fmtMs(t.elapsedMs)}</Text>
                 {t.costYuan != null && (
                   <span style={{ color: "#b45309", width: 52, textAlign: "right" }}>¥{t.costYuan.toFixed(4)}</span>
                 )}

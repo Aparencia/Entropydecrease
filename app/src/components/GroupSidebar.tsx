@@ -39,7 +39,7 @@ import GroupCreateDialog from "./GroupCreateDialog";
 // REQ-287：多选拖拽载荷读取（text/note-ids JSON + 单 id 兜底）
 import { crateDndReadIds } from "./NoteTreeSection";
 import { blobToBase64 } from "../utils/blobToBase64";
-import { EmptyState, StatusLine } from "../ui/primitives";
+import { EmptyState, StatusLine, Text } from "../ui/primitives";
 
 interface Props {
   /** 列宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 240=历史值） */
@@ -376,7 +376,7 @@ export default function GroupSidebar({
           }}
         >
           📥 收件箱 <span style={{ fontSize: 11, color: inboxActive ? "#be185d" : "#9ca3af" }}>{inboxCount > 0 ? `(${inboxCount})` : ""}</span>
-          <span style={{ float: "right", fontSize: 10, color: "#9ca3af" }}>碎片原料</span>
+          <Text tone="ink-3" style={{ float: "right", fontSize: 10 }}>碎片原料</Text>
         </div>
 
         {/* 📁 全部笔记（未归组笔记在此可见——收件箱只装碎片，两种实体两条动线） */}
@@ -395,7 +395,7 @@ export default function GroupSidebar({
         {/* v0.14 C1：最近使用区（LRU≤5；点击直达过滤——无 toggle 互斥） */}
         {!filtering && recentGroups.length > 0 && (
           <div data-testid="recent-groups" style={{ marginTop: 6 }}>
-            <div style={{ fontSize: 11, color: "#9ca3af", padding: "2px 10px", fontWeight: 600 }}>🕐 最近使用</div>
+            <Text as="div" tone="ink-3" style={{ fontSize: 11, padding: "2px 10px", fontWeight: 600 }}>🕐 最近使用</Text>
             {recentGroups.map((g) => (
               <div
                 key={g.id}
@@ -419,7 +419,7 @@ export default function GroupSidebar({
             {/* REQ-315：过滤平铺也走组展示序（置顶→手排→自动；跨 kind seq 撞值并列保持输入序——稳定排序，无 id 决胜） */}
             {orderGroups(filteredGroups, orderRows).map(renderGroupRow)}
             {filteredGroups.length === 0 && (
-              <p style={{ fontSize: 12, color: "#9ca3af", padding: "12px 8px" }}>无匹配组</p>
+              <Text as="p" size={5} tone="ink-3" style={{ padding: "12px 8px" }}>无匹配组</Text>
             )}
           </div>
         ) : (
@@ -437,7 +437,7 @@ export default function GroupSidebar({
                   style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", padding: "2px 10px", cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 4 }}
                 >
                   <span>{isFolded ? "▸" : "▾"}</span> {sec.title}
-                  <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 400 }}>{secGroups.length}</span>
+                  <Text tone="ink-3" style={{ fontSize: 10 }}>{secGroups.length}</Text>
                   {/* REQ-315：手排徽标（对齐 REQ-287 组头「手排 ↺」）——一键整分区回自动 */}
                   {manual && (
                     <button

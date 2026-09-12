@@ -14,7 +14,7 @@ import InterviewDialog from "./InterviewDialog";
 import GraduateDialog from "./GraduateDialog";
 import RetroTimeline from "./RetroTimeline";
 import GoalPlanApprovalDialog from "./GoalPlanApprovalDialog";
-import { ConfirmDialog, EmptyState, Loading, Skeleton, StatusLine } from "../ui/primitives";
+import { ConfirmDialog, EmptyState, Loading, Skeleton, StatusLine, Text } from "../ui/primitives";
 
 interface Props {
   goalId: number;
@@ -195,7 +195,7 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
             ✎ 改名
           </button>
         )}
-        <span style={{ fontSize: 11, color: "#9ca3af" }}>始于 {new Date(goal.createdAt * 1000).toISOString().slice(0, 10)}</span>
+        <Text tone="ink-3" style={{ fontSize: 11 }}>始于 {new Date(goal.createdAt * 1000).toISOString().slice(0, 10)}</Text>
       </div>
       <p style={{ fontSize: 12, color: "#4b5563", background: "#fafaf9", padding: 8, borderRadius: 6, margin: "10px 0" }}>{detail.declaration}</p>
 
@@ -209,9 +209,9 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
       {criteria.length > 0 && (
         <div style={{ marginBottom: 10 }}>
           {criteria.map((c, i) => (
-            <div key={i} style={{ fontSize: 11, color: c.met ? "#047857" : "#9ca3af" }}>
+            <Text tone={c.met ? "ok" : "ink-3"} key={i} style={{ fontSize: 11 }}>
               {c.met ? "✓" : "○"} {c.label}：{c.detail}
-            </div>
+            </Text>
           ))}
         </div>
       )}
@@ -242,9 +242,9 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
             </>
           ) : (
             <>
-              <span style={{ fontSize: 12, color: m.status === "done" ? "#9ca3af" : "#1f2937", textDecoration: m.status === "done" ? "line-through" : "none" }}>{m.title}</span>
+              <Text size={5} tone={m.status === "done" ? "ink-3" : "ink-2"} style={{ textDecoration: m.status === "done" ? "line-through" : "none" }}>{m.title}</Text>
               {m.criteriaType === "group_settled" && <span style={{ fontSize: 10, color: "#0f766e", background: "#f0fdfa", borderRadius: 8, padding: "0 6px" }}>随组结算</span>}
-              {m.status === "skipped" && <span style={{ fontSize: 10, color: "#9ca3af" }}>已跳过</span>}
+              {m.status === "skipped" && <Text tone="ink-3" style={{ fontSize: 10 }}>已跳过</Text>}
               <button onClick={() => { setEditingMileId(m.id); setEditingMileValue(m.title); }} style={smallGhost}>改</button>
             </>
           )}
@@ -347,7 +347,7 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
             )}
           </>
         ) : (
-          <span style={{ fontSize: 11, color: "#9ca3af" }}>{goal.status === "graduated" ? "已毕业——回顾流与报告见下方" : "已放弃——无惩罚，随时可再立新目标"}</span>
+          <Text tone="ink-3" style={{ fontSize: 11 }}>{goal.status === "graduated" ? "已毕业——回顾流与报告见下方" : "已放弃——无惩罚，随时可再立新目标"}</Text>
         )}
         <button
           data-testid="goal-delete-open"

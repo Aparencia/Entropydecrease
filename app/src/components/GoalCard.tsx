@@ -7,6 +7,7 @@
  */
 import type { GoalCardView } from "../types/goals";
 import { GOAL_STATUS_LABELS } from "../types/goals";
+import { Text } from "../ui/primitives";
 
 interface Props {
   card: GoalCardView;
@@ -44,9 +45,9 @@ export default function GoalCard({ card, onClick }: Props) {
         {GOAL_STATUS_LABELS[card.goal.status] ?? card.goal.status}
       </span>
       {card.goal.status === "graduated" && card.goal.completedAt != null && (
-        <span style={{ fontSize: 10, color: "#9ca3af" }}>
+        <Text tone="ink-3" style={{ fontSize: 10 }}>
           {new Date(card.goal.completedAt * 1000).toISOString().slice(0, 10)}
-        </span>
+        </Text>
       )}
       {card.ready && card.goal.status === "active" && (
         <span data-testid="goal-ready-badge" style={{ fontSize: 10, color: "#b45309", background: "#fffbeb", borderRadius: 8, padding: "1px 7px" }}>

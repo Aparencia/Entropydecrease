@@ -11,7 +11,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ConfirmDialog, StatusLine } from "../ui/primitives";
+import { ConfirmDialog, StatusLine, Text } from "../ui/primitives";
 
 interface BackupSummary {
   archivePath: string;
@@ -103,9 +103,9 @@ export default function BackupPanel() {
       </div>
       {error && <StatusLine kind="error">{error}</StatusLine>}
       {!error && info && <div style={{ fontSize: 11, color: "#0f766e" }}>{info}</div>}
-      <div style={{ fontSize: 10, color: "#9ca3af" }}>
+      <Text as="div" tone="ink-3" style={{ fontSize: 10 }}>
         备份保存在应用数据目录 backups/（本地优先：数据不出本机）；如需异地保存请自行拷贝备份文件
-      </div>
+      </Text>
 
       {/* 高危确认（§5.3）：原文案「恢复将覆盖当前全部数据（现有数据库改名 .pre-restore 兜底）。\n继续？」
           逐字拆为 title（首句）+ impacts（括号内的保留项）+ 确认按钮「继续」 */}

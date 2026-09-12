@@ -8,7 +8,7 @@
  *              清理登记（丢弃项）诚实展示，绝不静默。
  */
 import { useMemo, useState } from "react";
-import { Button, Modal, StatusLine } from "../ui/primitives";
+import { Button, Modal, StatusLine, Text } from "../ui/primitives";
 import type { GoalPlanView } from "../types/goals";
 
 interface Props {
@@ -115,7 +115,7 @@ export default function GoalPlanApprovalDialog({ view, onConfirm, onClose, onUse
             checked={selectedMilestones.includes(i)}
             onChange={(e) => setSelectedMilestones((s) => e.target.checked ? [...s, i] : s.filter((x) => x !== i))}
           />
-          <span style={{ fontSize: 11, color: "#9ca3af", width: 46 }}>{m.dueWeeks}周</span>
+          <Text tone="ink-3" style={{ fontSize: 11, width: 46 }}>{m.dueWeeks}周</Text>
           <input
             data-testid={`plan-milestone-${i}`}
             value={milestoneTitles[i]}
@@ -135,7 +135,7 @@ export default function GoalPlanApprovalDialog({ view, onConfirm, onClose, onUse
             checked={selectedGroups.includes(i)}
             onChange={(e) => setSelectedGroups((s) => e.target.checked ? [...s, i] : s.filter((x) => x !== i))}
           />
-          组 #{g.groupId} {g.reason && <span style={{ color: "#9ca3af", fontSize: 11 }}>（{g.reason}）</span>}
+          组 #{g.groupId} {g.reason && <Text tone="ink-3" style={{ fontSize: 11 }}>（{g.reason}）</Text>}
         </label>
       ))}
 
@@ -177,7 +177,7 @@ function SubTitle({ children }: { children: React.ReactNode }) {
   return <div style={{ fontWeight: 600, fontSize: 12, color: "#374151", margin: "10px 0 4px" }}>{children}</div>;
 }
 function Empty({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 11, color: "#9ca3af" }}>{children}</div>;
+  return <Text as="div" tone="ink-3" style={{ fontSize: 11 }}>{children}</Text>;
 }
 
 const numStyle: React.CSSProperties = { width: 56, fontSize: 12, padding: "2px 6px", border: "1px solid #e5e7eb", borderRadius: 4 };

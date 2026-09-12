@@ -16,7 +16,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { zIndex } from "../ui/zIndex";
-import { EmptyState } from "../ui/primitives";
+import { EmptyState, Text } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AiTaskRecord, AiTaskState, AiTurn, ChatMessage, ChatSession } from "../types";
@@ -176,9 +176,9 @@ export default function AiConversationDock({
                 {OP_LABEL[t.opType] ?? t.opType} {taskRefTitle(t)}
               </span>
               <span style={{ fontSize: 10, fontWeight: 600, color }}>{done ? (t.state === "succeeded" ? "✓" : "✗") : "…"}</span>
-              <span style={{ fontSize: 10, color: "#9ca3af" }}>
+              <Text tone="ink-3" style={{ fontSize: 10 }}>
                 {new Date(t.createdAt * 1000).toLocaleTimeString()}
-              </span>
+              </Text>
             </button>
           );
         })
@@ -198,7 +198,7 @@ export default function AiConversationDock({
           }}
         >
           <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</span>
-          {s.model && <span style={{ fontSize: 10, color: "#9ca3af" }}>{s.model.split("/").pop()}</span>}
+          {s.model && <Text tone="ink-3" style={{ fontSize: 10 }}>{s.model.split("/").pop()}</Text>}
         </button>
       ))
     );
@@ -211,9 +211,9 @@ export default function AiConversationDock({
     }
     return messages.map((m) => (
       <div key={m.id} style={{ marginBottom: 8 }}>
-        <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 2 }}>
+        <Text as="div" tone="ink-3" style={{ fontSize: 10, marginBottom: 2 }}>
           {m.role === "user" ? "🧑 你" : "🤖 AI"}{m.model ? ` · ${m.model}` : ""}
-        </div>
+        </Text>
         <div style={{
           whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12.5, lineHeight: 1.6,
           background: m.role === "user" ? "#eef2ff" : "#f9fafb",

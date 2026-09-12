@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Text } from "../ui/primitives";
 
 interface FeatureFlags {
   feedCapture: boolean;
@@ -52,14 +53,14 @@ export default function FeatureFlagSetting() {
           />
           快速记录（收件箱碎片捕获入口）
         </label>
-        <span style={{ fontSize: 11, color: "#9ca3af" }}>
+        <Text tone="ink-3" style={{ fontSize: 11 }}>
           {flags?.feedCapture ? "已启用" : "已关闭"}
-        </span>
+        </Text>
       </div>
-      <p style={{ fontSize: 12, color: "#9ca3af", margin: "6px 0 0" }}>
+      <Text as="p" size={5} tone="ink-3" style={{ margin: "6px 0 0" }}>
         笔记页侧栏的「⚡ 快速记录」入口与收件箱的升笔记/升卡/删除操作。
         碎片不是笔记——独立原料层，升为笔记沉淀或升为闪卡复习（v0.12.2 收件箱动线）。
-      </p>
+      </Text>
       {status && <p style={{ fontSize: 12, color: "#dc2626", margin: "6px 0 0" }}>{status}</p>}
     </div>
   );

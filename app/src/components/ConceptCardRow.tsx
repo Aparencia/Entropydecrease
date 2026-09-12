@@ -10,6 +10,7 @@
  */
 import type { KnowledgeConcept } from "../types/knowledge";
 import { conceptStatusLabel } from "../types/knowledge";
+import { Text } from "../ui/primitives";
 
 interface Props {
   concept: KnowledgeConcept;
@@ -39,9 +40,9 @@ export default function ConceptCardRow({ concept, selected, onSelect }: Props) {
         <span style={{ fontSize: 10, color: "#7c3aed", background: "#faf5ff", borderRadius: 8, padding: "0 5px" }}>{conceptStatusLabel[concept.status]}</span>
       </div>
       {summary && (
-        <div data-testid={`concept-summary-${concept.id}`} style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <Text as="div" tone="ink-3" testId={`concept-summary-${concept.id}`} style={{ fontSize: 11, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {summary}
-        </div>
+        </Text>
       )}
       <div data-testid={`concept-applied-${concept.id}`} style={{ fontSize: 10, color: concept.lastAppliedAt != null ? "#0f766e" : "#9ca3af", marginTop: 2 }}>
         {appliedLabel}
