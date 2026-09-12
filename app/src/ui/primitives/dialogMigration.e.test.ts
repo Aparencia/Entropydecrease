@@ -11,21 +11,19 @@
  * 三条跨文件判据（外加 E 组自己的 4 条）：
  *   ① `DIALOG_20` 的 20 个文件：barrel 名字表含 `Modal` ∧ 无深导入 ∧ 无自建遮罩 ∧ 无 `keydown`
  *      监听 ∧ 无裸数字 z-index；且**源码 0 处** `role="dialog"`（20/20 的角色归原语唯一持有）。
- *   ② `CROSS_LINE_34 − DIALOG_20 == NON_MIGRATED_14`（**11 锚定菜单 + 3 覆盖层**，逐字登记）
- *      ∧ 该差集**在盘上仍成立**（那 14 个今日仍是跨行 `fixed`∧`inset:0`、且都不 import 原语）
- *      —— 后半条同时是 **B1 / B2** 的守卫：登记为「不迁」的 14 个不许被顺手迁掉。
+ *   ② `CROSS_LINE_34 − DIALOG_20 == NON_MIGRATED_14` ∧ 该差集**在盘上仍成立** —— 后半条同时是
+ *      **B1 / B2** 的守卫：登记为「不迁」的 14 个不许被顺手迁掉（判据取「barrel 里含 `Modal`」，
+ *      叶子原语不算绕过，理由见该条注释）。
  *   ③ `ADR033_28 ⊆ CROSS_LINE_34` ∧ `|ADR033_28| = 28` ∧ `ADR033_28 == CROSS_LINE_34 − 6`
  *      （6 = 跨行口径相对同行口径的新增项：`fixed` 与 `inset:0` 分写两行的文件）。
  *
  * 边界（诚实登记）：
- *   ① 28 / 34 是 **`42e88740`（批 4 基线）** 上的实测快照，探针可复现（本地 `tmp/t8/`，不入库）；
- *      28 的**语义**（同行）今日已不能复算（15 个成员已迁走）⇒ 它是**登记值**，本文件只对它做集合
- *      运算与存在性核对，**不声称**「今日盘上仍有 28 个同行命中」。
+ *   ① 28 / 34 是 **`42e88740`（批 4 基线）** 上的实测快照，探针可复现（本地 `tmp/t8/`，不入库）；28 的
+ *      **语义**（同行）今日已不能复算（15 个成员已迁走）⇒ 它是**登记值**，本文件只做集合运算与存在性核对。
  *   ② 剥注释用 `a1` 的两行正则版（**不碰字符串字面量**）：已用 `tmp/t8/stripper-equiv.mjs` 对全部
  *      **287** 个非测试源文件做**双剥除器对拍**（本文件用到的 5 条谓词逐个同判、0 处不一致）。
- *   ③ `pages/ChatPage.tsx` 的口径差**双列登记**：它是本计划采纳的跨行口径成员（B7 把它的 2 处裸值
- *      委托给 T13-b），§表 4 则用 `components/BrowserChrome.tsx` 顶替它（两种数法都得 **11**）⇒
- *      本文件把 `BrowserChrome` 记成**别名**（不在 34 里，也不得进 34）。
+ *   ③ `pages/ChatPage.tsx` 的口径差**双列登记**：§表 4 用 `components/BrowserChrome.tsx` 顶替它
+ *      （两种数法都得 **11**）⇒ 本文件把 `BrowserChrome` 记成**别名**（不在 34 里，也不得进 34）。
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -58,10 +56,10 @@ export const DIALOG_20: readonly string[] = [
   "components/RefineWorkbench.tsx",
   "components/SecondPassPanel.tsx",
   "components/SopRunOverlay.tsx",
-  "components/TaskLaunchDialog.tsx",
-];
+  "components/TaskLaunchDialog.tsx"];
 
-/** ADR-033 的 **28**（同行口径：同一行同时含 `position:"fixed"` 与 `inset:0`；`42e88740` 实测） */
+/** ADR-033 的 **28**（同行口径：同一行同时含 `position:"fixed"` 与 `inset:0`；`42e88740` 实测；
+ *  T13-b 后 `pages/ChatPage.tsx` 那条 → `components/chat/ChatLaunchMenu.tsx`，成员数仍是 28） */
 export const ADR033_28: readonly string[] = [
   "components/CaptureOverlayPanel.tsx", "components/ChatSaveNoteDialog.tsx",
   "components/GoalPlanApprovalDialog.tsx", "components/GraduateDialog.tsx",
@@ -76,10 +74,10 @@ export const ADR033_28: readonly string[] = [
   "components/RefineWorkbench.tsx", "components/RichEditorView.tsx",
   "components/RouteInfoPopover.tsx", "components/ScreenSelectOverlay.tsx",
   "components/SessionRowContextMenu.tsx", "components/TaskLaunchDialog.tsx",
-  "components/note-selection/SelectionActionMenu.tsx", "pages/ChatPage.tsx",
-];
+  "components/chat/ChatLaunchMenu.tsx", "components/note-selection/SelectionActionMenu.tsx"];
 
-/** 跨行口径 **34**（文件内含 `position:"fixed"` ∧ 含 `inset:0`，任意行；`42e88740` 实测） */
+/** 跨行口径 **34**（文件内含 `position:"fixed"` ∧ 含 `inset:0`，任意行；`42e88740` 实测；
+ *  T13-b 后同上（`ChatPage` 那条 → `ChatLaunchMenu`），成员数仍是 34，见 `T13B_MOVED`） */
 export const CROSS_LINE_34: readonly string[] = [
   "components/CaptureOverlayPanel.tsx", "components/ChatSaveNoteDialog.tsx",
   "components/GoalPlanApprovalDialog.tsx", "components/GraduateDialog.tsx",
@@ -97,15 +95,18 @@ export const CROSS_LINE_34: readonly string[] = [
   "components/RouteInfoPopover.tsx", "components/ScreenSelectOverlay.tsx",
   "components/SecondPassPanel.tsx", "components/SessionRowContextMenu.tsx",
   "components/SopRunOverlay.tsx", "components/TaskLaunchDialog.tsx",
-  "components/note-selection/SelectionActionMenu.tsx", "pages/ChatPage.tsx",
-];
+  "components/chat/ChatLaunchMenu.tsx", "components/note-selection/SelectionActionMenu.tsx"];
 
 /** 34 − 28 = **6**：跨行口径的新增项（`fixed` 与 `inset:0` 分写两行）—— recon §3.2 逐字 */
 export const CROSS_LINE_ONLY_6: readonly string[] = [
   "components/ImagePreviewOverlay.tsx", "components/ModelCardFromNoteDialog.tsx",
   "components/PracticeQuestionsOverlays.tsx", "components/ProofreadPanel.tsx",
-  "components/SecondPassPanel.tsx", "components/SopRunOverlay.tsx",
-];
+  "components/SecondPassPanel.tsx", "components/SopRunOverlay.tsx"];
+
+/** **T13-b（2026-09-12）：28/34/14 三数都不变，只有 `pages/ChatPage.tsx` 那条换了新家** —— B7「先拆件」把
+ * 它那段**锚定菜单 + 透明点击层**整段搬到 `components/chat/ChatLaunchMenu.tsx`（`zIndex: 30/31` →
+ * `zIndex("popover")`）⇒ 常量里把那条换成新家（不是新增、不是放宽：新文件同样被三条跨文件判据查）。 */
+const T13B_MOVED = "components/chat/ChatLaunchMenu.tsx";
 
 /** **不进 `Modal` 的 14**（= 34 − 20）：11 个锚定菜单（B1）+ 3 个采集/预览覆盖层（B2） */
 export const NON_MIGRATED_14: readonly string[] = [
@@ -115,8 +116,7 @@ export const NON_MIGRATED_14: readonly string[] = [
   "components/NoteMoveToGroupMenu.tsx", "components/NoteRowContextMenu.tsx",
   "components/RichEditorView.tsx", "components/RouteInfoPopover.tsx",
   "components/ScreenSelectOverlay.tsx", "components/SessionRowContextMenu.tsx",
-  "components/note-selection/SelectionActionMenu.tsx", "pages/ChatPage.tsx",
-];
+  "components/chat/ChatLaunchMenu.tsx", "components/note-selection/SelectionActionMenu.tsx"];
 
 /** E 组的 2 个文件（计划 Task 8 Files 逐字） */
 const E_FILES: readonly string[] = ["components/PracticeQuestionsOverlays.tsx", "components/SopRunOverlay.tsx"];
@@ -165,6 +165,8 @@ describe("20 清单的常量自检（防路径写错 / 空数组造成的静默�
   it("六个数组：长度就是名字里的那个数、已排序、无重复；每个登记路径都在盘上", () => {
     const named: readonly (readonly [string, readonly string[], number])[] = [
       ["DIALOG_20", DIALOG_20, 20],
+      // 28 / 34 是 `42e88740` 的**成员数快照**，T13-b 只把 `ChatPage` 那**一条**换成它的新家
+      // （同一次搬迁）⇒ 三个数都不变；`NON_MIGRATED_14` 同理（见 `T13B_MOVED` 的登记）。
       ["ADR033_28", ADR033_28, 28],
       ["CROSS_LINE_34", CROSS_LINE_34, 34],
       ["CROSS_LINE_ONLY_6", CROSS_LINE_ONLY_6, 6],
@@ -232,15 +234,23 @@ describe("② 34 − 20 = 14：不迁的 14 条逐字登记，且今日盘上仍
     expect(MENU_11.length, "11 个锚定菜单（B1）").toBe(11);
     expect(OVERLAY_3.length, "3 个采集/预览覆盖层（B2）").toBe(3);
     expect([...MENU_11, ...OVERLAY_3].sort()).toEqual([...NON_MIGRATED_14]);
-    expect(NON_MIGRATED_14.includes("pages/ChatPage.tsx"), "§表 4 的别名数法要留账（双列登记）").toBe(true);
+    expect(NON_MIGRATED_14.includes(T13B_MOVED), "T13-b 搬来的那一段必须仍在「不迁」账上（B1/B2 不许静默消失）").toBe(true);
     expect(CROSS_LINE_34.includes(TABLE4_ALIAS), `${TABLE4_ALIAS} 不在 34 里（别名不是成员）`).toBe(false);
     expect(DISK_FILES.includes(TABLE4_ALIAS), `${TABLE4_ALIAS} 在盘上不存在`).toBe(true);
   });
 
-  it("盘上对拍：今日的跨行命中集 == 这 14 个（迁完 20 后一个不多、一个不少）", () => {
+  it("盘上对拍：今日的跨行命中集 == 这 14 个（原文件 → T13-b 搬走的那一段仍算在内）", () => {
+    // B7 的拆件把 `pages/ChatPage.tsx` 里的**同一段**锚定菜单搬到 `components/chat/ChatLaunchMenu.tsx`
+    // ⇒ 盘上集合 = 登记表（`ChatLaunchMenu` 为成员、`ChatPage` 不再命中）。这不是放宽：两侧都逐字列名。
     expect(DISK_CROSS_LINE, "盘上跨行 `fixed`∧`inset:0` 的文件集与登记的 14 条不符").toEqual([...NON_MIGRATED_14]);
-    const usingPrimitives = NON_MIGRATED_14.filter((rel) => stripped(rel).includes("ui/primitives"));
-    expect(usingPrimitives, `登记为「不迁」的文件开始用原语了（B1 / B2 被绕过）：\n${usingPrimitives.join("\n")}`).toEqual([]);
+    // B1/B2 的守卫（**收窄后**）：判据 = 登记为「不迁」的 14 个，barrel 名字表里不得出现 `Modal`。
+    // 为什么不判「文件里出现 `ui/primitives` 字样」：T13 的空态迁移按 B6 让其中三个锚定菜单 import 了
+    // `EmptyState`/`Button` —— 叶子原语既不是弹层机制也不是「自建第二套对话框」（ADR-033 §7 的适用对象
+    // 是对话框类，B1 逐字排除它们）⇒ 旧判据会把 B6 授权的迁移误报成绕过 B1。
+    const usesModal = NON_MIGRATED_14.filter((rel) => BARREL_NAMES(rel).includes("Modal"));
+    expect(usesModal, `登记为「不迁」的文件开始用 Modal 了（B1 / B2 被绕过）：\n${usesModal.join("\n")}`).toEqual([]);
+    // 收窄不能变成空转：域内必须真的有文件被判为「用了 Modal」（阳性对照）
+    expect(BARREL_NAMES("components/RefineWorkbench.tsx").includes("Modal"), "阳性对照失效：判据读不出 Modal").toBe(true);
   });
 });
 
@@ -248,6 +258,8 @@ describe("③ ADR-033 的 28：⊆ 34、恰 28 条、且 == 34 − 6（跨行口
   it("28 ⊆ 34 ∧ |28| = 28 ∧ 28 == 34 − CROSS_LINE_ONLY_6 ∧ 6 条差项互不重叠", () => {
     const notIn34 = ADR033_28.filter((f) => !CROSS_LINE_34.includes(f));
     expect(notIn34, `28 里有不在 34 的文件：\n${notIn34.join("\n")}`).toEqual([]);
+    // T13-b 只把 `ChatPage` 那**一条**换成它的新家（同一段代码、同一次搬迁）⇒ 两侧计数都不变，
+    // `28 + 6 == 34` 与 `34 − 20 == 14` 两条恒等式在搬迁后依然成立。
     expect(ADR033_28.length).toBe(28);
     expect(CROSS_LINE_34.filter((f) => !CROSS_LINE_ONLY_6.includes(f))).toEqual([...ADR033_28]);
     expect(CROSS_LINE_ONLY_6.length, "28 + 6 = 34 的差额必须是 6").toBe(6);

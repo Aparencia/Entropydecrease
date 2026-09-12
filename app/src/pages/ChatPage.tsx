@@ -28,6 +28,8 @@ import { buildConversationMarkdown } from "../utils/chatTranscript";
 // v0.16.1：任务对话化——对话内发起任务（按钮 + '/' 命令）+ 线程任务卡 + 追问预填
 import TaskLaunchDialog, { type LaunchTargetRow } from "../components/TaskLaunchDialog";
 import TaskThreadCard from "../components/TaskThreadCard";
+// 批 4 T13-b（B7）：发起工具条拆件到 components/chat/（本页 599/600 贴边，动它必须先拆）
+import ChatLaunchMenu from "../components/chat/ChatLaunchMenu";
 import { buildTaskFollowUpPrompt } from "../utils/taskFollowUp";
 // 2026-09-09 批 1：任务标题统一按类别解析（taskRefLabel——笔记级精修
 // ref_id=笔记 id，仅按 opType 会错查会话标题表；enrich 恒笔记级）
@@ -88,7 +90,6 @@ export default function ChatPage(props: Props) {
   const [noteGroups, setNoteGroups] = useState<NoteGroup[]>([]);
   const [saveDialog, setSaveDialog] = useState<{ initialTitle: string; content: string } | null>(null);
   // v0.16.1：任务对话化——发起面板（工具条下拉）/ 启动对话框 / 目标清单
-  const [launchMenuOpen, setLaunchMenuOpen] = useState(false);
   const [launchDialog, setLaunchDialog] = useState<"refine" | "enrich" | null>(null);
   const [launchTargetId, setLaunchTargetId] = useState<number | null>(null);
   const [sessionRows, setSessionRows] = useState<LaunchTargetRow[]>([]);
@@ -229,7 +230,6 @@ export default function ChatPage(props: Props) {
   const onTaskLaunched = useCallback((taskId: number) => {
     setLaunchDialog(null);
     setLaunchTargetId(null);
-    setLaunchMenuOpen(false);
     void reloadTasks();
     // 启动后切到任务对话视图（进度/轨迹即时可见；聊天视图内有同款线程卡）
     void selectTask(taskId);
@@ -488,31 +488,10 @@ export default function ChatPage(props: Props) {
         {/* 内容区 */}
         {activeChatId !== null && activeSession && (
           <>
-            {/* v0.16.1：任务对话化——发起工具条（按钮）/ '-' 命令同义 */}
+            {/* v0.16.1：任务对话化——发起工具条（按钮）/ '/' 命令同义。
+                批 4 T13-b：菜单（含透明点击层与锚定面板）已拆到 ChatLaunchMenu。 */}
             <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 16px", flexShrink: 0 }}>
-              <div style={{ position: "relative" }}>
-                <button
-                  data-testid="task-launch-open"
-                  onClick={() => setLaunchMenuOpen((v) => !v)}
-                  style={{ fontSize: 12, cursor: "pointer", padding: "3px 10px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", color: "#374151" }}
-                  title="在对话中发起 AI 任务（也支持 '/refine' '/enrich'）"
-                >
-                  ✨ 发起任务 ▾
-                </button>
-                {launchMenuOpen && (
-                  <>
-                    <div onClick={() => setLaunchMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30, background: "transparent" }} />
-                    <div data-testid="task-launch-menu" data-app-menu="" style={{ position: "absolute", top: "100%", left: 0, zIndex: 31, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 4, boxShadow: "0 4px 12px rgba(0,0,0,0.12)", minWidth: 180 }}>
-                      <button data-testid="task-launch-refine" style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", borderRadius: 6, padding: "6px 10px", fontSize: 12.5, cursor: "pointer", color: "#374151" }} onClick={() => { setLaunchDialog("refine"); setLaunchTargetId(null); setLaunchMenuOpen(false); }}>
-                        ✨ AI 精修（会话 → 精修成笔记）
-                      </button>
-                      <button data-testid="task-launch-enrich" style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", borderRadius: 6, padding: "6px 10px", fontSize: 12.5, cursor: "pointer", color: "#374151" }} onClick={() => { setLaunchDialog("enrich"); setLaunchTargetId(null); setLaunchMenuOpen(false); }}>
-                        📚 AI 知识补充（笔记 → 补外部知识）
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
+              <ChatLaunchMenu onLaunch={(kind) => { setLaunchDialog(kind); setLaunchTargetId(null); }} />
               <span style={{ fontSize: 11, color: "#9ca3af" }}>试试 '/refine' '/enrich' 快捷命令</span>
             </div>
             {/* v0.16.1：线程任务卡（进行中实时 + 完成可追问）；v0.17.0 精修

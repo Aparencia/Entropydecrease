@@ -8,10 +8,12 @@ import { describe, expect, it } from "vitest";
  *
  * Why：批 0-A 已交付六档标尺 `ui/zIndex.ts`（消费方式 `zIndex("modal")`）。批 4 的 T4
  * 之前全仓有 **43 文件 / 58 行**裸数字，17 个值分裂成 10…61 与 900…1150 两个**不相交**的段
- * —— 叠放顺序是涌现的而不是被设计的。T4 已把这 58 处整段迁完：**53 处**落档、**5 处**
- * 例外（3 个 B2 覆盖层 + `ChatPage.tsx` 交 T13-b 拆件的 2 处）。本守卫的职责随之从
+ * —— 叠放顺序是涌现的而不是被设计的。T4 已把这 58 处整段迁完：**53 处**落档、**5 处**挂账
+ * （3 个 B2 覆盖层例外 + `ChatPage.tsx` 交 T13-b 拆件的 2 处委托）。本守卫的职责随之从
  * 「不许新增」升级为**双向**：① 全仓裸数字必须**恰好**等于例外注册表；② 注册表不得过期；
- * ③ 注册表每项必须带理由（B2：例外不许静默）；④ `ChatPage` 的 2 处必须由 T13-b 收口。
+ * ③ 注册表每项必须带理由（B2：例外不许静默）；④ 委托面必须结清 —— **T13-b 已于 2026-09-12
+ * 收口** `ChatPage.tsx` 的 2 处（随发起菜单拆进 `components/chat/ChatLaunchMenu.tsx` 并改走
+ * `zIndex("popover")`）⇒ 裸值全集现在**恰好 3 条**，即 §11-2 的例外三条。
  *
  * 副作用：只读磁盘（递归遍历 `app/src` + 定点读例外文件）。不修改任何文件。
  *
@@ -49,19 +51,23 @@ interface RawZIndexHit {
 
 /**
  * **ZINDEX_ACCOUNTS**（T4 之后唯一被授权保留的裸数字 z-index）—— 与 `FROZEN_NUMERIC_ZINDEX` 一一对应。
- * 两种账：`exception`（规格 §11-2 写明例外的系统交互面，保留裸值）与 `delegated`
- * （B7 的 `ChatPage.tsx`：先拆件再迁，本批不动）。
+ * 只剩一种账：`exception`（规格 §11-2 写明例外的系统交互面，保留裸值）。
+ *
+ * 曾经还有第二种账 `delegated`（B7 的 `ChatPage.tsx` 两处，交 T13-b 拆件时收口）——
+ * **2026-09-12 T13-b 已收口**：那两处随「发起菜单」拆进 `components/chat/ChatLaunchMenu.tsx`，
+ * 并改用 `zIndex("popover")` ⇒ 本注册表里的两条 `delegated` 条目与配套的
+ * `ZINDEX_DELEGATED` / `CHATPAGE_DELEGATED_BASELINE` 一并删除（委托账结清，不留过期条目）。
  *
  * 每条带 `why`：理由必须随代码走（B2 逐字「例外必须带理由，不许静默」）。
  * 理由非空且 >20 字由「例外注册表逐条带理由」那条 `it` 钉住。
  */
-type ZIndexAccountKind = "exception" | "delegated";
+type ZIndexAccountKind = "exception";
 
 interface ZIndexAccount {
   readonly file: string;
   readonly line: number;
   readonly value: number;
-  /** `exception` = 保留裸值（规格 §11-2 的例外）；`delegated` = 本批不迁、已交下游任务 */
+  /** `exception` = 保留裸值（规格 §11-2 的例外） */
   readonly kind: ZIndexAccountKind;
   readonly why: string;
 }
@@ -88,53 +94,22 @@ const ZINDEX_ACCOUNTS: readonly ZIndexAccount[] = [
     kind: "exception",
     why: "系统交互面（全屏十字光标屏幕点选）：迁 modal(300) 会让采集面被任何弹层盖住",
   },
-  {
-    file: "pages/ChatPage.tsx",
-    line: 504,
-    value: 30,
-    kind: "delegated",
-    why: "B7：ChatPage.tsx 599/600 先拆件（T13-b）再迁移 ⇒ 本批不动它，拆件时改用 zIndex(\"popover\")",
-  },
-  {
-    file: "pages/ChatPage.tsx",
-    line: 505,
-    value: 31,
-    kind: "delegated",
-    why: "同上（同一对：透明点击层 + 锚定发起菜单，层内相对序由 DOM 序保持）",
-  },
 ];
 
 /** 例外集（保留裸值的那几条）—— 规格 §11-2 的例外判据逐条落地 */
 const ZINDEX_EXCEPTIONS = ZINDEX_ACCOUNTS.filter((a) => a.kind === "exception");
 
-/** 已委托集（本批不迁、交下游任务）—— B7 的 `ChatPage.tsx` */
-const ZINDEX_DELEGATED = ZINDEX_ACCOUNTS.filter((a) => a.kind === "delegated");
-
-/**
- * 委托面基线（B7 / T13-b 的 `ChatPage.tsx` 两处裸值）—— **本判据的真源**。
- *
- * 刻意**独立于** `ZINDEX_ACCOUNTS`：委托账从注册表里整段消失时，`ZINDEX_DELEGATED` 会变空、
- * 「实际 == 注册表」会退化成 `[] == []` 的**空真**（实测 M7 全绿）。用这份写死的基线兜底 ⇒
- * 无论注册表怎么删，ChatPage 的两处裸值都必须能被解释。
- */
-const CHATPAGE_DELEGATED_BASELINE: readonly { readonly line: number; readonly value: number }[] = [
-  { line: 504, value: 30 },
-  { line: 505, value: 31 },
-];
-
 /**
  * 改造前就存在的裸数字 z-index（相对 `app/src`，正斜杠）—— **只允许减少**。
  *
  * 批 4 T4 逐段迁移后收口到**例外集**（与 `ZINDEX_ACCOUNTS` 一一对应）：名单从 58 条删到
- * 「规格 §11-2 写明例外」的 3 条 + 「B7 交给 T13-b 拆件」的 2 条，与 `FROZEN_OVER_LIMIT`
- * 的棘轮同源 —— 名单只能缩短。
+ * 「规格 §11-2 写明例外」的 3 条 + 「B7 交给 T13-b 拆件」的 2 条；**T13-b 已于 2026-09-12
+ * 收口那 2 条** ⇒ 名单现在**恰好 3 条**，与注册表同长。
  */
 const FROZEN_NUMERIC_ZINDEX: readonly string[] = [
   "components/CaptureOverlayPanel.tsx::<div style={{ position: \"fixed\", bottom: 24, left: \"50%\", transform: \"translateX(-50%)\", display: \"flex\", gap: 8, zIndex: 10 }}>",
   "components/ImagePreviewOverlay.tsx::zIndex: 1000,",
   "components/ScreenSelectOverlay.tsx::style={{ position: \"fixed\", inset: 0, zIndex: 999, background: \"rgba(17,24,39,0.45)\", cursor: \"crosshair\" }}",
-  "pages/ChatPage.tsx::<div data-testid=\"task-launch-menu\" data-app-menu=\"\" style={{ position: \"absolute\", top: \"100%\", left: 0, zIndex: 31, background: \"#fff\", border: \"1px solid #e5e7eb\", borderRadius: 6, padding: 4, boxShadow: \"0 4px 12px rgba(0,0,0,0.12)\", minWidth: 180 }}>",
-  "pages/ChatPage.tsx::<div onClick={() => setLaunchMenuOpen(false)} style={{ position: \"fixed\", inset: 0, zIndex: 30, background: \"transparent\" }} />",
 ];
 
 /** 递归收集 `app/src` 下受管辖的源文件（口径①） */
@@ -189,11 +164,6 @@ function bareZIndexSites(hits: readonly RawZIndexHit[]): string[] {
 /** 该行的裸值（`?` = 口径④的正则没抓到位，属仪器故障，必须显形而不是静默） */
 function bareValueOf(hit: RawZIndexHit): string {
   return /(?:zIndex|z-index)\s*:\s*(-?\d+)/.exec(hit.text)?.[1] ?? "?";
-}
-
-/** 一处站点的二元组 `相对路径 → 裸值`（行号会随拆件重排的文件用这个口径比） */
-function bareZIndexByFile(hits: readonly RawZIndexHit[]): string[] {
-  return hits.map((h) => `${h.location.replace(/:\d+$/, "")} → ${bareValueOf(h)}`);
 }
 
 describe("z-index 棘轮", () => {
@@ -251,24 +221,32 @@ describe("z-index 棘轮", () => {
     expect(hits.length, "仪器自检：对已知存在的 5 处应命中 5").toBe(ZINDEX_ACCOUNTS.length);
   });
 
-  it("`ChatPage.tsx` 的两处裸值仍由 T13-b 拆件任务收口（本批不迁、但必须留账）", () => {
-    // B7：`ChatPage.tsx` 599/600 先拆件再迁移 ⇒ 它的 2 处裸值**不算例外**，只算「已委托」。
-    // 本条是**双向**的：裸值提前消失 ⇒ 红（「已委托」这句话过期了，必须从账上删）；
-    // 裸值数目/值变了 ⇒ 红（委托面被悄悄改动）。把「交给 T13-b」从承诺变成会失败的判据。
-    // 只比 `文件 → 值`（不比行号：拆件会重排 ChatPage，行号不是本条的语义）
-    const hits = numericZIndexHits(resolveFiles(ZINDEX_DELEGATED));
-    const actual = byLocation(bareZIndexByFile(hits));
-    const expected = ZINDEX_DELEGATED.map((a) => `${a.file} → ${a.value}`);
-    expect(actual, "ChatPage.tsx 的委托面已变：拆件完成后请从注册表删掉这两条").toEqual(byLocation(expected));
-    // ★ 兜底（防「注册表删空 ⇒ [] == []」的空真；实测 M7 全绿的漏洞就出在这里）：
-    //   把**独立基线**与注册表两边都钉住 —— 任何一侧偷偷清空都红。
-    expect(ZINDEX_DELEGATED.length, "委托账不能空：ChatPage 的 2 处裸值必须留在账上（或从基线删掉并说明）").toBe(
-      CHATPAGE_DELEGATED_BASELINE.length,
-    );
+  it("`ChatPage.tsx` 的委托面已由 T13-b 收口（裸值消失 ∧ 新家改走六档）", () => {
+    // B7：`ChatPage.tsx` 599/600 先拆件再迁移 ⇒ 它的 2 处裸值曾以 `delegated` 记账；
+    // T13-b 拆件时把「发起菜单」摘进 `components/chat/ChatLaunchMenu.tsx`，并改用
+    // `zIndex("popover")`。本条把「收口」钉成**双向**判据（原来那条只判「裸值还在」）：
+    //   ① ChatPage 里**不得**再有裸数字 z-index（收口不能是假的）；
+    //   ② 新家必须**逐处**用 `zIndex("popover")`，且**不得**出现裸数字（层级走标尺）；
+    //   ③ 委托账（`delegated` 这一档）**整体结清**：注册表里不许再留任何 delegated 条目。
+    const hits = numericZIndexHits([join(SRC, "pages", "ChatPage.tsx")]);
+    expect(hits.map((h) => `${h.location}  ${h.text}`), "ChatPage.tsx 仍有裸数字 z-index").toEqual([]);
+
+    const menuPath = join(SRC, "components", "chat", "ChatLaunchMenu.tsx");
+    const menuHits = numericZIndexHits([menuPath]);
+    expect(menuHits.map((h) => `${h.location}  ${h.text}`), "拆出的菜单里出现了裸数字 z-index").toEqual([]);
+    const menuSrc = readFileSync(menuPath, "utf8");
+    // ★ 先剥注释再判据 —— 本文件的 `@ai-context` 里**逐字**引用了 `zIndex("popover")` 这句写法，
+    //   不剥的话判据会被自己的注释满足（批 1 实测过的假阳性形态：「注释被当代码」）。
+    const menuCode = menuSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
     expect(
-      ZINDEX_DELEGATED.map((a) => `${a.file.replace(/^.*\//, "")}#${a.value}`).sort(),
-      "委托账的内容必须与独立基线一致（否则基线形同虚设）",
-    ).toEqual(CHATPAGE_DELEGATED_BASELINE.map((b) => `ChatPage.tsx#${b.value}`).sort());
+      (menuCode.match(/zIndex\((["'])popover\1\)/g) ?? []).length,
+      "拆出的菜单必须**逐处**用 zIndex(\"popover\")（点击层 + 面板共 2 处，注释不算）",
+    ).toBe(2);
+
+    expect(
+      ZINDEX_ACCOUNTS.filter((a) => (a.kind as string) === "delegated").length,
+      "委托账未结清：T13-b 落库后不得再留 delegated 条目",
+    ).toBe(0);
     // 仪器自检：同一扫描函数对已知存在的 3 条例外文件应命中 3；再对一个**域内 0 命中**的负样本
     // （`utils/entityLabel.ts`）应命中 0 —— 否则「命中数恰好」是假绿
     expect(numericZIndexHits(resolveFiles(ZINDEX_EXCEPTIONS)).length).toBe(3);

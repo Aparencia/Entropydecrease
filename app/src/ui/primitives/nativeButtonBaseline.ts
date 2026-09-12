@@ -161,4 +161,9 @@ export const FROZEN_NATIVE_BUTTON_BY_FILE: Readonly<Record<string, number>> = {
 };
 
 /** 允许"搬运计数"的文件（拆件产物）：形如 "新文件|源文件"，两侧计数之和必须不变 */
-export const SPLIT_MOVES: readonly string[] = [];
+export const SPLIT_MOVES: readonly string[] = [
+  // 批 4 T13-b（B7：`ChatPage.tsx` 先拆件再迁移）：发起工具条的「开关钮 + 两个菜单项」3 个原生
+  // `<button>` 随 `✨ 发起任务` 菜单整段搬进 `components/chat/ChatLaunchMenu.tsx`。
+  // 守恒：新家 3 + 源文件今日 2 == 基线 `pages/ChatPage.tsx` 的 5（原 5 = 这 3 + 转笔记 + 前往设置）。
+  "components/chat/ChatLaunchMenu.tsx|pages/ChatPage.tsx",
+];
