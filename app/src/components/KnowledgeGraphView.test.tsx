@@ -33,6 +33,12 @@ vi.mock("@xyflow/react", async () => {
 
 import KnowledgeGraphView from "./KnowledgeGraphView";
 
+/** 等待上限 = 唯一真源：本地 18 处曾各自写死 5000，与 `vitest.config.ts` 的 `testTimeout: 15000`
+ *  不一致 ⇒ 全量并发（jsdom + 多棵树的解包/普查）下 `waitFor` 先超时 ⇒ **既有负载敏感 flake**
+ *  （批 3 `a7bd1899`、批 4 收口评审 I-4 各复现过一次：9 次抽样 2 次红，全落本文件「局部聚焦」）。
+ *  这里只统一**等待上限**，断言与用例语义一字未改（不放宽断言、不加睡眠掩盖）。 */
+const WAIT = { timeout: 15000 } as const;
+
 /** 全场景快照 fixture：5 节点 + 4 边（2 link + 1 trace + 1 belong） */
 const snapshot: GraphSnapshot = {
   nodes: [
@@ -75,7 +81,7 @@ describe("KnowledgeGraphView 加载与图层", () => {
     await waitFor(() => {
       const edges = rfProps[rfProps.length - 1].edges as unknown[];
       expect(edges).toHaveLength(2);
-    }, { timeout: 5000 });
+    }, WAIT);
     const edges = rfProps[rfProps.length - 1].edges as unknown[];
     expect(edges.every((e) => (e as { id: string }).id.startsWith("link:"))).toBe(true);
     // 节点全集渲染（5 个）
@@ -86,38 +92,38 @@ describe("KnowledgeGraphView 加载与图层", () => {
 
   it("开溯源层 → trace 边进入画布", async () => {
     renderGraph();
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), { timeout: 5000 });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), WAIT);
     fireEvent.click(screen.getByTestId("graph-layer-trace"));
     await waitFor(() => {
       const edges = rfProps[rfProps.length - 1].edges as unknown[];
       expect(edges).toHaveLength(3);
-    }, { timeout: 5000 });
+    }, WAIT);
     // 再开归属层 → 4 边全量
     fireEvent.click(screen.getByTestId("graph-layer-belong"));
     await waitFor(() => {
       const edges = rfProps[rfProps.length - 1].edges as unknown[];
       expect(edges).toHaveLength(4);
-    }, { timeout: 5000 });
+    }, WAIT);
   });
 
   it("关引用层 → link 边消失", async () => {
     renderGraph();
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), { timeout: 5000 });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), WAIT);
     fireEvent.click(screen.getByTestId("graph-layer-link"));
     await waitFor(() => {
       const edges = rfProps[rfProps.length - 1].edges as unknown[];
       expect(edges).toHaveLength(0);
-    }, { timeout: 5000 });
+    }, WAIT);
   });
 });
 
 describe("KnowledgeGraphView 局部聚焦", () => {
   it("单击节点 → 1~2 度邻居展开、范围外淡出", async () => {
     renderGraph();
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), { timeout: 5000 });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), WAIT);
     const onNodeClick = rfProps[0].onNodeClick as (e: unknown, node: { id: string }) => void;
     onNodeClick(null, { id: "note:1" });
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(1), { timeout: 5000 });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(1), WAIT);
     const nodes = rfProps[rfProps.length - 1].nodes as { id: string; style?: { opacity?: number } }[];
     const dimmed = nodes.filter((n) => n.style?.opacity === 0.15).map((n) => n.id);
     // note:1 的邻居：concept:1（link）、note:2（trace——图层默认关）、group:1（belong 关）
@@ -129,26 +135,26 @@ describe("KnowledgeGraphView 局部聚焦", () => {
 
   it("点击空白取消聚焦（全部恢复实显）", async () => {
     renderGraph();
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), { timeout: 5000 });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), WAIT);
     const onNodeClick = rfProps[0].onNodeClick as (e: unknown, node: { id: string }) => void;
     onNodeClick(null, { id: "note:1" });
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(1), { timeout: 5000 });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(1), WAIT);
     const onPaneClick = rfProps[rfProps.length - 1].onPaneClick as () => void;
     onPaneClick();
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(2), { timeout: 5000 });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(2), WAIT);
     const nodes = rfProps[rfProps.length - 1].nodes as { style?: { opacity?: number } }[];
     expect(nodes.every((n) => !n.style || n.style.opacity !== 0.15)).toBe(true);
   });
 
   it("再点同一节点取消聚焦（toggle）", async () => {
     renderGraph();
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), { timeout: 5000 });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), WAIT);
     const onNodeClick = rfProps[0].onNodeClick as (e: unknown, node: { id: string }) => void;
     onNodeClick(null, { id: "note:1" });
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(1), { timeout: 5000 });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(1), WAIT);
     const handler2 = rfProps[rfProps.length - 1].onNodeClick as (e: unknown, node: { id: string }) => void;
     handler2(null, { id: "note:1" });
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(2), { timeout: 5000 });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(2), WAIT);
     const nodes = rfProps[rfProps.length - 1].nodes as { style?: { opacity?: number } }[];
     expect(nodes.every((n) => !n.style || n.style.opacity !== 0.15)).toBe(true);
   });
@@ -158,7 +164,7 @@ describe("KnowledgeGraphView 双击跳转", () => {
   it("双击笔记节点 → onOpenNote", async () => {
     const onOpenNote = vi.fn();
     renderGraph({ onOpenNote });
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), { timeout: 5000 });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), WAIT);
     const onDouble = rfProps[0].onNodeDoubleClick as (
       e: unknown, node: { data: { kind: string; entityId: number; systemId: number | null } },
     ) => void;
@@ -169,7 +175,7 @@ describe("KnowledgeGraphView 双击跳转", () => {
   it("双击组节点 → onOpenGroup", async () => {
     const onOpenGroup = vi.fn();
     renderGraph({ onOpenGroup });
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), { timeout: 5000 });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), WAIT);
     const onDouble = rfProps[0].onNodeDoubleClick as (
       e: unknown, node: { data: { kind: string; entityId: number; systemId: number | null } },
     ) => void;
@@ -180,7 +186,7 @@ describe("KnowledgeGraphView 双击跳转", () => {
   it("双击概念/模型节点 → onOpenSystem（体系归属）", async () => {
     const onOpenSystem = vi.fn();
     renderGraph({ onOpenSystem });
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), { timeout: 5000 });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), WAIT);
     const onDouble = rfProps[0].onNodeDoubleClick as (
       e: unknown, node: { data: { kind: string; entityId: number; systemId: number | null } },
     ) => void;
@@ -204,7 +210,7 @@ describe("KnowledgeGraphView 空态与错误", () => {
     expect(await screen.findByTestId("graph-error")).toBeTruthy();
     // 重试成功 → 错误消失、画布出现
     fireEvent.click(screen.getByTestId("graph-retry"));
-    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), { timeout: 5000 });
+    await waitFor(() => expect(rfProps.length).toBeGreaterThan(0), WAIT);
     expect(screen.queryByTestId("graph-error")).toBeNull();
   });
 });
