@@ -15,8 +15,14 @@
  * **语法起点**行 —— JSX 属性常换行）。为什么需要这一档：迁移**保留用户可见文案原文** ⇒ 文案串
  * 必然还在文件里；判据的真身是「这句文案**是否走原语渲染**」，不是「字符串是否还存在」。
  *
- * 副作用：只读磁盘（遍历 `app/src` + 定点读例外行）。边界：文本级判据、不做 AST；
- * 例外 5 处的**行号**逐字冻结 —— 行号漂了或那一行不再命中词表即红。
+ * 副作用：只读磁盘（遍历 `app/src` + 定点读例外锚点行）。边界：文本级判据、不做 AST；
+ * 例外 5 处的**锚点片段**逐字冻结 —— 片段被删改即红（行号漂移不再误伤，T14 实测过 147 → 148）。
+ *
+ * ★ 变异体实验（T13，2026-09-12，**每棵树各解一次导出树**，CONTROL = 同源未变异树）：
+ *   M1 把切片内一处已迁移的空态还原成手写灰字 ⇒ ② 红（+ ⑤ 的 migrated 自检红）；
+ *   M2 把余量冻结值抬高 1 ⇒ ④ 红（**第一版判据无牙、实测 6/6 绿，已改成「冻结值恰等于实测值」**）；
+ *   M3 新增一个带词表的文件 ⇒ ④ 红；M4 删掉 `ChatLaunchMenu` 的必填 prop ⇒ `tsc` 红（vitest 不暴露）；
+ *   M0 反方向：把这套守卫放进**迁移前的基线树** ⇒ ② 红（证明判据不是永真）。
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -138,6 +144,9 @@ const FROZEN_REST: Readonly<Record<string, readonly [number, number]>> = {
   "components/SessionListBody.tsx": [1, 1],
 };
 
+/** 余量**总数**的独立校验和（5 = 5 文件 × 1 行；只许降 —— 见 ④ 里为什么单列这一条） */
+const FROZEN_REST_TOTAL = 5;
+
 /**
  * 允许命中词表的新增文件。域**已经**排除了 `ui/primitives/**`（T1 口径），故这里只做**显式声明**：
  * `sliceScan.ts` 是本任务析出的共享扫描仪器（新增件），它逐字带着那张词表 ⇒ 把「域外 + 新件」
@@ -189,14 +198,21 @@ describe("空态切片棘轮（B11）", () => {
     }
   });
 
-  it("④ 余量文件逐文件冻结（只许减）+ 全仓总数 ≤ 44 + 无未登记的新命中文件", () => {
+  it("④ 余量逐文件冻结（只许减）+ **余量总数恰为 5** + 全仓总数 ≤ 44 + 无未登记的新命中文件", () => {
     const restFiles = [...new Set(ALL_HITS.map((h) => h.file))].filter((f) => !SLICE.includes(f)).sort();
     expect(restFiles, "余量集变了（新增未登记的命中文件，或余量被悄悄迁移）").toEqual(Object.keys(FROZEN_REST).sort());
     for (const [f, [min, max]] of Object.entries(FROZEN_REST)) {
       const n = hitsOf(f).length;
       expect(n, `${f} 的命中数 ${n} 越出冻结区间 [${min}, ${max}]`).toBeGreaterThanOrEqual(min);
       expect(n, `${f} 的命中数 ${n} 越出冻结区间 [${min}, ${max}]`).toBeLessThanOrEqual(max);
+      // ★ 冻结值必须**恰好等于**实测值（T13 变异体实测的教训）：只判区间时，把某条上界抬高 1
+      // 会让 M2 **静默通过**（实测 6/6 绿 = 判据无牙）。真迁走一处时须**主动收紧**这一对数字。
+      expect(`${f}=${min}..${max}`, `${f} 的冻结值与实测不一致：声明 ${min}..${max} / 实测 ${n}（棘轮只许降，须手工收紧）`)
+        .toBe(`${f}=${n}..${n}`);
     }
+    // ★ 余量**总数**是独立校验和：任何一条被抬高/篡改都会让 `sum > 5` 当场红（M2 的第二个抓手）。
+    const restTotal = Object.keys(FROZEN_REST).reduce((n, f) => n + hitsOf(f).length, 0);
+    expect(restTotal, "余量命中总数不是 5（棘轮只许降：真迁走了就把这里改成新值）").toBe(FROZEN_REST_TOTAL);
     expect(ALL_HITS.length, "全仓命中总数超过基线 44").toBeLessThanOrEqual(44);
     const unexpected = [...new Set(ALL_HITS.map((h) => h.file))].filter(
       (f) => !SLICE.includes(f) && !(f in FROZEN_REST) && !NEW_FILES_ALLOWLIST.includes(f),
