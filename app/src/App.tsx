@@ -15,6 +15,9 @@
  *              查询的活，内联 style 表达不了）；AI toast 则从导航行搬到本层的 **fixed 覆盖层**
  *              （控制方裁决 A3：它是 1024 溢出的唯一主因，单项 373.75 px = 视口的 36.5%）。
  *              本文件负责装配、跨页状态与这层壳级覆盖层。
+ * @ai-context: 批 3 T13：`PageSlot` / 两个窗口变体 / 对话面板**四处**都包了**叶级**错误边界并配
+ *              `ShellFallback` 首访加载态（此前懒 chunk 失败会一路抛到最外层 AppErrorBoundary ⇒
+ *              整个导航壳被卸载、已访问页状态一起丢）。边界在 `shell/ShellFallback.tsx`。
  */
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
@@ -36,6 +39,9 @@ import { TopBar, TopBarAction } from "./shell/TopBar";
 // 本批只做**页面级跳转 + 对话面板**两条动作（`focus*` 状态机原样保留，收敛属 T12）。
 // 自足实现、未 import 原语层（非目标 2）：遮罩/Esc/焦点都在它自己文件里，批 4 换成 `Modal`。
 import { CommandPalette } from "./shell/CommandPalette";
+// 批 3 T13：壳层的**首访加载态**与**叶级错误边界**（批 2 §瓶颈清单转交的三条）——自足实现、
+// 刻意不 import 原语层（非目标 2，两个组件是批 4 换 `Loading` / `StatusLine` 的迁移点）。
+import { ShellFallback, SlotErrorBoundary } from "./shell/ShellFallback";
 // 批 3 T7（控制方裁决 A3）：AI toast 从 56px 导航行搬到**固定覆盖层** —— 层级走六档标尺，
 // 不许写裸数字（`ui/zIndex.guard.test.ts` 在看着）。实测 toast 是 1024 溢出的唯一主因
 // （单项 373.75 px = 视口的 36.5%；含它 1375.74 px、剔除它 997.99 px），而规格 §6.1 的顶栏
@@ -96,10 +102,13 @@ function App() {
   // v0.12.0 M3：系统级覆盖层截图窗口入口（全屏透明 1:1 框选；无采集控制需求）
   if (query.get("overlay") === "1") {
     return (
-      // 批 2：面板是 lazy chunk —— 首次拉取期间渲染 fallback(null)，加载完即常驻（本窗无导航）
-      <Suspense fallback={null}>
-        <CaptureOverlayPanel />
-      </Suspense>
+      // 批 2：面板是 lazy chunk —— 加载完即常驻（本窗无导航）
+      // 批 3 T13：套一层**叶级**边界 + 首访加载态 —— 此前 chunk 失败 = 本窗全空白（批 2 风险 1）
+      <SlotErrorBoundary>
+        <Suspense fallback={<ShellFallback />}>
+          <CaptureOverlayPanel />
+        </Suspense>
+      </SlotErrorBoundary>
     );
   }
   // v0.12.0 M6：采集浮窗入口（独立窗口 alwaysOnTop，加载 index.html?float=1）；
@@ -108,10 +117,13 @@ function App() {
     return (
       // 批 2：CaptureStatusProvider 必须留在 Suspense **外层**——它是本窗「每窗恰一个实例」的
       // 采集状态源（见文件头 @ai-context），塞进 Suspense 会改变它自己的挂载时机
+      // 批 3 T13：边界加在 provider **内层**（状态源层级不动）；chunk 失败不再让本窗全空白
       <CaptureStatusProvider>
-        <Suspense fallback={null}>
-          <CaptureFloatPanel />
-        </Suspense>
+        <SlotErrorBoundary>
+          <Suspense fallback={<ShellFallback />}>
+            <CaptureFloatPanel />
+          </Suspense>
+        </SlotErrorBoundary>
       </CaptureStatusProvider>
     );
   }
@@ -132,20 +144,21 @@ function App() {
  * @ai-context: 批 2 包体治理的挂载闸门，也是「保留挂载」语义的唯一实现点。
  *   · mounted=false ⇒ 整棵子树不渲染 ⇒ 该页的 lazy chunk **不会被请求**（首屏收益的来源）；
  *   · mounted=true 之后永不回到 false ⇒ 已访问页面常驻（TD-004 保活语义，状态与事件监听不重置）；
- *   · 每页一个独立 Suspense（fallback=null）：只有**新挂载**的页会挂起，
+ *   · 每页一个独立 Suspense + **叶级** `SlotErrorBoundary`：只有**新挂载**的页会挂起，
  *     已经可见的页不会因为邻居加载而被替换成 fallback（避免可见的闪烁）。
- * @ai-context: 为什么 fallback 是 null 而不是原语层的 Loading：本批是**尺寸治理批**，
- *   引入原语会把它连同 CSS 一起拉进首屏，与目标冲突；「首访加载态」登记给批 3/4
- *   （壳层与加载原语一起做），见计划 Task 11 的瓶颈清单。
- * @ai-context: 动态 import 失败时 React 会把它抛到最近的错误边界 —— App.tsx 的
- *   AppErrorBoundary 仍在最外层包着 MainShell，因此「chunk 加载失败」有兜底 UI，不会白屏。
+ * @ai-context: 批 3 T13：fallback 从 `null` 换成 `ShellFallback`（首访加载态，静态无动效），并在
+ *   ⚠️ Suspense 之外加了**叶级**边界：懒 chunk 失败原本会一路抛到最外层 AppErrorBoundary ⇒
+ *   **整个 MainShell 被卸载**（已访问页状态一起丢，批 2 评审 M-1）。边界在本函数内 ⇒ 只卸载出错的
+ *   那一页，兄弟槽位与壳层状态保留（证明见 `shell/ShellFallback.test.tsx` 的「叶级」用例）。
  * 副作用：无。边界：children 是懒组件元素，未 mounted 时不会被 React 渲染 ⇒ 不触发 dynamic import。
  */
 function PageSlot({ show, mounted, children }: { show: boolean; mounted: boolean; children: React.ReactNode }) {
   if (!mounted) return null;
   return (
     <div style={{ flex: 1, display: show ? "block" : "none", overflow: "hidden" }}>
-      <Suspense fallback={null}>{children}</Suspense>
+      <SlotErrorBoundary>
+        <Suspense fallback={<ShellFallback />}>{children}</Suspense>
+      </SlotErrorBoundary>
     </div>
   );
 }
@@ -537,20 +550,22 @@ function MainShell() {
       />
       {/* REQ-274：全局 AI 对话面板（常驻挂载——开合仅切 display，选中态/后台任务保活）。
           批 2：闸门只加在**首开之前** —— dockMounted 一旦为真永不复位，此后 open/close
-          仍是纯 display 切换（保活语义逐字保留）；独立 Suspense(fallback=null) 与 PageSlot
-          同理由：chunk 首次到达前不渲染任何东西，加载失败由外层 AppErrorBoundary 兜底。 */}
+          仍是纯 display 切换（保活语义逐字保留）；独立 Suspense 与 PageSlot 同理由：chunk 首次
+          到达前渲染 `ShellFallback`（批 3 T13），加载失败由**这一层的叶级边界**兜底（不再拖垮整壳）。 */}
       {dockMounted && (
-        <Suspense fallback={null}>
-          <AiConversationDock
-            open={dockOpen}
-            onClose={() => setDockOpen(false)}
-            onOpenChat={goChatSession}
-            onOpenTaskInChat={goChatTask}
-            onOpenSessions={goSessions}
-            onOpenNote={openNotePlain}
-            onOpenRefineWorkbench={goRefineWorkbench}
-          />
-        </Suspense>
+        <SlotErrorBoundary>
+          <Suspense fallback={<ShellFallback />}>
+            <AiConversationDock
+              open={dockOpen}
+              onClose={() => setDockOpen(false)}
+              onOpenChat={goChatSession}
+              onOpenTaskInChat={goChatTask}
+              onOpenSessions={goSessions}
+              onOpenNote={openNotePlain}
+              onOpenRefineWorkbench={goRefineWorkbench}
+            />
+          </Suspense>
+        </SlotErrorBoundary>
       )}
       </div>
   );
