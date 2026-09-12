@@ -14,7 +14,9 @@
  *   P1 印张数 = `screens.length` · 顺序 = `screens` 给定顺序 · 序号 = `screen_id ?? index+1` ·
  *      区间时间码与 `fmtMs` 逐字一致 · `screens` 为空 ⇒ 0 张印张 + `EmptyState`（根仍在）。
  *   P2 `image_ref` 为空 ⇒ **不出** `<img>`；非空且 `imageUrl()` 解析得出 ⇒ `src` **逐字等于**它的
- *      返回；非空但解析不出（null）⇒ 同样不出图；**图注位恒在**（3/3）；`imageUrl` 只被非空 ref 调用。
+ *      返回；非空但解析不出（null）⇒ 同样不出图；**图注位恒在**（3/3）且「有图/无图」两态可区分；
+ *      `imageUrl` 只被非空 ref 调用。⚠️ 图注**文案不属冻结契约**（P2 只判槽位与两态可区分）——
+ *      这是反例守卫 R1 逼出来的修正：初版判逐字文案，R1（只改文案）**假红**（实测 `failed=1`）。
  *   P3 正文按区间归属：每张印张出现的转写文本集合与顺序 == 与该区间重叠的段（逐字 + 升序 + 并列按 id）。
  *   P4 只读：全件 0 个 `<button>` / 0 个 `<details>`（印样不得退化成卡片流的复制品）。
  *
@@ -182,8 +184,14 @@ describe("SessionProofView（批 5 T8 · P5 起 = C14② 的第一条判据）",
     expect(convertFileSrcMock).not.toHaveBeenCalled();
     // 注入槽只被**非空 ref** 调用（空 ref 的答案视图自己就知道）
     expect(imageUrl.mock.calls.map((c) => c[0])).toEqual(["full/s1.webp", UNRESOLVABLE_REF]);
-    // 图注位恒在（3/3）：无图的两张印张保留降级文案，而不是整块消失
-    expect(sheets().map(figureTextOf)).toEqual(["配图 1", "本屏未归档配图", "本屏未归档配图"]);
+    // 图注位恒在（3/3）：无图的两张印张保留**降级态**，而不是整块消失。
+    // ⚠️ **文案不属冻结契约**（它可改）⇒ 这里只判「槽位在 + 两态可区分」，不判逐字文案 ——
+    // 反例守卫 R1（只改文案 + 合法间距）实测过：判逐字文案会让这条判据假红。
+    const captions = sheets().map(figureTextOf);
+    expect(captions).toHaveLength(SCREENS.length);
+    for (const caption of captions) expect(caption.trim()).not.toBe("");
+    expect(captions[0], "有图与无图的图注是同一条 ⇒ 降级对用户不可见").not.toBe(captions[1]);
+    expect(captions[1], "两张无图印张的降级图注不一致").toBe(captions[2]);
     for (const sheet of [sheets()[1], sheets()[2]]) {
       expect(sheet.querySelectorAll("img")).toHaveLength(0);
     }
