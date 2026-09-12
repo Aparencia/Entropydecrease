@@ -127,6 +127,13 @@
   > - **注册位置**：批 4 计划 §收口回写 §七 follow-ups（逐条具名归属）· `docs/versions/v0.22.md` 批 4 节「未做登记」。
 - 批 4 从本 ADR 接手的壳层残留：`shell/CommandPalette.tsx`（自建遮罩/Esc/焦点 → `Modal`）· `shell/ShellFallback.tsx`（→ `Loading`/`StatusLine`）· `App.tsx` 的 AI toast（→ `Toast`）· `App.tsx` 对话面板的裸 `zIndex: 900`（→ `panel`）——**逐条见批 4 计划的任务总表**。
 
+> **🔻 加注⑧ · 批 5 的处置结果（C4 = C13；2026-09-12，**上一节与加注④/⑦ 的原文一字未改**）—— 上面 `:115` 那两条的**最终归属与结果**：
+> - **「会话详情头改粘性」→ ✅ 批 5 已做**（控制方 C13 走 (b)）。落点 = `app/src/components/session-detail/SessionDetailHeader.tsx`，**161 → 176 行**（预算 ≤180）；形态 = `position: sticky` + `top: var(--ed-space-4)`（= **4 px**）+ `zIndex("raised")`（= **10**，走本 ADR §6 的六档标尺，**不写裸值**）；**先补 1 条行为级判据**（该文件此前无同名测试）：`SessionDetailHeader.test.tsx` **9 passed**（改前 **5 passed / 4 failed** ⇒ 改后 **9/9**）。
+> - ⚠️ **真实粘性不可验（诚实登记）**：**jsdom 测不出真实粘性**（无布局引擎）⇒ 判据形态只能是**静态结构级**（`position: sticky` ∧ `top` 来自 token）+ 祖先链核验；**真实滚动下的粘性行为归批 8 的真机/像素 pass**。**不得**把本行读成「粘性已验证」。
+> - **「笔记工具栏三层合并为单行」→ 批 5 未做，转批 8**（C13 逐字；理由：要动 `NotesPage.tsx`（拆件后 **288/300**）+ `NoteListView.tsx`（241）+ **`app/src/components/NoteListToolbar.tsx`（95）** 三个**无测试面**文件，投入产出比最差）。⚠️ **文件名更正（F-3）**：真身是 `NoteListToolbar.tsx`，**不是** `NotesListToolbar.tsx`（C16 的事实更正，记控制方账上）。规格 §6.2 已就地加注同一条去向。
+> - **本 ADR §2（列契约）与 §3（断点）在批 5 零动作**：批 5 只动 `columnsOf(page)` 的**消费侧之外**（视图层），`shell/` 五个模块与两条既有守卫（`shellReset.test.ts` / `columnKeys.freeze.test.ts`）**零 diff**。**本 ADR 的结论一字未改。**
+> - **出处**：批 5 计划 §收口回写 §四（C13 行）/§七 · `tmp/t18/measurements.md` §9 C4。
+
 ## 加注⑤ · 本次新增的两条守卫 + T0 报告 §四 五条建议的登记（2026-09-12 批 4 前置单元）
 
 > 口径：本 ADR 的**登记**类条目（上一节 §登记 及其 `:115` 加注④）一律**不代控制方裁决**是否采纳、也不代定去向；本节的五条建议同理 —— **只登记 + 注明待承接单元**。

@@ -51,6 +51,13 @@ ADR-032 交付了 token 层（色阶 / 字阶 / z-index 标尺 / 图标），但
 
 **本批全部 42 个文件逐个 ≤300 行（最大 297）**，无需行数豁免登记。
 
+> **🔻 批 5 收口就地加注 · 导出面新增第 10 个原语 `ViewSwitcher`（C1 = C14①；2026-09-12，**上面原文一字未改**）**：
+> - **落点与形态**：`app/src/ui/primitives/ViewSwitcher.tsx`（**135 行**，预算 ≤150）+ `ViewSwitcher.css`（**63 行**，预算 ≤80）+ `ViewSwitcher.test.tsx`（**225 行 / 14 passed**）；**已进 `ui/primitives/index.ts` barrel**（该文件 **45 → 48 行**，+2 导出 + 注释）**并在 `style-contract.test.ts` 的枚举里**（该文件 **233 → 296 行**；用例 **6 → 10**，**只新增枚举块 + 它自己的判据，`CONTRACTS` 的 12 条一字未动、删除行 = 0**）。
+> - **`--dur-micro` 接缝**：本原语覆盖 §8.6.1 第 3 条的**响应层接缝**（`--ed-dur-micro` = **120 ms**），**零行内 `style`**（W1–W3/W4 判据；W4 的形态按批 5 裁决 1 强化为「每段 `className` 逐字等于 `ed-btn ed-btn--segment`」+「根/段无 `style` 属性」，理由是 `aria-pressed` 是状态的**唯一权威**，再加状态类会造出第二份权威）。
+> - **⚠️ 上表「接缝与守卫」行的行数是批 0-D 时点值**：`index.ts` **45 → 48** · `style-contract.test.ts` **233 → 296**（`motion.css` **74** 不变 · `style-seams.test.ts` 287 · `motion-coverage.test.ts` 147）。⇒ 该行按本加注读；**本 ADR §1 的「9 类原语」口径不变**（`ViewSwitcher` 是**第 10 个**落地文件、属 §1 的「原语层第 10 类」延伸，不重排编号）。
+> - **首屏账（诚实代价，见 §4 的批 5 加注）**：`ViewSwitcher` 进 barrel 后**首屏 JS Δ = 0 B**、**CSS +604 B** —— 计划 C14① 的「首屏 Δ 不是 0」**被实测否证**（机理：rollup 把它 tree-shake 进懒 chunk）。
+> - **出处**：批 5 计划 §收口回写 §四（C14 行）· `tmp/t18/measurements.md` §9 C1。
+
 ### 2. 依赖方向：领域 → 视图 → 容器 → 原语，**禁止反向**
 
 这是规格 §7.1 四部件依赖方向在原语层上的落法，也是本 ADR 的**核心约束**：
@@ -93,6 +100,13 @@ ADR-032 交付了 token 层（色阶 / 字阶 / z-index 标尺 / 图标），但
 > - 本条禁令（「调用点不得用行内 `style` 覆盖类的底/圆角/边框」）在批 0-D 落笔时**对真实代码是空真的** —— 当时全仓 `<Surface>` **0 个**。批 4 的 `69489f9f`（`refactor(ui): migrate card borders to surface`）**第一次真正使用 `Surface`**：14 个 `<Surface>` 开标签，机器判据（`surfaceRatchet.test.ts` ⑦）实测**覆盖命中 0**；同一提交把 `FROZEN_SURFACE_TAG_TOTAL` 由 **0 → 14**（T17-A 冻结的「零」是**故意的空真登记**，一迁移就会红）。⇒ 本条禁令**自 `69489f9f` 起有真实输入**。
 > - **已知边界（诚实登记，不得读成「判据完备」）**：⑦ 的文本级启发式只认 `style={{ … }}` **字面对象** ⇒ `style={S}` / `style={pick()}` 这类**间接写法是假阴**（写在 `overridesSurface()` 的文档注释里）。批 4 迁移的 14 处**全是直接形态**，故对本批读数无影响 —— 但**下游若用变量间接给 `style`，棘轮会漏**。
 > - **同源的两条原语缺口（批 4 实测，登记为 follow-up 而非本批动作）**：① `SurfaceProps` 无 DOM 属性透传（`onClick`/`id`/`aria-*`/`data-*`/`dangerouslySetInnerHTML`/`ref`）⇒ 至少挡住 3 处已点名 + 未来 21 处；② `Surface` 基类**必出底色**、无「只出边框」档 ⇒ 挡住 **28 处**透明边框容器。两条都属「批 5 与视图层一并裁」（B22 第 3 条）。
+>
+> **🔻 批 5 收口就地加注 · 类名命名空间（C2 = R-2）与上面两条 `Surface` 缺口的去向（D12）（2026-09-12，**上面全部原文与加注一字未改**）**：
+> - **R-2：`ViewSwitcher` 复用既有 `ed-btn` 基座命名空间** —— 容器 `.ed-btn-group` + 段 `.ed-btn--segment`（**段控件本质是成组的按钮**）。**这不是随手取名，是「既有断言 0 改动」的关键**：若另立 `.ed-switcher*` 命名空间，`motion-coverage.test.ts` 与 `style-seams.test.ts` 的**既有计数/名单会需要改动**；复用 `ed-btn` 后，批 5 对既有断言的改动数保持 **0**（唯一例外是 `style-contract.test.ts` 的**只增**枚举块）。
+> - **诚实代价（如实登记，不许省略）**：**语义折中** —— 一个「视图切换器」的类名落在**按钮**基座命名空间里；读到 `.ed-btn--segment` 的人会先以为是 `Button` 的一个档位。**换来的收益**：`Button` 的 `variant` 枚举与 `Button.css` **零改动**（C16 登记 2 的条件④逐字要求「若实现中发现必须改 `Button` 的 `variant` 枚举或 `Button.css` 语义 ⇒ STOP 报控制方」—— **实际未触发**）。**且 §4 的「行内 style 禁令」在本原语上是真的**：零行内 `style`（判据 W4 + `style-contract` ②）。
+> - **产物级前后对照锚（可复跑）**：字面量 `ed-btn--segment` 在**批 5 前的 dist 里 0 命中**（T1 台账逐字 `NOT-FOUND`，`tmp/t1/lazy-chunks.md:168`）⇒ 批 5 后命中 **`registry-C-RvXIfE.js`（懒 chunk）** ⇒ **该锚已从 0 变为命中** ✅。
+> - **上面两条 `Surface` 缺口（① DOM 属性透传 +3 处 · ② 透明容器 +28 处）→ 两条都转批 7**（D12 逐字）。理由：两条都是**原语能力扩展**（与本 ADR §1 的「只加属性级槽」同族，B16 先例），批 5 已有一个原语（`ViewSwitcher`）要新建；且 ② 若接受，`surfaceRatchet` 的两条冻结值**必须抬高**（「只许降」的棘轮倒退 ⇒ 需要一次显式裁决）。**读数**：`+3`（DOM 属性透传解锁的已点名处数）· **`+28`**（透明边框容器处数，来自 `task-4-report.md:208-212` 的分桶：边框 240 → 整圈 172 = 控件 96 · NM14 14 · 锚定菜单 4 · 交互 4 · 条件底色 4 · **透明容器 28** · 有底色容器 22）。
+> - **出处**：批 5 计划 §收口回写 §五/§七 · `tmp/t18/measurements.md` §9 C2 与 D6。
 
 ### 5. 动效接缝契约：`[data-phase]` 三态 + `usePresence` + 时长变量名
 
@@ -309,6 +323,14 @@ z-index 的迁移纪律（0-A 交接第 3 条）：**必须按叠放段整段推
 - `docs/tech-debt/` 的 **TD-2026-08-31-C**（`App.css` 死样式）由批 0-D Task 13 实质闭环（该目录未入库，故只在此记录闭环关系）；
   **TD-2026-09-11-AG**（`structuredBlocks.ts` 整模块无生产调用方）仍 open，属批 1/4。
 - 动效 token（`--ed-dur-*` / `--ed-ease`）的真源、GSAP、四层动效与三档强度：**批 6**。
+
+> **🔻 批 5 收口就地加注 · 「视图层契约」在批 5 的落地与未做项（C3 = C4 = D4；2026-09-12，**上面原文一字未改**）**：
+> - **本 ADR 标题里的「视图层契约」在批 5 第一次有真实载体**：`app/src/views/registry.ts`（`ViewSpec` + `load` + `viewsFor`，**109 行**）· `app/src/views/useViewMemory.ts`（**70 行**，顶格）· 会话 5 视图 + 笔记 2 视图 · 两个宿主（`session-detail/SessionViewHost.tsx` **136 行** / `notes/NotesReadingColumn.tsx` **290 行**）· 守卫 `views/architecture.guard.test.ts`（**260 行 / 17 用例**）+ `views/architecture.slots.test.ts`（**100 行 / 2 用例**）。**§2 的依赖方向**由 A1/A2/A3 三组判据守住（`views/**` 首屏可达 0 · 注册表运行时导入者恰 2 · `views/**` 对 `@tauri-apps` 裸 0/声明级 0，阳性对照双侧命中）。
+> - **编辑态切视图的 `flushSave` 契约（本 ADR §1 的 `StatusLine` 与 §7 的「不用第二套机制」同向）**：`catch` ⇒ **不切视图 + 保持编辑态 + 就近渲染一行 `StatusLine kind="error"`**（**不用 toast** —— 它已登记 `belowNav` 堆叠缺陷，且就近提示 `role="alert"` 可测）。判据 **F1–F4**（`NotesReadingColumn.views.test.tsx` **11/11 passed**），**F4 断言「阻断全过程 0 个 toast 节点」并证明选择器有牙**；反向对照 **T14-M1**（把 `catch` 改成继续切换）⇒ **唯一红 = F1**。
+> - **显式登记未做（两条，各自带归属）**：① **不改接口** —— `flushSave` 的返回类型**未升级**为 `Promise<boolean>`（`NoteEditHandle` 原样）⇒ **批 8 接口卫生**；② **`RichEditorView` 内的 Ctrl+E / 完成按钮路径仍不阻断**（今天就是 fire-and-forget，**不是本批引入的回归**，C4② 逐字禁止顺手扩大面）⇒ 批 8。另：`RichEditorView` 内部若要显示保存错误**做不到**（它自带 `status` state 保持原样）⇒ 批 7/8。
+> - **行数代价**：`components/notes/NotesReadingColumn.tsx` **166 → 290 行**（预算 ≤260 ⇒ **超 30，已登记**；口径：**预算是估算，绑定约束是 ≤300 + 零新增豁免登记**）。
+> - **ADR-035 的归属不变**：**L4 动效纲领与引擎仍顺延批 6**；**批 5 未新增任何 ADR**（`docs/adr/` 实盘最高仍是 ADR-034，`docs/adr/README.md` 索引本批零改动）。
+> - **出处**：批 5 计划 §收口回写 §四/§七 · `tmp/t18/measurements.md` §9 C3 与 D6。
 
 ## 相关决策
 

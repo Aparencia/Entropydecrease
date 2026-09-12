@@ -1531,24 +1531,298 @@ cd ..; node scripts/docs-check.mjs; node scripts/check-command-registry.mjs
 ### 一、三条硬约束的判据与读数
 （① 原文永远保留：默认视图无 `load` 的读数 + 两个宿主的「切换后原文 DOM 仍可达 + 挂载计数」用例数 ② 非默认视图模块级惰性：A1–A5/G7 的读数 + **懒 chunk 逐 chunk 归属台账**（R-1：**实测值**；写明 27 与 28 各自出现的条件）③ 编辑态切视图 `flushSave` 阻断：F1–F3 的读数 + 未做项登记）
 
+> **终态（`HEAD = b4edf8e4` · 采集 **2026-09-12 22:57:07–23:03 +08:00** · 全部在**同一次全量 `vitest run`（exit 0）**内跑过）**：**三条合计 9 条判据全绿**。出处：`tmp/t18/measurements.md` §1（六组读数包，gitignored 不入库）。
+
+| 硬约束（规格 §7.3 逐字） | 判据（结构 / 图级） | 判据（行为） | 反向对照（变异体，**必须带任务号**） | 读数 / exit |
+|---|---|---|---|---|
+| **① 原文视图永远保留** | **结构 1** `SESSION_VIEWS[0].key === "raw"` ∧ `NOTE_VIEWS[0].key === "raw"`（自写结构探针）· **结构 2（G2）** 默认视图**不带 `load`**、非默认 **5/5 全带**（`app/src/views/registry.test.ts`，**12 用例**） | **H1** 会话：切到**每一个**非默认视图后原文节点仍在 DOM ∧ 挂载计数不减 · **F5** 笔记：切到 `cardflow` 后正文仍在 DOM ∧ 原文子树节点**同一性**不变 | **T10-M1**（`{resident}` → `{isDefault ? resident : null}`）⇒ `6 failed / 9 passed`，红含 **H1**；**T14-M5**（默认视图改回互斥条件渲染 = 旧 `SessionDetailPanel:200-206` 形态）⇒ `1 failed / 10 passed`，**唯一红 = F5** | `session[0].key="raw"` ✅ · `note[0].key="raw"` ✅ · `session[0].hasLoad=false` · `note[0].hasLoad=false` · **H1 11/11** · **F5 11/11** · exit 0 |
+| **② 非默认视图模块级惰性** | **A1** `views/**` 首屏静态可达 = **0**（工具 + TS-API **双口径**）· **A2** 生产运行时导入者**恰 2**（`pages/NotesPage.tsx` / `pages/SessionsPage.tsx`）+ `views/** → registry` 生产侧 **7 条边全是 `import type`**（运行时边 0）· **G7** 每个 `load` 体内**恰 1 个** `import(` ∧ 注册表顶部**0 个**视图组件静态 import（4 条 import 逐字全是 `import type`） | **H2** 切到 ⇒ 挂载 / 切走 ⇒ **不在 DOM** · **H3** `Suspense` + `ShellFallback` 在位 · **F6** 笔记侧惰性 + 卸载 + 记忆恢复 | **T10-M2c**（惰性视图 sticky 常驻 ∧ 去掉默认视图门控）⇒ `failed 1 / passed 14`，**仅 H2 红**；**T10-M3**（删 `<Suspense>` 包裹）⇒ `failed 5 / passed 10`，红含 **H3**；**T14-M6**（`display:none` 代替卸载）⇒ `failed 1 / passed 10`，**唯一红 = F6** | `load` 内 `import(` **5/5 恰为 1** · 顶部运行时 import **0** · **H2/H3/F6 各 11/11** · 懒 chunk **22 → 31** · exit 0 |
+| **③ 编辑态切视图先 `flushSave`、失败则阻断** | **F9** 既有断言原样绿（**文件头 `@ai-context` 注释，不是 `it`**） | **F1** reject ⇒ 值未变 + 目标未挂载 + `role="alert"` + 记忆未写 · **F2** resolve ⇒ 切换发生 + 目标挂载 + 无错误行 · **F3** 非编辑态直通（`editorRef.current === null`）· **F4** 阻断全过程 **0 个 toast 节点**（并证选择器有牙） | **T14-M1**（把 `catch` 分支改成「保存失败也继续切换」= C4 逐字禁止形态）⇒ `Tests 1 failed \| 10 passed (11)`，**唯一红 = F1** | **F1–F4 各 11/11 passed** · exit 0；**未做项登记**见下 |
+
+**① 的产物级佐证**：会话侧「常驻」字面量落在**懒 chunk** 而非首屏 —— `"session-resident-view" -> SessionsPage-BCLQ3FuS.js(1)` · `"note-resident-view" -> NotesPage-CTJSvFrT.js(1)`，**两者都不在首屏 3 个 chunk 里**。
+
+**② 的懒 chunk 逐 chunk 归属台账（R-1，**实测几写几**）**：BEFORE = `tmp/t1/lazy-chunks.md` @`2559a3fd`（入口 `index-4qKuUwYr.js`；**22 懒 / 1,790,753 B**），AFTER = 本批真实构建 @`b4edf8e4`（入口 `index-Bn5oI23G.js`；**31 懒 / 1,805,017 B**）。
+- **逐块具名（10 条全部有归属，10/10 闭合）**：`SessionTriTrackView` 2,155（T7）· `SessionProofView` 2,058（T8）· `SessionCardFlowView` 1,351（T9）· `NoteCardFlowView` 1,489（T12）· `SessionNotePreview` 11,472（T6b 的会话槽适配器）· **`registry` 4,943**（T6 的注册表 + T5 的 `ViewSwitcher`）· `NoteMarkdown` 6,564（T12）· `SessionScreenCard` 332（T3）· `fmt` 634（工具小块）· `RefineLaunchDialog` 19,250（**再分组，非本批代码**）。
+- **措辞口径（必须照此读）**：**「真新增 9 块 + 1 次共享块再分组（1 拆 2）」**，**不是**「ADDED 10 / REMOVED 1」。**闭合核算**：`50,248（ADDED 10）− 21,149（REMOVED 1）− 14,835（保留 21 个的字节变化）= +14,264 B` = 实测净 Δ **逐字节相等**；**再分组核算**：`21,149 = 19,250（RefineLaunchDialog 独立）+ 1,899（useTransientToast 迁入新共享块）` ✅ **无字节丢失**（两个源文件在批 5 区间**零提交**，`git log` 已证）。
+- **「27 与 28 各自出现的条件」（计划原问，按实测回答）**：计划假设「**每个新视图恰产生 1 个懒 chunk**」⇒ `22 + 5 = 27`（笔记「带证据三轨」**不**交付 = C2 判否）或 `22 + 6 = 28`（**交付**）。**实测 = 31 ⇒ 该假设不成立**：除 4 个视图本体 chunk 外，rollup 还产生了 **5 个共享块**（`SessionNotePreview` 适配器 / `registry` / `NoteMarkdown` / `SessionScreenCard` / `fmt`），并触发了 1 次共享块再分组（净 0 个新模块）⇒ **27/28 是「22 + 视图数」的下界式估算，不是可复现判据**；**终态一律报 31**。
+- **BEFORE 为何不用活树 `app/dist`**：T16 的警告在本批得到正面确认 —— T18-A 构建**前**的活树 dist（34 `.js` / 懒 31 / 入口 `index-Bn5oI23G.js` / mtime `14:49:49.490Z`）与 T16 自己声明的产物**三者逐字相同** ⇒ **它已含本批代码**，当 before 会得到 **Δ=0 的假读数**。BEFORE 因此改用 T1 台账，并在**导出树 @`2559a3fd`** 内**独立跑了一次真实构建**复核（构建 exit 0 / wall **11.5 s** / `789 modules`）：**22 懒 / 1,790,753 B 与 T1 台账逐字节相等**（`only in T1 = []` · `only in mine = []` · 同键不同字节 `[]` · 首屏集合逐字相同）。
+
+**③ 的未做项登记（逐条带归属）**：① **`RichEditorView` 的 Ctrl+E / 完成按钮路径仍不阻断**（今天就是 fire-and-forget，**不是本批引入的回归**，C4② 逐字禁止顺手扩大面）→ **批 8**；② **`flushSave` 返回类型未升级**（不改 `NoteEditHandle` 接口）→ **批 8 接口卫生**；③ **`RichEditorView` 内部若要显示保存错误做不到**（它自带 `status` state 保持原样）→ **批 7/8**；④ **错误行的位置重排**（批 5 **只预留槽位**，C11）→ **批 8**；⑤ **提示形态**：`catch` ⇒ 不切视图 + 保持编辑态 + **就近一行 `StatusLine kind="error"`**（**不用 toast**），宿主在**非 `NON_MIGRATED_14`** 的层（`NoteReadingView.tsx` / `NotesReadingColumn.tsx`）⇒ **两条 B1/B2 守卫一字未改且绿**（C7）。
+
+⚠️ **ID 撞名警告（引用变异体时必须带任务号）**：**T10 的 `M1`**（默认视图条件渲染）= 约束①的反向对照（6 条红）；**T14 的 `M1`**（`catch` 分支继续切换）= 约束③的反向对照（唯一红 F1）。**不是同一个变异体。**
+⚠️ **两条「无专属变异体」的判据**：**F9 是文件头注释而不是 `it`**（断的是**跨文件**的「既有断言未被动过」⇒ 单文件变异体无法表达；计划对它的反向形态写明「改任一条 ⇒ 红（**若红 ⇒ STOP，不许改判据**）」）· **A5①/A5②** 没有以自己为目标的变异记录（该性质分别由 **G2** 与 **F5/H1** 守着）。四条守卫自证缺口（G-1 A5① · G-2 A5② · G-3 A2③ · G-4 F9）逐条四要素见 `tmp/t18/measurements.md` §9.1，**只登记、不在收口提交里补测**（收口禁改代码），去向 **批 6/7**。
+
 ### 二、八门禁终态表
 （逐条命令 + exit code + 读数；vitest 必须给**既有 166 文件 / 1608 用例逐文件一条不少**的比对结论；首屏必须给 **dist mtime + 入口 chunk 名 + 提交 sha + Δ 与机理**；eager 给**工具与 TS-API 双口径**；Rust 如实写「未跑 + `git log` 空」）
+
+> **采集 provenance**：`HEAD = b4edf8e4f06669cf1062ccc43482f97ea99f700e` · 分支 `dev` · 八门禁采集窗口 **2026-09-12 22:57:07 – 22:58:51 +08:00** · 真实构建产出 `app/dist/index.html` mtime **`2026-09-12T14:58:51.595Z`**（= 22:58:51 +08:00）· 入口 chunk **`index-Bn5oI23G.js`** · 取锁 `LOCK_ACQUIRED attempt=1` / `LOCK_RELEASED`，事后 `Test-Path tmp/build.lock` = **False** · 原始输出全部落在 `tmp/t18/raw/**`（25 个文件）。
+
+| # | 门禁 | 命令（逐字） | exit | 读数 | 原始输出 |
+|---:|---|---|---:|---|---|
+| 1 | 行数 | `node scripts/line-limits.mjs --full` | **0** | `>600` 硬限 **0**（棘轮内）· 301–600 档 **122** · 登记条目 **122** ✅ 与基线**逐字一致**（**零新增登记**）；`--write` 复跑 **逐字节零 diff**（sha256 `3790451a…` 前后相同）⇒ **豁免表不在本收口提交路径里** | `raw/line-limits-full.txt` |
+| 2 | 文档 | `node scripts/docs-check.mjs` | **0** | 扫描 **277** / 检查 **177** · **五项全 ✅**（相对链接 · `file://` 目标 · 文件名规范 · 索引覆盖 · 模板源与实例）—— **本收口提交新增的链接全部可达** | `raw/docs-check.txt` |
+| 3 | 命令注册 | `node scripts/check-command-registry.mjs` | **0** | 定义 **312** / 注册 **312** / 重复 **0** ✅ 与基线**逐字一致** | `raw/command-registry.txt` |
+| 4 | 类型 | `cd app; npx tsc --noEmit` | **0** | **0 错**（`raw/tsc.txt` 仅 171 B，**全部是** `npm warn Unknown env config "manage-package-manager-versions"`，无一行 TS 诊断） | `raw/tsc.txt` |
+| 5 | 测试 | `cd app; npx vitest run` | **0** | **`testResults.length` = 184 文件** / `numTotalTestSuites` **647**（= `describe` 块数，**不是文件数**）/ 用例 **1770** · passed **1770** · failed **0** · pending **0** · todo **0** · `success` **true**；运行窗口 **47.11 s**（控制台逐字 `Test Files 184 passed (184)` / `Tests 1770 passed (1770)`） | `raw/vitest-full.json`（697,940 B）· `raw/vitest-metrics.json` |
+| 6 | 真实构建 | `node scripts/check-bundle-budget.mjs`（**取锁** `tmp/build.lock`） | **0** | 见下「首屏账」 | `raw/budget-build.txt` · `raw/budget-nobuild.json` · `raw/build-summary.json` |
+| 7 | 首屏图 | `node scripts/bundle-eager-graph.mjs` **+** `tmp/t1/eager-graph-tsapi.mjs` | **0 / 0** | **工具口径 91** 文件（**源 77 + CSS 14**）/ npm 包 **4** · **TS-API 真实边口径 66（结论口径）** · `--keep-type-only` **77** 自证（⇒「91 − 66 = 25」确由 **14 CSS + 11 条纯类型边**构成） | `raw/eager-tool.txt` · `raw/eager-tool.json` · `raw/eager-tsapi.json` · `raw/eager-analysis.txt` |
+| 8 | Rust | — | — | **未跑**（逐字见下） | `raw/rust-zero-change.txt` |
+
+**门禁 5 的「既有用例一条不少」比对结论**：`node …/tmp/t0/compare-perfile.mjs <本次 JSON 绝对路径> --frozen` ⇒ **exit 0**。基准指纹逐字 = **166 行 · sha256 `AD789A809C5F2E59`（全串 `AD789A809C5F2E59EBEABF4DFE3967E60B4B50979AFCDFD7292D6088B2D91C18`）· 1608 用例 · HEAD `2559a3fd` · 采集 2026-09-12 21:08/21:12 +08:00**；候选 = **184 文件 / 1770 用例** ⇒ **`LOST=0 SHRUNK=0 GROWN=4 ADDED=18`**。**闭合核算**：`166 + 18 = 184` ✅ · `1608 + 24(GROWN 增量) + 138(ADDED 用例和) = 1770` ✅。
+- **GROWN=4**：`ui/primitives/navHeight.consumption.test.ts` 3→6 · `ui/primitives/Modal.scroll-lock.test.tsx` 6→9 · `ui/primitives/style-contract.test.ts` 6→10 · `utils/colorPalette.test.ts` 40→43。
+- **ADDED=18（逐个用例数）**：`useNotesDeepLink.test.ts`(8) · `SessionDetailPanel.test.tsx`(4) · `NotesPage.groupFilter.test.tsx`(2) · `views/architecture.guard.test.ts`(17) · `views/architecture.slots.test.ts`(2) · `views/registry.test.ts`(12) · `views/registryResolution.test.ts`(10) · `views/useViewMemory.test.ts`(13) · `NotesReadingColumn.views.test.tsx`(11) · `SessionDetailHeader.test.tsx`(9) · `SessionScreenCards.test.tsx`(6) · `SessionViewHost.test.tsx`(11) · `surfaceTagRegistry.test.ts`(5) · `ViewSwitcher.test.tsx`(14) · `SessionCardFlowView.test.tsx`(6) · `SessionProofView.test.tsx`(5) · `SessionTriTrackView.test.tsx`(5) · `noteViews.test.tsx`(9)。
+- ⚠️ **仪器口径（必记）**：`numTotalTestFiles` **不存在** —— vitest **4.1.11** 的 JSON 顶层键只有 `numTotalTestSuites, numPassedTestSuites, numFailedTestSuites, numPendingTestSuites, numTotalTests, numPassedTests, numFailedTests, numPendingTests, numTodoTests, snapshot, startTime, success, testResults`（`hasOwnProperty` = false、`typeof` = `undefined`）⇒ **文件数一律用 `testResults.length`**。
+- **相对 T16 的一次变化**：`numPendingTests` **1 → 0**（`skipped` 归零），**全部由批 5 收口的两个守卫提交解释**（`1d4023e4` + `b4edf8e4`：+2 文件 / +19 用例 / skipped 1→0；闭合式 `1750 + 19 + 1 = 1770`）。
+
+**首屏账（门禁 6；dist mtime + 入口 chunk 名 + 提交 sha + Δ 与机理）**：`check-bundle-budget.mjs` **exit 0** · **首屏 JS 合计 gzip `100,485 B = 100.49 kB`**（原始 **318,299 B**；预算 200 kB ⇒ **余量 99.52 kB**）· 首屏 3 chunk = `index-Bn5oI23G.js` **108,620 B** + `vendor-react-lr0dg1MX.js` 192,536 B + `vendor-tauri-UIF4jgRy.js` 17,143 B · **懒 chunk 31 个 · gzip 583,980 B（583.98 kB，不计入预算）** · **CSS 3 个 · 63,229 B = 63.23 kB 原始 / 14.51 kB gzip（不计入判据，只报告）** · `index.html` 1,558 B · 字体（仅报告）`.ttf` 20 个 513,664 B / `.woff` 20 个 303,116 B / `.woff2` 19 个 256,168 B · vite 自报 `803 modules transformed` / `built in 3.67s` / 一条 `(!) Some chunks are larger than 500 kB`（`vendor-editor` 608.38 kB，**批 4 起既有、非本批引入**）。
+- **Δ 与机理（基线 = `091d1c3d` 冻结值，出处 `progress.md:46,123`）**：首屏原始 **317,778 → 318,299 B（+521 B / +0.16%）** ⇒ **全部落在入口 chunk**（108,099 → 108,620 B），`vendor-react` / `vendor-tauri` **逐字节不变**；gzip **100,297 → 100,485 B（+188 B / +0.19%）**；**首屏 chunk 个数 3 → 3（Δ = 0，构造性成立；新进首屏集合 = `[]`）**；懒 chunk **22 → 31（+9）**、gzip **575.16 → 583.98 kB（+8.82 kB / +1.53%）**；CSS **62.63 → 63.23 kB（+599 B）**（与 T5 的「首屏 CSS 16,568 → 17,172（**+604 B**）」同源）。
+- **`ViewSwitcher` 的首屏 Δ（C14① 的落点，**实测否证计划判词**）**：**JS Δ = 0 B + CSS +604 B** —— **T5 的时点读数**（当时 dist = 25 个 `.js`）：字面量 `ed-btn-group`/`ed-btn--segment` 在**全部 25 个 JS 里 0 命中**、只在**首屏 CSS** 里命中（首屏 CSS 16,568 → 17,172 = **+604 B**）⇒ rollup 把 `ViewSwitcher` 的 **JS tree-shake 掉了**（当时无任何调用点）；**终态**（34 个 `.js`）该字面量命中**懒 chunk** `registry-C-RvXIfE.js` —— 即**前后对照锚由 0 变为命中**，而**首屏 JS 仍无该模块**。**机理一句话：barrel 里有导出 ≠ 产物里有模块。**（总 CSS 口径：62.63 → 63.23 kB = **+599 B**，与 +604 B 同源，差额在 CSS 拼接/分块口径。）
+- **eager 的三件套与 Δ（门禁 7）**：工具 **89 → 91 文件**（= 源 **76 → 77** + CSS **13 → 14**）· **TS-API 真实边 65 → 66** · npm 包 **4 → 4** ⇒ **+2 全部是 `ui/primitives/ViewSwitcher.tsx` + `ViewSwitcher.css`**（**唯一**新增的 barrel 导出）；**`app/src/views/**` 首屏可达 = 0**、`views/registry*` = **0**、`pages/SessionsPage*`/`pages/NotesPage*` = **0**（两者都在懒 chunk 内）⇒ **没有任何页面被静态拉回首屏**。
+
+**门禁 8（Rust）逐字声明**：`git log --oneline 091d1c3d..HEAD -- app/src-tauri` ⇒ **空**（无输出）；`git log --oneline 4905d4d8..HEAD -- app/src-tauri` ⇒ **空**（无输出）⇒ **本批零 Rust 改动**（Global Constraints 非目标 1：不动 `src-tauri/**`）⇒ 判据仍是批 3 收口的 **2300 / 0 / 6**，但**本批未复跑 `cargo test`**。⚠️ **不得**把「未跑」写成「已跑」；⚠️ **不得**把 2300/0/6 当作本批读数（它是**继承值**）。
 
 ### 三、逐任务提交轨迹
 （`Task → commit sha → subject → 文件数`；**提交数用 `A^..B` 含左端点口径**并写明起止；如实列出区间内的非本批提交）
 
+**提交数（含左端点口径，逐条实测 `git rev-list --count`）**
+
+| 区间 | 读数 | 含义 |
+|---|---:|---|
+| `4905d4d8^..HEAD` | **88**（`HEAD = b4edf8e4`；**本节所在的收口提交落下去后 = 89**） | 含左端点（`4905d4d8` = 批 4 计划提交，起算点） |
+| `4905d4d8..HEAD` | **87**（收口后 **88**） | 不含左端点；`88 = 87 + 1` ✅ 自洽 |
+| `091d1c3d..HEAD` | **39** | 批 4 收口之后至今 |
+| **`091d1c3d..2559a3fd`** | **9** ★ | **「批 4 收口后追加」的真实 9 条**（4 修复 + 4 文档 + 1 计划）—— **不是** `091d1c3d..7d541254`（那只有 **5** 条） |
+| **`2559a3fd..b4edf8e4`** | **30** ★ | **批 5 本批** T0–T17 的全部提交（不含收口提交） |
+| `ad9d80d2^..HEAD` | **30**（收口后 **31**） | 批 5 全批含收口提交的含左端点口径（`ad9d80d2^` ≡ `2559a3fd`） |
+| 自洽 | `9 + 30 = 39` ✅ | = `091d1c3d..HEAD` |
+
+**「区间内的非本批提交」逐段列出（`4905d4d8^..HEAD` = 89 的分解）**：批 4 本体含计划与收口 **49**（`4905d4d8^..091d1c3d`）· 批 4 收口后追加 **9**（`091d1c3d..2559a3fd`，逐条：`ed07d491` `8a2dd5e1` `531eb93f` `cd85e4c3` `7d541254` `6038bb42` `11018f40` `2901511f` `2559a3fd`；按 Conventional Commits 类型 = **`test` ×5 + `docs` ×4**）· 批 5 **31**（`ad9d80d2^..HEAD`）⇒ `49 + 9 + 31 = 89` ✅。**边界链（批 4 收口 → 批 5 第一个任务提交）**：`2559a3fd docs(spec): fix row index in batch four correction` → `ad9d80d2 test(sessions): pin detail panel before split`。
+
+**逐任务轨迹（批 5 本批 30 条，oldest-first；文件数/增删 = 本仓库实测 `git show --numstat <sha>` 汇总）**
+
+| # | Task | sha | subject | 文件数 | +/− |
+|---:|---|---|---|---:|---|
+| 1 | T2 前置安全网 | `ad9d80d2` | `test(sessions): pin detail panel before split` | 1 | +164/−0 |
+| 2 | T4 | `e579df63` | `refactor(notes): move derivations to colorPalette` | 3 | +98/−19 |
+| 3 | T3 前置安全网 | `4bee9d7a` | `test(sessions): pin screen cards before split` | 1 | +218/−0 |
+| 4 | T2 拆件主体 | `0bf849d2` | `refactor(sessions): split raw view out of detail panel` | 4 | +467/−228 |
+| 5 | T3 抽单卡 | `06116283` | `refactor(sessions): extract single screen card` | 2 | +55/−10 |
+| 6 | T4 | `343b38f0` | `test(notes): pin page wiring of note derivations` | 1 | +89/−0 |
+| 7 | T2 · C18 棘轮重同步 | `f193808d` | `test(ui): resync ratchet baselines after split` | 5 | +17/−16 |
+| 8 | **T2 收口回执**（T18-A 的 §4.2 把它记为 T5 的第 2 提交；**台账 `progress.md` §十二 记为 T2 的提交 4** —— 本表从台账，因为它的内容是 `SessionViewHost.tsx` 的圆角落档、属 T2 拆件面） | `d48fca57` | `refactor(sessions): snap switcher radius to control token` | 3 | +20/−6 |
+| 9 | T5 | `afd35439` | `feat(ui): add ViewSwitcher segmented control` | 5 | +458/−0 |
+| 10 | T5 | `ca19275a` | `test(ui): pin ViewSwitcher barrel export` | 1 | +16/−0 |
+| 11 | T5 | `3c739c74` | `test(ui): narrow ViewSwitcher class token scan` | 1 | +10/−4 |
+| 12 | T5（第 4 提交） | `927aedf8` | `test(ui): drop inline svg from switcher probe` | 1 | +9/−3 |
+| 13 | T6a | `b2d5d477` | `feat(views): add view memory and slot contracts` | 3 | +333/−0 |
+| 14 | T7 | `f191ab9b` | `feat(views): add session tri-track alignment view` | 2 | +435/−0 |
+| 15 | T9 | `a41e9438` | `feat(views): add session card flow view` | 2 | +377/−0 |
+| 16 | T7 判据复核 | `02dd20ba` | `test(views): assert both no-invoke faces at once` | 1 | +21/−10 |
+| 17 | T8 | `d4794227` | `feat(views): add session proof view` | 2 | +383/−0 |
+| 18 | T11 | `a36145c5` | `feat(session-detail): make detail header sticky` | 2 | +212/−2 |
+| 19 | T8 判据修正 | `e73b3616` | `test(views): pin proof caption slot not wording` | 1 | +11/−3 |
+| 20 | T12 | `6d49bb21` | `feat(views): add note card flow view` | 4 | +463/−2 |
+| 21 | T15a | `cc49b09c` | `fix(ui): add call-site registry channel to surface ratchet` | 5 | +388/−83 |
+| 22 | T6b | `556515b8` | `feat(views): register view specs with session slot adapter` | 4 | +481/−0 |
+| 23 | T17 | `7deeb274` | `test(shell): bind nav-h fallback to token source` | 1 | +101/−0 |
+| 24 | T17（第 2 提交） | `c927d547` | `fix(primitives): restore scroll position on modal unlock` | 2 | +103/−1 |
+| 25 | T14 | `dadd2515` | `feat(notes): host views with flushSave guard` | 2 | +483/−79 |
+| 26 | T14（C19 授权的 2 行） | `a9f8fe97` | `feat(notes): inject note view specs into page` | 1 | +2/−0 |
+| 27 | T10（重落地） | `5f39cefe` | `feat(session-detail): wire views to registry` | 6 | +460/−139 |
+| 28 | T16 | `c652f67f` | `fix(deep-link): reset sticky focus* after consume` | 7 | +233/−27 |
+| 29 | T15 | `1d4023e4` | `test(views): guard architecture graph and slot props` | 2 | +355/−0 |
+| 30 | T15 收口修复 | `b4edf8e4` | `test(views): create slot probe dir in exported trees` | 1 | +6/−1 |
+| — | **T13** | *（无）* | **零提交**（C2/C17①：条件项判否 ⇒ 交付「为什么不做」的登记） | 0 | 0 |
+| — | **T18-A** | *（无）* | **零提交**（只产 `tmp/t18/**` 读数包） | 0 | 0 |
+| — | **T18-B（本节所在提交）** | *（自引用，无法写入本节）* | `docs(batch5): close out view layer readings` | 见下 | 见下 |
+| **合计（本批 30 条）** | | | | **76 次文件触碰**（含跨提交重复） | **+6,468 / −633** |
+
+**轨迹核对结论**：① **T13 零提交** ✅ 与台账一致（`progress.md` 逐字「**零提交**（开工 `6d49bb21` → 收工 `c927d547`）」—— 第 20 → 第 24 号之间确无 T13 的提交）。② **T10 / T14 各含 STOP 后重落地**：`5f39cefe`（T10 最终落地，6 文件 **+460/−139**）、`dadd2515` + `a9f8fe97`（T14 两提交，第二提交 = **C19 授权的 `NotesPage.tsx` 2 行**）。③ **收口前 HEAD（`b4edf8e4`）的 `git show --stat` 只含测试路径**（`app/src/views/architecture.slots.test.ts` **+6/−1**），**不含任何生产文件**。④ **计划估算「预计提交 17（+1 条件项）」vs 实测 30** ⇒ 计划估计偏低 **+12**，机理 = 多数任务按「安全网 / 实现 / 收口」拆成 2–4 个原子提交（T5 单独 4 条、T2/T3/T4/T14 各 2–3 条）。
+
+**本收口提交（T18-B）的 stat 与「删除行 = 0」自证**：`git show --stat HEAD` **只含 `docs/**`**（规格 / `docs/versions/v0.22.md` / 本计划 / `docs/adr/ADR-033` / `docs/adr/ADR-034`）；`git diff --numstat HEAD^ HEAD` ⇒ **删除列全部为 0**（逐文件读数见 `tmp/t18b/**` 与 `task-18b-report.md`）；`docs/standards/line-limit-exemptions.md` **不在提交路径里**（`--write` 复跑逐字节零 diff ⇒ 本批**零新增登记**）。
+
 ### 四、C1–C15 的实际结果
 （逐条：裁决摘要 → 实际做法 → 证据（文件 / 守卫 / 读数）；**照 §裁决落点表的顺序**，不重排、不合并）
+
+> **口径**：C1–C15 照 §裁决落点表的顺序逐条填「实际结果」（**不重排、不合并**）；**C16–C19 是裁决文件在计划冻结后的追加裁决**（`rulings.md` 的 C16 / C17 补录 / C18 / C19），按其编号顺序附在本节末，**不改 C1–C15 的次序**。
+
+| # | 裁决摘要 | 实际做法（终态） | 证据（文件 / 守卫 / 读数） |
+|---|---|---|---|
+| **C1** | 注册表落点 + `load` 取代 `Component`/`lazy` + `React.lazy`/`Suspense` | 落 `app/src/views/registry.ts` **109 行**；`ViewSpec = { key, label, icon, appliesTo, load? }`；宿主 `SessionViewHost` 用 `React.lazy` + `Suspense`（复用 `ShellFallback`） | **G2/G3/G7**（`views/registry.test.ts` 12 用例 · `views/registryResolution.test.ts` 10 用例）· **H2/H3** 各 11/11 · **A1/A2/A4** 全绿 · **首屏 Δ=0 构造性 + 实测**（构造：`views/**` 首屏可达 0；实测：真实构建 exit 0 / 首屏 100.49 kB）· `manualChunks` **零改动** · 规格 §7.1 加注 ✅（本收口提交） |
+| **C2** | 会话三轨 = 转写/画面/OCR；笔记「带证据三轨」先探针 | 会话 `tritrack` **已交付**（三轨 = `segments`/`screens`/`ocr_blocks`，**零新数据面**）；笔记侧按探针判否 **交付 2 视图**，`NoteEvidenceTrackView` **不做、不建空壳**（T13 **零提交**） | `views/session/SessionTriTrackView.tsx` **207 行** + `SessionTriTrackView.test.tsx` **5 passed** · `FROZEN_VIEW_KEYS.note = ["raw","cardflow"]` · 全仓 `NoteEvidenceTrack*` **0 命中** · 规格 §7.2 / §11-6 / §8.6 加注 ✅（本收口提交）· **R8 对拍**：全批**无**「笔记 3 视图已交付」表述 |
+| **C3** | 抽单卡 + 前置安全网 + 锚点集合不变 + 框选留容器 + 不加剧棘轮 | 抽 `session-detail/SessionScreenCard.tsx` 供两视图复用；`SessionScreenCards` 退化为「每屏一卡的列表容器」；**先补安全网再抽件**（`4bee9d7a` 在前、`06116283` 在后） | **S1–S4 + 阳性对照**（V2 批准的强化口径：id 锚点集合 + 卡片计数 + 逐字文案 + 展开态）· `SessionScreenCards.test.tsx` **6 passed** · 框选态留容器（`selectingScreen` 不复制）· **五类棘轮全绿**（9 文件 / 97 用例 / exit 0）· 单卡独立成块 **332 B** |
+| **C4** | 不改接口 + 就近 `StatusLine` 阻断 + 不用 toast + 显式登记未做 | `NotesReadingColumn` 的切视图路径改为 `try { await flushSave() } catch { 阻断 }`；`catch` ⇒ 不切视图 + 保持编辑态 + 就近 `StatusLine kind="error"` | **F1–F4 各 11/11 passed**（`NotesReadingColumn.views.test.tsx`）· **F4 断言「阻断全过程 0 个 toast 节点」并证选择器有牙** · 反向对照 **T14-M1** ⇒ 唯一红 F1 · **登记未做**：`NoteEditHandle` 返回类型未升级（批 8）· `RichEditorView` 的 Ctrl+E/完成按钮仍不阻断（批 8）· 错误行位置重排（批 8，C11） |
+| **C5** | 键口径 `view:default:{objectType}` + web 早退 + 新建 hook + **改判旧 D1** | `useViewMemory.ts` **70 行（顶格）**，键 = `view:default:{objectType}`（`objectType ∈ {"session","note"}`，**不含 `kind`**）；web 会话保持早退（不渲染切换器 ⇒ 不写记忆）；**`SessionDetailPanel.tsx:64` 的 `useEffect(() => setViewMode("raw"), [sessionId])` 整条删除**（不是「加条件」） | `views/useViewMemory.test.ts` **13 passed**（M1–M5：键形状 / 互不串 / 异常兜底 / 垃圾值回退 / 不写 `layout:`）· **H4b**「切到非默认后**换会话** ⇒ 仍是记忆里的视图」11/11 · 等价性 = 记忆由 `useViewMemory` 承载、**无记忆时**才回退默认 · `objectType` 不含 `kind` 的代价（web/photo/video 共享一份记忆）**只登记** |
+| **C6** | 5 个粘滞字段最小收敛 + 注释更正 + `App.tsx` ≤600 | 5 字段补 `onFocus*Consumed`（**声明形态与类型一律不动**，10 行 `useState` 逐行相同）；`useNotesDeepLink.ts:18` 的注释已改正；`App.tsx` **590/600** | **K1** `CommandPalette.kb.test.tsx` **9 passed** 且 `numstat` **空** ⇒ 既有断言一字未改 · **K2/K3**（消费后恰 1 次归零 · 连续两次跳同一对象都触发）· **K4**（注释与实现一致）· **K5**（≤600）· 5/5 变异体如期红、`ran` 全 true · `{value,key}` 全量统一 → **批 7/8 durable** |
+| **C7** | 不碰 `NON_MIGRATED_14`；提示落宿主层；守卫一字未改 | 编辑态提示落 `NoteReadingView.tsx` / `NotesReadingColumn.tsx`（**都不在名单内**）；`useNotesPageEditing.ts` / `NoteEditView.tsx` / `RichEditorView.tsx` **不在提交路径** | 两条守卫（`dialogMigration.e.test.ts` ② / `buttonMigration.test.ts` ④）**零 diff 且绿**（各 15 / 9 用例）· `NON_MIGRATED_14` **零触碰** · 残留登记：`RichEditorView` 内部若要显示保存错误**做不到** → 批 7/8 |
+| **C8** | 不归一 + 防「3 套变 4 套」+ 派生器显式命名 | 批 5 **不做** markdown 归一（转批 7）；`noteCardModel.ts` 复用既有 `react-markdown` 栈（自定义组件映射），文件头显式命名「**结构派生器，批 7 归一**」 | **N5**：`react-markdown` **运行时站点 == 2（不变）**、`views/**` 含 `import type` 也 **0 站点**、`remark-*`+`rehype-*` = **8（不变）** · **N6**（不传新槽 ⇒ DOM 逐字相同、既有 6 用例绿）· `NoteMarkdown.tsx` 244 → **266**（**只追加，删除行 = 0**）· 规格 §12 加注 ✅（含口径更正「**4 套活 + 1 套死**」） |
+| **C9** | 拆件在前 + 独立原子提交 + 无测试面先补判据 + 新文件 ≤300 + 不许动豁免表 | `SessionDetailPanel.tsx` **297 → 148**（四步抽件：297→172→150→148，兜底项「refineMsg 行并入 AuxPanels」已用；T10 接线下沉到 **182**）· `NotesPage.tsx` **300 → 288** · `ChatPage.tsx` **本批不动**（579/600） | 每个拆件**独立原子提交**且 `line-limits --full` 逐提交 exit 0 · 无测试面文件**先补安全网**（P1–P4 在拆前拆后各跑一次，4 个变异体全 `ran=true · red=true`）· 新文件全部 ≤300 · **`122/122` 零新增登记** · `ChatPage.tsx` **不在任何提交路径** |
+| **C10** | 20 条交接项归属 + 两处修正 | 留批 5 的 #2/#3/#11/#13/#14/#18 逐条落地（#3 按 C16/C13 改为**转批 8**）；#12 确定转批 6；#16 = 只裁不动（C7） | #13 → **J1–J3**（`navHeight.consumption.test.ts` **6 passed**）· #14 → `Modal` 的**纯函数判据** + 既有判据绿（`Modal.scroll-lock.test.tsx` **9 passed**）· #11 → **双口径入账**（工具 91 / TS-API 66；**不修工具**，修工具归批 8）· #1 → **H6/F7**（槽位）· #2 → **D1–D3**（粘性头）· **#19 不属批 5**（`git status --porcelain` 全程**只有** `?? docs/tech-debt/`） |
+| **C11** | 只预留槽位、不重排、加注 | 两侧各**恰 1 个**空槽位（`class="ed-view-error-slot" data-view-error-slot=""`），**位于切换器之后**；**不重排**任何既有 `StatusLine` 调用点 | **H6** `SessionViewHost.tsx:121`（剥注释后 1；裸子串 2，第 32 行是注释引文）· **F7** `NotesReadingColumn.tsx:268`（自闭合空元素）· 守卫 `architecture.guard.test.ts:250-258` **2 passed** · 变异 **T15-M-A5**（删槽）与 **T15-M-A5c**（上移到切换器之前）⇒ 各 `failed 1 / passed 16`，红 = A5③；反向对照 **T15-R-A5b** ⇒ 17 passed 绿 · 像素位置 → **批 8** · 规格 §5.1 加注 ✅ |
+| **C12** | `Surface` 两条转批 7 | **零动作** ✅（本批不扩 `SurfaceProps`、不动透明容器口径） | 读数已登记：**+3**（DOM 属性透传解锁的已点名处数）/ **+28**（透明边框容器处数）⇒ §七 follow-ups 具名批 7 · `ADR-033` §4 加注 ✅ |
+| **C13** | 粘性头 + jsdom 测不出 + 工具栏合并转批 8 | `session-detail/SessionDetailHeader.tsx` **161 → 176**：`position: sticky` + `top: var(--ed-space-4)`（4 px）+ `zIndex("raised")`（10）；**先补 1 条行为级判据** | `SessionDetailHeader.test.tsx` **9 passed**（改前 5 passed / 4 failed ⇒ 改后 9/9）· **真实粘性不可验**（jsdom 无布局引擎）⇒ 只登记，批 8 · 「笔记工具栏三层合并」→ **批 8**（含 F-3 的文件名更正：`components/NoteListToolbar.tsx`）· 规格 §6.2 与 `ADR-034` §登记 加注 ✅ |
+| **C14** | 目录/文件名/行数预算 + ① barrel/枚举/零行内 style/`--dur-micro` + ② 每视图「不 invoke」 | `app/src/views/`（`session/` + `note/`）建成；`ViewSwitcher.tsx` **135**（≤150）· `.css` **63**（≤80）· `.test.tsx` **225**；进 `ui/primitives/index.ts` barrel（**45 → 48**）并在 `style-contract.test.ts` 枚举里（**233 → 296**，用例 **6 → 10**，**只增不删**） | **W1–W3/W4**（受控值 / 回调 / 零行内 style）9/9 如期红 · **W7** 图标走注册表（类型层探针：非法名 ⇒ exit 2 + `TS2322` 指名 `IconName`）· **V3**（`style-contract` 只增 + 删除行 0）· **A3** `views/**` 零 Tauri（裸 0 / 声明级 0，阳性对照双侧命中）· 各视图不-invoke 判据（T4/C4/P5/N7/E4）· **① 的首屏 Δ 登记结果 = JS `0 B` + CSS `+604 B`** —— **计划的「不是 0」被实测否证** · **R-2 的类名空间折中已写进「诚实代价」（§五）** |
+| **C15** | 每新文件 ≥2 条行为级判据 + 各带变异体 + 四条变异体纪律 | 各任务的 Verification 表**逐行**给出「判据 ↔ 变异体 ↔ 期望」；`ran` 闸（`ran===false` ⇒ 仪器异常）；CONTROL 在 `tmp/t0/control`（冻结树） | 全批变异体**只引用、不重跑**（T18-A 派发书逐字要求）；每条在 §一 标 `task-N-report.md:行` 与 `tmp/tN/**` 路径 · **「只能登记」六项**：`scrollTop` 恢复真实性 · sticky 真实粘性 · 视图密度观感 · 切视图卡顿 · 真机/WebView2 · **惰性挂载的运行时内存效果**（字节面可测、内存面不可测）⇒ 全部落在 §六 |
+| **C16** | 计划期两条 STOP 的处置 + 两处控制方事实更正 | **STOP 1**：按 C13 裁 ⇒ #3 转批 8，C10 汇总行的 `#3` **作废**，**不启用** T20 条件任务。**STOP 2**：批准强化口径（`data-testid` 为空集 ⇒ 改 id 锚点集合 + 卡片计数 + 逐字文案 + 展开态 + 阳性对照）；**登记 1**：懒 chunk 必须实测（禁止把 28 写成 27）；**登记 2**：批准复用 `ed-btn` 基座 + 四条条件 | STOP 1 ✅（§裁决回执 §4 标「转批 8」）· STOP 2 ✅（`SessionScreenCards.test.tsx` **6 passed**，判据不退化为「渲染不报错」）· 登记 1 ✅（R-1 实测 **31**，逐块具名 10/10）· 登记 2 ✅（`Button` 的 `variant` 与 `Button.css` **零改动**；条件④「若必须改 ⇒ STOP」**未触发**）· 事实更正：`NoteListToolbar.tsx`（**95 行**）· `check-bundle-budget.mjs` **无锁机制** ⇒ 本批一律显式取锁 |
+| **C17** | T1 探针带来的口径裁决（**补录**） | ① **C2 开关 = T13 零代码**（笔记 2 视图 + 登记 + 规格加注留 T18）② **C8 口径 = 「4 套活 + 1 套死」** ③ **计划两处出入以实测为准**（`--keep-type-only` 实为 **76**、dist mtime 实为 **20:48:57**）④ **各建各自测试文件** | ① ✅ 见 C2 行 ② ✅ 规格 §12 加注已按此写 ③ ✅ §八 的偏差表已记 ④ ✅ 三个 `*View.test.tsx` 各自存在、**`sessionViews.test.tsx` 盘上不存在**（计划那三处 Files 的更正见 §八 ⑩） |
+| **C18** | 基线「只读」的**方向性**更正（迁移吃掉豁免 ⇒ 迁移者必须向下重同步） | **重同步由 T2 独占**（T3 及后续单元**不碰**任何 `*Baseline.ts` / 棘轮测试文件，只在报告里列「迁走了哪些字面量」供核对）；`f193808d` 一次落完 | 弱化灰 **64 → 63** / 文件 44 → **43**（删键）· 字号越界 **558 → 551**（键 8 → 1）· 边框 **226 → 223** + 锚 108 → 107 · 越界圆角 **261 → 260** + 锚 109 → 108 · 三红 **114 → 113** · **`FROZEN == Σentries` 保持** · 每族各带变异体（M1–M4 全红）+ **反例守卫 M5 绿** · 五类棘轮终态 **9 文件 / 97 用例 / exit 0** |
+| **C19** | 笔记侧接线归属（计划 Task 14 Files vs 单写者约束）⇒ 授权 T14 改 `NotesPage.tsx` **2 行** | T14 第二个原子提交 `a9f8fe97` = `+2/−0`（`+1 import { viewsFor }` + `+1 prop views={viewsFor("note")}`），`--only` 显式路径、**改完立刻提交** | **四条条件全满足**：① 第二个原子提交且 `--stat` 只含该文件（**1 文件 +2/−0**）② **改后 288 ≤ 300**、**未动豁免表** ③ **偏差已登记**（「≤285 是 T4 拆件时点目标；+2 推到 287，T16 的 +1 到 288，仍 ≤300、零新增登记」）④ **保留 `views` 缺席时的退化分支**（单视图：原文、不渲染切换器、不写记忆，由 F8 类判据覆盖）· 一致性：两侧槽位形态与 T10 **逐字一致**，由 T15 的图级守卫跨两侧查 |
 
 ### 五、诚实代价
 （`ViewSwitcher` 进 barrel 的首屏 Δ 与机理 · **R-2 的类名空间折中** · `preview` 迁懒 chunk 的字节重分配 · `SessionViewHost`/`SessionAuxBlocks` 多拆两个文件的行数账 · 既有断言的改动数 = **0**（这是本批最值得记的一笔））
 
+**① 首屏账（gzip）**：**100.30 → 100.49 kB**（**100,297 → 100,485 B，+188 B / +0.19%**），入口 chunk 原始 **108,099 → 108,620 B（+521 B）**；**余量 99.52 kB**（预算 200 kB）。**首屏 chunk 个数 3 → 3（Δ = 0，构造性成立；新进首屏集合 = `[]`）**，但**入口 chunk 内容变了**。**CSS 62.63 → 63.23 kB（+599 B，不计入判据、只报告）**。**懒 chunk 22 → 31 个**、**583,980 B = 583.98 kB gzip**（原始 **1,805,017 B**，**不计入预算**；基线 1,790,753 B ⇒ **净 Δ = +14,264 B**）。
+
+**② `ViewSwitcher` 进 barrel 的首屏 Δ 与机理（C14① **被实测否证**）**：**JS Δ = 0 B** + **CSS +604 B**。机理 = **rollup 把 `ViewSwitcher` 的 JS tree-shake 掉了**（T5 时点无任何调用点；T5 实测：`ed-btn-group`/`ed-btn--segment` 在**全部 25 个 `.js` 里 0 命中**、只在首屏 CSS 里命中，首屏 CSS 16,568 → 17,172 = **+604 B**）；终态（34 个 `.js`）该字面量命中**懒 chunk** `registry-C-RvXIfE.js` ⇒ **前后对照锚由 0 变为命中**，而**首屏 JS 仍无该模块**。**教训一句话：barrel 里有导出 ≠ 产物里有模块** —— 计划的判词（「不是 0，机理 = barrel 已在首屏」）**方向对、结论错**。
+
+**③ 懒 chunk 的字节重分配（措辞必须照 E7 读）**：**「真新增 9 块 + 1 次共享块再分组（1 拆 2）」**，**不得**写成「ADDED 10 / REMOVED 1」（那会读成「新增 10 块代码、删掉 1 块代码」）。**逐块具名 10/10**：`SessionTriTrackView` 2,155 · `SessionProofView` 2,058 · `SessionCardFlowView` 1,351 · `NoteCardFlowView` 1,489 · `SessionNotePreview` 11,472 · **`registry` 4,943** · `NoteMarkdown` 6,564 · `SessionScreenCard` 332 · `fmt` 634 · `RefineLaunchDialog` 19,250。**再分组闭合**：`21,149（旧共享块 useTransientToast-*.js）= 19,250（RefineLaunchDialog 独立）+ 1,899（useTransientToast 迁入新共享块）` ✅ **无字节丢失**。**总闭合**：`50,248 − 21,149 − 14,835 = +14,264 B` = 实测净 Δ **逐字节相等**。**「页 chunk 变小、总懒基本持平」的读数**：`SessionsPage` 页 chunk **−10,288 B**（73,703 → 63,415）· `NotesPage` 页 chunk **−4,815 B**（161,732 → 156,917）；另有 `colorPalette` **+229 B**（T4 把笔记派生搬进 `utils/colorPalette.ts`，124 → 175 行）· `KnowledgePage` **+39 B**。
+
+**④ R-2 的类名空间折中（语义代价，明确选中）**：`ViewSwitcher` 的容器 `.ed-btn-group` + 段 `.ed-btn--segment` **借用了按钮基座命名空间** —— 读到它的人会先以为它是 `Button` 的一个档位。**换来的收益**：`Button` 的 `variant` 枚举与 `Button.css` **零改动**、`motion-coverage.test.ts` 与 `style-seams.test.ts` 的**既有计数零改动** ⇒ **本批对既有断言的改动数 = 0**。
+
+**⑤ 拆件多出两个文件的行数账**：C9 的「主文件 ≤150」在只抽一个 `SessionRawView` 时**达不到** ⇒ 拆件产物从 1 个变 **3 个**（`SessionRawView.tsx` **157** · `SessionViewHost.tsx` **136** · `SessionAuxBlocks.tsx` **127**），**没有为凑数而拆**（三者各有独立职责：原文视图 / 视图宿主 / 顶部与尾部信息块与面板）。**逐件终态与超支**：`SessionDetailPanel.tsx` **182**（> C9 的 ≤150，T2 拆到 148 后被 T10 接线下沉）· `NotesReadingColumn.tsx` **290**（> 预算 260，超 30）· `useViewMemory.ts` **70 = 顶格（余量 0）** · `navHeight.consumption.test.ts` **165**（预算 110）· `Modal.scroll-lock.test.tsx` **269**（追加预算 +60）· `NoteMarkdown.tsx` **244 → 266**。**口径：预算是估算，绑定约束是 ≤300 + 零新增豁免登记** ⇒ 全部合规（301–600 档 **122 → 122**、`FROZEN_OVER_LIMIT` 仍为空数组）。
+
+**⑥ 本批最值得记的一笔：既有断言的改动数 = 0** —— `dialogMigration.e.test.ts`（15 用例）/ `buttonMigration.test.ts`（9 用例）**一字未改且绿**；`CommandPalette.kb.test.tsx` **9 passed** 且 `numstat` **空**；`Modal.scroll-lock.test.tsx` 的 `GROWN` 是**追加**（6 → 9）不是改写；`style-contract.test.ts` 是**只增枚举**（6 → 10，删除行 0）。**唯一被改的既有数字是五类棘轮基线的「向下重同步」**（C18 授权、T2 独占执行），且**每条被改的判据各带自己的变异体**。
+
+**⑦ 拆件顺带迁移的三处可见/观感变化（登记，不是「写法变了、观感不变」）**：**字阶 `11 → 11.5` / `13 → 12`** · **弱化灰 `#9ca3af → ink-3`**（批 4 的 5.13:1 口径延续）· **圆角 `6 → 5`**（落 `--ed-radius-control` 档 —— 起因是 T2 一度把圆角改成 `4`「躲开冻结集合」被打回，纪律 #53：**棘轮读数分辨不了「躲开冻结集合」与「落到档位」**，只有逐处自审表能分辨；最终落到**真档位**）。**这些全部只有类级/属性级/源码级证据**（jsdom 不排版；真机已裁决跳过）⇒ **批 8 的像素探针才是判据**。
+
+**⑧ 零新增依赖 / 零新增豁免登记 / 零 Rust 改动**：npm 包 **4 → 4**；`manualChunks.ts` **零改动**；301–600 档 **122 → 122**；`git log … -- app/src-tauri` **两条为空**（判据仍是批 3 的 2300/0/6，**未复跑**）。
+
+**⑨ B9 的逐字中间态**：**「只有接缝、没有纲领」—— 三档强度 / 双基调 / GSAP 在批 6。** 批 5 交付的是**内容与结构**（视图层骨架 + 多视图可用 + `--ed-dur-micro` 120 ms 的响应层接缝 + 两处 `position: sticky`/`Suspense` 接缝），**手感未设计、未调参**；**验收不得把接缝当最终手感，也不得声称动效系统已交付**。
+
 ### 六、未验证（诚实单列，**不许含糊**）
 （§诚实边界 逐条搬入；**真机/WebView2 用户已裁决跳过**；**不许出现「已在真机确认」类表述**）
+
+> **口径**：逐条**区分「仪器不可达」与「本批未做」** —— 前者是**工具/环境限制**（本批造不出读数，换批次也造不出，除非换仪器），后者是**做得到、但不在本批范围/预算内**。**两类都不许含糊成「未验证」一笔带过**；**本批任何一条都不得被读成「已在真机确认」。**
+
+**A. 仪器不可达（工具/环境限制，本批无法造出读数）**
+
+| # | 项 | 为什么不可达 | 本批给了什么（替代读数） |
+|---|---|---|---|
+| **U1** | **真实粘性头的粘性**（C13） | **jsdom 无布局引擎** —— 无法验证滚动后元素是否真的吸顶 | 只给**静态结构级**判据（`SessionDetailHeader.test.tsx` 9 passed：`position: sticky` ∧ `top` 来自 token ∧ 层级）+ 祖先链核验；计划 §诚实边界已裁「只登记」 |
+| **U2** | **真实滚动恢复**（`scrollTop`，T17） | **jsdom 的 `scrollingElement` 不滚动**（T17 已留 `probe-jsdom-scroll*.json` 证明**探针本身有效**、是环境不滚动） | 只给 `Modal` 的**纯函数**判据（原值快照 / 引用计数 / 解锁恢复调用）+ `Modal.scroll-lock.test.tsx` **9 passed** |
+| **U3** | **惰性挂载的运行时内存效果** | 需要真机/DevTools 采样；本机无 headless 内存探针 | **字节面可测并已给**（懒 chunk 22 → 31 / 583.98 kB gzip / 页 chunk −10,288 与 −4,815 B）；**内存面不可测** ⇒ 计划 §裁决落点表与 C15 逐字列入「只能登记」 |
+| **U4** | **切视图卡顿 / 视图密度观感 / 像素位置与可达性**（C11①） | 需真实渲染 + 人眼/性能采样（jsdom 不加载 CSS、不排版） | 只给类级/属性级/源码级证据；**批 8 的像素探针才是判据** |
+| **U5** | **真机 / WebView2** | **用户已裁决本批跳过**（计划 V6 逐字） | 无替代读数；**不得**出现「已在真机确认」类表述 |
+| **U6** | **`loadingRatchet.test.ts` 的「299」原始声明为何是 299** | 需追溯批 4 的中间树；本批**零 `checkout` 纪律**下不可达 | 终态 **181** 已由台账归因（批 4 收口把扫描器搬进新文件 `loadingScan.ts` = **101 行**） |
+| **U7** | **`textBaseline.ts` 声明 299 → 实测 297 的机理** | 同上（需批 4 中间树） | **如实写「机理未判定」**，**不许为补这个数字去 checkout**（= T18-A 的 U-1） |
+| **U8** | **首屏 gzip 残差（T5 的 ±1 B）的逐字节归因** | A 树的产物**已随清理删除** ⇒ 无法逐字节对拍 | 已给候选机理（rollup 的 **hash 级联**：入口含懒 chunk 的 `import()` 映射；A/C 两树 14/22 个懒 chunk 改名而字节不变），量级 < 批 4 同源噪声（9 B） |
+
+**B. 本批未做（做得到，但不在本批范围/预算内）**
+
+| # | 项 | 性质 | 说明 / 谁会做 |
+|---|---|---|---|
+| **N1** | **变异体复跑** | 本批未做（**派发书逐字禁止**：各单元的变异读数已留档，只引用 + 标出处） | 本批在 §一/§四 逐条标 `task-N-report.md:行` 与 `tmp/tN/**` 路径；**未独立复跑任何一个变异体** |
+| **N2** | **门禁 8（Rust）** | 本批未做（零 Rust 改动已证，两条 `git log` 为空） | `cargo test` **未跑** ⇒ 2300/0/6 是**继承值** |
+| **N3** | **视图的真实数据分布**（视图在真实库上会拿到什么形状的数据、空/满/极端比例） | 本批未做（需真实 SQLite + 真实会话/笔记数据；本批只做静态只读探针与注入式测试） | 判据面：各视图的空态/退化分支有测试，但**真实分布未验**；建议与批 7 的 `evidence` 视图前置功课合并 |
+| **N4** | **真编辑器 handle 的接线**（`RichEditorView` 真实 `NoteEditHandle` 与 `flushSave` 的真接线） | 本批未做（判据用**注入替身 + `vi.mock`**） | F1–F4 断的是**宿主层语义**（注入的 `flushSave` reject/resolve），**不是真编辑器**；真编辑器接线 → **批 8 接口卫生**同批 |
+| **N5** | **`onConsumed` 进 deps 带来的额外 IPC 次数** | 本批未做（T16 只证「消费后恰 1 次归零 / 连续两次可触发」，**未计 IPC 调用次数**） | → 批 7/8 未接线落地 pass 一并量 |
+| **N6** | **`{value,key}` 全量统一**（C6） | 本批未做（**durable 登记批 7/8**） | 若届时要动，**必须先请裁改写 `CommandPalette.kb.test.tsx` 的既有断言** |
+| **N7** | **`evidence` 视图**（笔记「带证据三轨」） | 本批未做（**C17① 的「缺数据前置」**：读取路径不存在） | → **批 7，且必须先写规格**（E2 降级为 ms 最近邻 · E1/E3 改「带锚点段落数」· 覆盖四类无锚点 fixture） |
+| **N8** | **markdown 归一**（3 套 → 1） | 本批未做（C8；口径「**4 套活 + 1 套死**」） | → **批 7** |
+| **N9** | **`RichEditorView` 的 Ctrl+E / 完成按钮仍不阻断** | 本批未做（C4②；**非本批引入的回归**，逐字禁止顺手扩大面） | → **批 8** |
+| **N10** | **逐块 chunk 重排的逐字节归因**（每个保留 chunk 的字节变化为何是那个数） | 本批未做（只做了**净额闭合**与**10/10 归属**） | 已给的闭合：`50,248 − 21,149 − 14,835 = +14,264 B`；**逐字节**归因需逐 chunk 反编译级对拍 ⇒ 不属本批预算 |
+| **N11** | **规格 8 处加注的落位核对（N5）与「规格删除行 = 0」** | **本收口提交已完成**（T18-A 只提供数字） | 逐条落点见 `task-18b-report.md` 的处置表；`git diff --numstat HEAD^ HEAD` 删除列全 0 |
 
 ### 七、follow-ups（逐条具名归属）
 （C10 的 20 条 + 本批新增项，逐条给批次：批 6 / 批 7 / 批 8；至少含：`flushSave` 接口升级 · 错误行位置 · markdown 归一 · `focus*` 全量统一 · 五类棘轮余量 · `Surface` 两条 · 工具栏三层合并 · `bundle-eager-graph` 工具 · 「只能登记」六项）
 
+**A. 批 6（动效系统）**
+
+| 项 | 依据 / 读数 |
+|---|---|
+| **ADR-035 = L4 动效纲领与引擎**（GSAP + 四层 + 三档 + 双基调 + 6 个签名动效） | 批 5 **未新增任何 ADR**、**未装 GSAP**；接入**必须**用 `import()`（判据见批 2 计划 Task 5） |
+| **token 真源补 `pill` 档四处**（`app/scripts/gen-tokens.mjs` · `ui/tokens.gen.ts` · `ui/tokens.css` · `ui/primitives/tokens.drift.test.ts:52`） | 批 4 的 `Surface radius="pill"` 走 `var()` 兜底；批 5 **零动作**（`views/**` 不消费 `pill`） |
+| **`ink-4` 与 §4.3 条件③（审校模式 ≥4.5:1）** | 仓内**仍无实现**；批 5 的视图层一律 `ink-3`（5.13:1），**`ink-4` 0 使用** |
+| **`Toast` 的 `belowNav` 堆叠缺陷**（批 4 交接 #12） | C4 选 `StatusLine` 而非 toast ⇒ 本批不消费该路径 |
+| **相变两态（规格 §6.3）· 列折叠连续运动（Flip）· `pinnable` 定值** | 批 3/`ADR-034` §登记 的既有登记 |
+
+**B. 批 7（未接线落地）**
+
+| 项 | 依据 / 读数 |
+|---|---|
+| **笔记「带证据三轨」**（**必须先写规格**） | C17①：读取路径不存在 ⇒ 必须改规格（E2 降级为 ms 最近邻 · E1/E3 改「带锚点段落数」）并覆盖 `OcrDirect`/`Web`/手动笔记/`anchor_timestamps=false` 四类**无锚点 fixture** |
+| **3 套 markdown 渲染器归一** | 口径「**4 套活 + 1 套死**」（`NoteMarkdown.tsx:18` · `ChatMessageMarkdown.tsx:8` · `utils/refineDiff.ts:78 mdLineHtml` · `structuredBlocks.ts`）；批 5 只保证**运行时站点 2 不变** |
+| **`Surface` 两条**：① DOM 属性透传（解锁 **+3** 处）② 透明容器是否接受多一层底（**+28** 处） | D12；接受 ② 会要求**抬高** `surfaceRatchet` 两条冻结值（「只许降」倒退）⇒ 需一次**显式裁决** |
+| **`{value,key}` 全量统一** | C6 durable；动它须先请裁改写 `CommandPalette.kb.test.tsx` 的既有断言 |
+| **`RichEditorView` 内部若要显示保存错误** | C7 残留登记（它自带 `status` state 保持原样）；与批 8 的接口卫生同批 |
+| **`evidence` 视图的缺数据前置 · 视图的真实数据分布** | 见 §六 N3/N7 |
+| **`onConsumed` 进 deps 的额外 IPC 次数** | 见 §六 N5 |
+| **`b1-non-migrated`（回退动作 **9** / 冻结处数 **14**）与 B1/B2 守卫范围** | **批 5/7 的前置裁决**：批 5 的编辑态提示落**宿主层**、`NON_MIGRATED_14` **零触碰**；要迁它们的排版**必须先由控制方裁决守卫范围** |
+
+**C. 批 8（治理收口 / 像素 pass）**
+
+| 项 | 依据 / 读数 |
+|---|---|
+| **笔记工具栏三层合并为单行** | C13 逐字转批 8（要动 `NotesPage` **288/300** + `NoteListView` **241** + `components/NoteListToolbar.tsx` **95** 三个**无测试面**文件） |
+| **错误行的位置重排** | C11：批 5 **只预留槽位**（两侧各恰 1、空、在切换器之后）；位置与可达性判定需真实视口 |
+| **`flushSave` 接口升级**（`NoteEditHandle` 返回类型 → `Promise<boolean>`） | C4① 的显式登记（本批**不改接口**以保住零既有断言风险） |
+| **`RichEditorView` 的 Ctrl+E / 完成按钮仍不阻断** | C4② 的显式登记（**非本批引入的回归**） |
+| **真机 / WebView2 验收**（含**像素/观感探针**：字阶 11→11.5 / 13→12 · `#9ca3af → ink-3` · 圆角 6→5 · 视图密度 · 切视图卡顿 · 槽位像素位置） | **用户已裁决本批跳过**；jsdom 不排版 ⇒ 只有类级/属性级证据 |
+| **`bundle-eager-graph.mjs` 把 `import type` 计成静态边（工具本身）** | C10 修正②：批 5 **留批 5 但只作为判据口径**（双口径并列），**不修工具** ⇒ 修工具归批 8 |
+| **`check-bundle-budget.mjs` 的两个已实测缺口**（嵌套输出路径静默假绿 · 把「非首屏」说成「仅动态可达」的假文案）+ **接 CI / pre-commit** | 批 2 登记；批 5 承其纪律（显式取锁）但**未接线** |
+| **`docs/tech-debt/`（191 KB，未入库）的处置** | 待用户裁决；批 5 的 `git status` 全程只有 `?? docs/tech-debt/` |
+
+**D. 守卫自证缺口（§9.1 的四条；**只登记、不在收口提交里补测** —— 收口禁改代码）**
+
+| # | 缺口 | 该性质**由谁守**（有牙的判据） | 去向 |
+|---|---|---|---|
+| **G-1** | `architecture.guard.test.ts:239-243` 的 **A5①** 只读 `registry.ts` 里 `FROZEN_VIEW_KEYS` 的**文本**（`expect(frozen.includes('session: ["raw"'))`），**从不读 `SESSION_VIEWS[0].key`** ⇒ 该条从设计上就打不红自己（配套变异 `T15-M-A5d` 的红命中的是 **A4①·A4②**） | **G2** `views/registry.test.ts:81`（变异 `g2-default-gets-load` ⇒ `4 failed / 18 passed`，红含 G2①②）+ T18-A 的**独立结构实测**（`session[0].key==="raw"` ∧ `note[0].key==="raw"` ∧ 默认无 `load`） | **批 6/7**（若要自有牙齿 ⇒ 把 `SESSION_VIEWS[0].key` 也读进来做真对拍；**属代码改动**） |
+| **G-2** | `architecture.guard.test.ts:244-248` 的 **A5②**（两个宿主的「默认视图常驻 display 三元渲染」）在 `tmp/t15/mutants-summary.json` 的 10 条变异里**无一条以它为目标**；最接近的 `T14-M5` 的 `testFiles` 只有 `["src/components/notes/NotesReadingColumn.views.test.tsx"]` ⇒ **守卫文件不在该变异的测试面内** | 行为级 **F5**（同一条 `T14-M5` ⇒ 唯一红 F5）· 会话侧由 **H1**（`T10-M1` ⇒ 6 条红含 H1）守 | **批 6/7**（若要自有牙齿 ⇒ 在**含守卫文件**的测试面里重跑该变异；**属变异重跑**） |
+| **G-3** | `architecture.guard.test.ts:119` 的 **A2③**（`views/**` 不导入 `pages/**` / `shell/**`）无 A2③ 目标的变异；且该条的**前提已被实测收窄**（计划原以为零 `components/**`，实测 **4 条真实边**） | T18-A **独立复测今日读数 = 0 条边** + **仪器双侧自证**（同正则对 2 个阳性样本报 true、对 3 个阴性样本报 false）；判据仍在守卫里持续执行（2 passed） | **批 6/7**（若要自有牙齿 ⇒ 造一条「`views/**` import `pages/**`」的变异；**属变异重跑**） |
+| **G-4** | **F9**（`NotesReadingColumn.views.test.tsx:6-21` 的文件头 `@ai-context` 注释，**不是 `it`**） | ① **冻结逐文件基线** `tmp/t0/compare-perfile.mjs --frozen`（本批 exit 0，**`LOST=0 SHRUNK=0`**）② **命令级零 diff 证据**（`task-14-report.md:71`：5 文件 **36 用例 / 0 失败**；复跑 6 文件 **38 用例 / 0 失败**；`git diff --numstat` **空**） | **批 6/7**（若要加强 ⇒ 把「四文件零 diff」做成**工具级断言** —— T0 的 `--frozen` 已经是这个形态，**本批已跑通**） |
+
+**E. 本批新增的 follow-up（不在 C10 的 20 条内）**
+
+| 项 | 依据 / 读数 | 归属 |
+|---|---|---|
+| **卡片插槽 API 若 T9 后续需要** ⇒ **在 T9 消费时设计**（**本批未预扩**） | T9 的卡片流复用 `SessionScreenCard`；批 5 **没有**为「卡片插槽」预建 API（避免无消费方的抽象） | **T9 后续消费时** |
+| **`Text` 的 558 处字号越界** | 批 4 只冻结不迁；**本批拆件顺带迁 7 处 ⇒ 实测 551**（C18 重同步 `FROZEN_FONT_OOB_TOTAL` 558 → 551，键 8 → 1） | **批 5/6** |
+| **五类棘轮余量（弱化灰 63/43 · 字号越界 551 · 边框 223 + 越界圆角 260 + 阴影 24）** | 批 4 §11-3 的 B11 中间态余量；批 5 只做**向下重同步**（不许抬高） | **批 5/7** |
+| **`FROZEN_NUMERIC_ZINDEX` 等批 4 遗留项** | 见批 4 计划 §收口回写 §七 | **批 5/7** |
+| **`numTotalTestFiles` 不存在** ⇒ 后续批次引用 vitest 文件数一律用 `testResults.length` | vitest **4.1.11** 实测（顶层键 12 个、`hasOwnProperty` false） | **全批次纪律**（已写进规格 §11-11 加注） |
+| **「活跃树 `app/dist` 可能滞后一整个批次」** ⇒ 任何 before/after 必须**同源两棵树各跑一次真实构建** | T16 实测 + 陷阱 #103/#109；批 5 已按此执行（导出树 @`2559a3fd` 独立构建） | **全批次纪律** |
+| **「chunk 名不是稳定标识」** ⇒ 判 chunk 增删必须用**模块级字面量归属**或**字节闭合核算** | 陷阱 #110（按名字 diff 会同时产生假 ADDED + 假 REMOVED） | **全批次纪律** |
+
 ### 八、与计划的偏差（本节自陈）
 （实施中偏离计划处逐条列：哪一步 · 为什么 · 代价 · 谁批准。**必须含**：① 拆件产物从 1 个变 3 个（若执行期确实如此）② 懒 chunk 的**实测值**与 27/28 的关系 ③ T13 的实际路径（交付 3 视图 / 零代码登记）④ 任何被突破的行数预算（口径：**预算是估算，绑定约束是 ≤300 且不新增豁免登记**）⑤ 计划期错处（若有））
+
+**逐条（22 条；每条给「哪一步 · 为什么 · 代价 · 谁批准/依据」）**
+
+| # | 偏差 | 为什么 | 代价 / 读数 | 谁批准（依据） |
+|---:|---|---|---|---|
+| 1 | **拆件产物从 1 个变 3 个**（`SessionRawView` + `SessionViewHost` + `SessionAuxBlocks`） | C9 的「主文件 ≤150」在只抽一个 `SessionRawView` 时**达不到**（逐块行数实测见 Task 2 Step 2 的四步抽件） | 多 2 个文件的行数账（157 / 136 / 127）；**没有为凑数而拆**（三者各有独立职责） | 计划 §规模与预算 §1 的注已预告「T18 需如实登记」 |
+| 2 | **懒 chunk 实测 31（期望 27 或 28）** | 计划的「每视图恰 1 个 chunk」假设不成立：另有 5 个共享块 + 1 次共享块再分组 | 逐块具名 **10/10 闭合**；**实测几写几** | C16 登记 1 逐字（禁止把 28 写成 27）；R-1 |
+| 3 | **T13 的实际路径 = 零代码登记**（不是「交付 3 视图」） | 只读探针判**不存在**逐段级「笔记 ↔ 证据」读取路径 | 笔记侧 = **2 视图**；规格 §7.2/§11-6 就地加注；产品机会登记批 7 | **C2 + C17①**（逐字「不许做空壳视图」） |
+| 4 | **计划「预计提交 17（+1 条件项）」→ 实测 30** | 多数任务按「安全网 / 实现 / 收口」拆成 2–4 个原子提交（T5 单独 4 条、T2/T3/T4/T14 各 2–3 条） | 提交数 **+12**；逐个 sha 见 §三 | 无（估算偏差，如实登记） |
+| 5 | **测试文件从「共用 `sessionViews.test.tsx`」改为各自测试文件** | 计划 Task 7/8/9 的 Files 与「T7∥T8∥T9 可并行」**互斥**（三单元写同一文件必然丢更新） | **`sessionViews.test.tsx` 盘上不存在**；实盘 = `SessionTriTrackView.test.tsx` / `SessionCardFlowView.test.tsx` / `SessionProofView.test.tsx` | **C17④**（控制方补录裁决） |
+| 6 | **「13 个新文件」台账按实测改写** | 计划 §规模与预算 §1 的口径与实盘不同（计划按「新增生产文件」计，实盘 `views/**` 17 文件 = 9 生产 + 8 测试） | 终态按 `views/**` **17 文件**（全部 ≤300，最大 273）报 | 计划 §规模与预算 §1 的注（「T18 需如实登记」） |
+| 7 | **C14① 被实测否证**（计划：`ViewSwitcher` 进 barrel ⇒ 首屏 Δ**不是 0**、机理 = barrel 已在首屏） | 实测 **JS Δ = 0**（rollup tree-shake 进懒 chunk）+ **CSS +604 B** | 计划的判词**方向对、结论错** ⇒ 已写进 §五 ② | T5 的同源两树真实构建（`d48fca57` vs `927aedf8`） |
+| 8 | **W4 与 Step 1/Step 3 互斥** | Step 1（不设状态类）+ Step 3（枚举恰 2 项）与 W4 第一条子句（选中段与未选中段 `className` 不同）不可同时成立 | W4 **强化**为「每段 `className` 逐字等于 `ed-btn ed-btn--segment`」+「根/段无 `style`」 | 控制方**裁决 1**（维持：`aria-pressed` 是状态的唯一权威） |
+| 9 | **V3 与 Step 1③ 互斥** | 原口径与状态类形态冲突 | 口径改为「**新增 ≫ 删除 ∧ token 保序包含**」 | 台账 §二十五 的 V3 判据互斥裁决 |
+| 10 | **A2③ 的 `components/**` 前提不成立** | 计划原以为 `views/**` 零 `components/**`，实测有 **4 条真实边**（`NoteMarkdown` ×2 · `SessionScreenCard` · `NotePreviewView`） | 判据收窄为「只禁 `pages/**` / `shell/**`」（今日独立复测 = **0 条边**，带仪器双侧自证） | 台账 §三十三（控制方）+ T15 落地 |
+| 11 | **P2 与 H1 互斥** | 计划判词与源码不符 | P2 从「同步」改「异步」、从「存在性」改「可见性」 | T10 的 STOP → 三件全 GO |
+| 12 | **`SPLIT_MOVES` 条目删除** | **迁移不是搬运**：两个原生 `<button>` 随切换器迁进 **L1 原语**（原语层在扫描域外）⇒ 计数**真的**由 1 降到 0 | **删除它 = 撤掉豁免、恢复逐文件棘轮的牙齿**；`FROZEN_NATIVE_BUTTON_TOTAL` 是**上界**（393），实测 **392** ⇒ 判据仍绿 | T10 的源码逐字说明 + `nativeButton.ratchet.test.ts` 6 passed |
+| 13 | **`useViewMemory` 住面板** | C19 GO-3：`SessionDetailPanel` 仍持 `viewMode` state，记忆 hook 的调用点落在面板层 | 无（形态选择） | C19 的三项 STOP ⇒ **GO-3** |
+| 14 | **三处预算超支**（`navHeight.consumption.test.ts` **165**/110 · `Modal.scroll-lock.test.tsx` **269**/+60 · `NotesReadingColumn.tsx` **290**/260） | 判据/接线需要真实行数 | **全部 ≤300、零新增豁免登记** | 口径：**预算是估算，绑定约束是 ≤300 + 不新增豁免登记** |
+| 15 | **两处「拆件时点目标」被接线增量推翻**（`SessionDetailPanel` **182 > 150** · `NotesPage` **288 > 285**） | T2 拆到 148 后被 T10 的接线下沉；T4 拆到 285 后 T14 的 2 行 + T16 的 `focus*` 推到 288 | 均 ≤300、零新增登记 | **C19 四条条件③**逐字要求登记这条偏差 |
+| 16 | **计划 Task 13 的 V1 归属判据不可用**（原写「提交统计不含 `app/src/**`」） | 多单元并行下「HEAD 的 stat」不属任何单元 | 改为「**零提交 + 暂存区空 + `git status` 无我产生的路径**」 | T13 的 `tmp/t13/zero-change-selfcert.md`（V1a–V1i）+ 台账 §二十七 |
+| 17 | **计划 Task 15 的 A3 判据形态错**（整目录**裸子串** `includes("@tauri-apps")` 会让 6 个文件里 **5 个假红**） | 假阳性来自**注释**里的自述（「零 `@tauri-apps` import」） | 权威口径 = 剥注释 + 排除 `*.test.*` + 只匹配 import/export 声明 + **保留阳性对照** + 两读数并列 | 台账 §十八 的「A3 口径定案」（由 T15 实施） |
+| 18 | **计划写「`CommandPalette.kb.test.tsx` 17 用例」是笔误** | 实测 **9** 个 `it`（另一文件 12） | 无（读数更正） | T16 主动点名 |
+| 19 | **计划点名的 H1 锚点漂移**（计划 `:966` 写 `getByTestId("session-raw-view")`，**全仓 0 命中**） | 落地用 `data-testid="resident-probe"` | 双侧自证：前者 **0** 命中、后者 **5** 命中（**同仪器同次 grep**） | 台账 §三十四（E6 登记） |
+| 20 | **贴边表 13 格中 2 格与实测不同**（`textBaseline.ts` 声明 **299** → 实测 **297**（**机理未判定**）· `loadingRatchet.test.ts` 声明 **299** → 实测 **181**（**已归因**：批 4 收口拆出 `loadingScan.ts` **101 行**）） | 计划贴边表取的是批 4 中途时点值 | **不为补数字去 `checkout`**（禁）⇒ 如实写「1 格已归因、1 格机理未判定」 | 派发书逐字 + T18-A 的 U-1 |
+| 21 | **`architecture.slots.test.ts` 声明 95 → 实测 100** | **收口提交 `b4edf8e4` 自己**（`+6/−1`） | 时点值 vs 终态值之差 | T18-A 实测（`git show --numstat` 逐字 `6 1`） |
+| 22 | **`useViewMemory` 预算 ≤70 → 实测 70（顶格余量 0）** | C5 的预算上限恰为 70 | **顶格**：任何后续 +1 行都会**越过预算**（但仍 ≤300） | 计划 §规模与预算（如实登记） |
+
+**控制方前提错误的 6 例（记控制方账上；引用时按本表口径）**
+
+| # | 前提 | 实测 | 影响 |
+|---:|---|---|---|
+| 1 | 本机有 `pwsh` | **不存在**（只有 PowerShell 5.1；PS 5.1 的 `>` 写 **UTF-16LE**） | 长脚本一律写成 `.mjs` 用 `node` 跑；文本产物一律用 `node` 读；落盘走 `cmd /c … > out` |
+| 2 | vitest JSON 有 `numTotalTestFiles` | **字段不存在**（vitest **4.1.11**；顶层键 12 个、`hasOwnProperty` = false） | 文件数一律用 `testResults.length`；`numTotalTestSuites` = `describe` 块数（647，与文件数差 463） |
+| 3 | 批 4 收口后追加 9 条的区间是 `091d1c3d..7d541254` | 该区间**只有 5 条**；正确端点 = `091d1c3d..2559a3fd`（**9 条**） | 批 5 的起算点与全批台账一致（`2559a3fd` = T0 的 `FROZEN_HEAD`） |
+| 4 | 工作树「洁净」 | 全程只有 `?? docs/tech-debt/`（**这一条始终在场**） | 所有「零仓库改动」声明都必须把它排除在外再报 |
+| 5 | 批 4 计划的 `1964` 行可用于引用 | 那是**被 T18 追加 §收口回写之前**的时点值 | 引用批 4 计划一律**按节名 + 逐字引文**，不用行数 |
+| 6 | `scripts/check-bundle-budget.mjs` 有锁机制 | **没有任何锁机制**（也不打印 `dist` mtime） | 本批一律走**显式取锁协议**；provenance 由执行单元自采 |
+
+**并记两条「非计划错、但必须记住」的口径事故**：① **计划 Task 7/8/9 的 Files 与并行互斥**（同第 5 条；C17④）· ② **活树 `app/dist` 可能滞后一整个批次**（T16 实测：构建**前**只有 25 个 `.js` / 懒 22 个 / **无任何批 5 视图 chunk** ⇒ **拿它当 before 会误记 +9 懒 chunk**）⇒ **纪律：任何 before/after 必须用同源两棵树各跑一次真实构建**（批 5 已按此在**导出树 @`2559a3fd`** 内独立构建并**逐字节复核 T1 台账**）。
 
