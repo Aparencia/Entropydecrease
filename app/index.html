@@ -10,8 +10,9 @@
          而 reset 是**文档结构**约定，不是设计 token。 -->
     <style>
       html, body, #root { margin: 0; height: 100%; }
-      /* 规格 §1 决策 17：细滚动条 6px（审计 J1-2「6px 细滚动条规格全站未实现」） */
-      * { scrollbar-width: thin; }
+      /* 规格 §1 决策 17：细滚动条 6px。**只用 ::-webkit-scrollbar**：Chromium ≥121 里
+         `scrollbar-width` 一旦非 auto 就使 webkit 伪元素的宽度失效（实测 10px ≠ 6px），
+         而本应用是 Tauri/WebView2（仅 Chromium）—— 没有 Firefox 面需要它，别加回来。 */
       ::-webkit-scrollbar { width: 6px; height: 6px; }
       ::-webkit-scrollbar-thumb { background: #c9c4b8; border-radius: 3px; }
       ::-webkit-scrollbar-track { background: transparent; }
