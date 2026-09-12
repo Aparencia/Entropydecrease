@@ -16,6 +16,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { DecisionKind, KnowledgeDecision } from "../types/knowledge";
 import { countUsedRefs, parseUsedRefs } from "../types/knowledge";
+import { EmptyState } from "../ui/primitives";
 
 interface Props {
   systemId: number;
@@ -25,9 +26,14 @@ interface Props {
   onChanged?: () => void;
 }
 
-const TABS: { key: DecisionKind; label: string; badge: string; empty: string }[] = [
-  { key: "decision", label: "决策", badge: "🧭", empty: "暂无决策记录——从「记一个决策」开始。" },
-  { key: "application", label: "应用", badge: "🛠", empty: "暂无应用记录——点「记一次使用」。" },
+/**
+ * 两个 tab 的徽标/标签。**空态文案不在这里**：批 4 T13 把它就近写在渲染它的那次
+ * `<EmptyState>` 里（原为 `empty` 字段——配置数组里的字符串看不出「它会被渲染成空态」，
+ * 也让「空态是否走了原语」无法按处判读）。
+ */
+const TABS: { key: DecisionKind; label: string; badge: string }[] = [
+  { key: "decision", label: "决策", badge: "🧭" },
+  { key: "application", label: "应用", badge: "🛠" },
 ];
 
 export default function KnowledgeDecisionLog({ systemId, conceptId, onChanged }: Props) {
@@ -63,8 +69,6 @@ export default function KnowledgeDecisionLog({ systemId, conceptId, onChanged }:
     } catch (e) { setStatus(`删除失败: ${e}`); }
   };
 
-  const tabMeta = TABS.find((t) => t.key === tab)!;
-
   return (
     <div data-testid="decision-log">
       <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
@@ -78,7 +82,11 @@ export default function KnowledgeDecisionLog({ systemId, conceptId, onChanged }:
       {status && <p data-testid="decision-log-status" style={{ fontSize: 11, color: "#dc2626", margin: "0 0 4px" }}>{status}</p>}
 
       {activeList.length === 0 ? (
-        <div data-testid="decision-log-empty" style={{ fontSize: 12, color: "#9ca3af", padding: "8px 0" }}>{tabMeta.empty}</div>
+        tab === "decision" ? (
+          <EmptyState title="暂无决策记录——" description="从「记一个决策」开始。" testId="decision-log-empty" compact align="start" />
+        ) : (
+          <EmptyState title="暂无应用记录——" description="点「记一次使用」。" testId="decision-log-empty" compact align="start" />
+        )
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {activeList.map((d) => {

@@ -11,7 +11,7 @@
  *              的树形缩进视图（父锚点可视化），非平铺下拉。
  */
 import { useMemo, useState } from "react";
-import { Button } from "../ui/primitives";
+import { Button, EmptyState } from "../ui/primitives";
 
 export interface LinkRow {
   id: number;
@@ -96,9 +96,11 @@ export default function LinkEntityPicker({
       />
       <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid #f3f4f6", borderRadius: 6, padding: 2 }}>
         {visible.length === 0 && (
-          <div style={{ fontSize: 11, color: "#9ca3af", padding: "6px 4px" }}>
-            {kw ? `没有匹配——可直接回车新建「${query.trim()}」` : "暂无内容"}
-          </div>
+          kw ? (
+            <EmptyState title={`没有匹配——可直接回车新建「${query.trim()}」`} compact align="start" />
+          ) : (
+            <EmptyState title="暂无内容" compact align="start" />
+          )
         )}
         {visible.map((r) => (
           <Button

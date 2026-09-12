@@ -14,6 +14,7 @@ import type { AiTaskRecord, ChatSession } from "../types";
 // 2026-09-09 批 1：任务标题统一按类别解析（taskRefLabel——会话级/笔记级
 // 精修 ref_id 语义不同；enrich 恒笔记级），侧栏与对话页/dock 同口径
 import { taskRefLabel } from "../utils/entityLabel";
+import { EmptyState } from "../ui/primitives";
 // 批 3（规格 §6.2「AI 对话侧栏：接入列基础设施」）：列宽不再写死——
 // 规格住在 shell/columnRegistry，运行时由页面里的 useColumnLayout 执行
 import { columnSpec } from "../shell/columnRegistry";
@@ -114,7 +115,7 @@ export default function ChatSidebar(props: ChatSidebarProps) {
       </div>
       <div style={{ overflowY: "auto", flex: 1, minHeight: 0, padding: "0 8px 8px" }}>
         {sessions.length === 0 && (
-          <div style={{ fontSize: 12, color: "#9ca3af", padding: "4px 8px" }}>还没有对话——点 ＋ 开始</div>
+          <EmptyState title="还没有对话——" description="点 ＋ 开始" compact align="start" />
         )}
         {sessions.map((s) => (
           <div
@@ -150,7 +151,7 @@ export default function ChatSidebar(props: ChatSidebarProps) {
           style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", padding: "14px 8px 4px" }}
           title="AI 精修/补充任务的轨迹条目（来源=会话或笔记），不是上方 💬 聊天会话——点选查看轨迹与采纳入口"
         >🤖 AI 任务</div>
-        {tasks.length === 0 && <div style={{ fontSize: 12, color: "#9ca3af", padding: "4px 8px" }}>暂无精修/补充任务</div>}
+        {tasks.length === 0 && <EmptyState title="暂无精修/补充任务" compact align="start" />}
         {/* 2026-09-09 批 1 语义说明：本段是精修/补充任务（来源会话/笔记）的
             只读轨迹视图，不是 💬 聊天会话——点选打开任务对话、结果可采纳 */}
         {tasks.length > 0 && (

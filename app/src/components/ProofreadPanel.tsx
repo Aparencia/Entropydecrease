@@ -11,7 +11,7 @@
  *              （`SessionDetailPanel` 的 `showProofread` 条件挂载）⇒ `open` 恒为 `true`。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Button, Modal } from "../ui/primitives";
+import { Button, Modal, EmptyState } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { RefineDraftView, SecondPassView } from "./SecondPassPanel";
 
@@ -151,11 +151,11 @@ export default function ProofreadPanel({ sessionId, onClose }: Props) {
       </div>
 
       {list !== null && list.total === 0 && !busy && (
-        <p style={{ color: "#9ca3af", fontSize: 12 }}>
-          {est && est.sentences === 0
-            ? "本会话无可校对句子（无转写内容）。"
-            : "暂无校对草稿——运行后建议在此逐条裁决。"}
-        </p>
+        est && est.sentences === 0 ? (
+          <EmptyState title="本会话无可校对句子（无转写内容）。" />
+        ) : (
+          <EmptyState title="暂无校对草稿——" description="运行后建议在此逐条裁决。" />
+        )
       )}
 
       {(list?.items.length ?? 0) > 0 && (

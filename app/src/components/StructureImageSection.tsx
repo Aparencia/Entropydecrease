@@ -14,7 +14,7 @@ import { listen } from "@tauri-apps/api/event";
 import type { StructureImageRecord } from "../types";
 import { fmtMs } from "../utils/fmt";
 import ImagePreviewOverlay from "./ImagePreviewOverlay";
-import { Button } from "../ui/primitives";
+import { Button, EmptyState } from "../ui/primitives";
 
 /** kind 徽标文案（全栈统一术语） */
 const KIND_LABEL: Record<string, string> = {
@@ -98,9 +98,7 @@ export default function StructureImageSection({ sessionId, baseUrl }: { sessionI
         {!error && info && <span style={{ fontSize: 11, color: "#6b7280" }}>{info}</span>}
       </div>
       {images.length === 0 && !loading && (
-        <div style={{ fontSize: 11, color: "#9ca3af" }}>
-          暂无结构图（点击上方按钮分析参考图集中的表格/公式/代码/流程图；或到原料屏卡上框选截取）
-        </div>
+        <EmptyState title="暂无结构图（点击上方按钮分析参考图集中的表格/公式/代码/流程图；或到原料屏卡上框选截取）" compact align="start" />
       )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
         {images.map((r) => (

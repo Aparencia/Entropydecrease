@@ -17,6 +17,7 @@ import type {
 } from "../types/knowledge";
 import { linkTargetTypeLabel } from "../types/knowledge";
 import type { NoteGroup } from "../types/notes";
+import { EmptyState } from "../ui/primitives";
 
 interface Props {
   systemId: number;
@@ -166,12 +167,12 @@ export default function KnowledgeLinkSection({ systemId, entityType, entityId, l
 
       {mode === "entity" ? (
         <>
-          {refs.length === 0 && <p style={{ fontSize: 11, color: "#9ca3af", margin: "2px 0 6px" }}>暂无引用——把已有内容挂进来。</p>}
+          {refs.length === 0 && <EmptyState title="暂无引用——" description="把已有内容挂进来。" compact align="start" />}
           {refs.map(renderRow)}
         </>
       ) : (
         <>
-          {grouped.length === 0 && <p style={{ fontSize: 11, color: "#9ca3af", margin: "2px 0 6px" }}>暂无引用——把已有内容挂进来。</p>}
+          {grouped.length === 0 && <EmptyState title="暂无引用——" description="把已有内容挂进来。" compact align="start" />}
           {grouped.map((g) => (
             <div key={g.key} style={{ marginBottom: 4 }}>
               <div data-testid={`link-group-${g.key}`} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#6b7280", padding: "2px 0" }}>

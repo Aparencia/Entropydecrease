@@ -13,7 +13,7 @@
  *              的 `showPass2` 条件挂载）⇒ `open` 恒为 `true`。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Button, Modal } from "../ui/primitives";
+import { Button, Modal, EmptyState, Loading } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -215,9 +215,14 @@ export default function SecondPassPanel({ sessionId, onChanged, onClose }: Props
       {view === null ? (
         <p style={{ color: "#9ca3af", fontSize: 12 }}>加载中…</p>
       ) : view.total === 0 ? (
-        <p style={{ color: "#9ca3af", fontSize: 12 }}>
-          {view.running ? "任务已启动，等待首个窗口…" : "暂无精修草稿——点击「开始第二遍」用 S4 音频全窗重跑 SenseVoice，有实质差异的窗口会生成本页草稿。"}
-        </p>
+        view.running ? (
+          <Loading label="任务已启动，等待首个窗口…" />
+        ) : (
+          <EmptyState
+            title="暂无精修草稿——"
+            description="点击「开始第二遍」用 S4 音频全窗重跑 SenseVoice，有实质差异的窗口会生成本页草稿。"
+          />
+        )
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {view.items.map((d) => {

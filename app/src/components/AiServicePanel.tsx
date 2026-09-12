@@ -13,7 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AiAuditEntry, AiSettingsView, RefineStrategyMeta } from "../types";
 import RefineStrategyPicker from "./RefineStrategyPicker";
 import { draftFromPrefs, prefsFromDraft, type StrategyDraft } from "../utils/refineStrategy";
-import { Button } from "../ui/primitives";
+import { Button, EmptyState } from "../ui/primitives";
 
 /** 通用小按钮样式（与各设置面板一致） */
 const btn: React.CSSProperties = {
@@ -257,7 +257,7 @@ export default function AiServicePanel() {
           </button>
         </div>
         {audit.length === 0 ? (
-          <div style={{ color: "#9ca3af" }}>暂无调用记录</div>
+          <EmptyState title="暂无调用记录" compact />
         ) : (
           <div style={{ maxHeight: 140, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 6 }}>
             {audit.map((a, i) => (

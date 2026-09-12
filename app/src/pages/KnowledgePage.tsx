@@ -35,6 +35,7 @@ import KnowledgeSampleView from "../components/KnowledgeSampleView";
 import KnowledgeGraphView from "../components/KnowledgeGraphView";
 // 批 3 T8：列规格（体系列/详情列两行的宽·夹取·阈值）改从 `shell/columnRegistry` 取
 import { columnSpec } from "../shell/columnRegistry";
+import { EmptyState } from "../ui/primitives";
 
 type MiddleView = "tree" | "canvas" | "concept" | "model" | "graph";
 
@@ -257,11 +258,11 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup, 
           {globalSystem ? (
             <SystemCard system={globalSystem} selected={selectedSystemId === globalSystem.id} onSelect={() => selectSystem(globalSystem.id)} />
           ) : (
-            <div style={{ padding: "10px 8px", fontSize: 12, color: "#9ca3af" }}>尚未创建全局体系——每个领域的根。</div>
+            <EmptyState title="尚未创建全局体系——" description="每个领域的根。" compact align="start" />
           )}
 
           <div style={{ marginTop: 6, fontSize: 11, fontWeight: 600, color: "#6b7280", padding: "0 6px" }}>领域体系</div>
-          {domainSystems.length === 0 && <div style={{ padding: "6px 8px", fontSize: 11, color: "#9ca3af" }}>暂无领域体系。</div>}
+          {domainSystems.length === 0 && <EmptyState title="暂无领域体系。" compact align="start" />}
           {domainSystems.map((s) => (
             <SystemCard key={s.id} system={s} selected={selectedSystemId === s.id} onSelect={() => selectSystem(s.id)} onArchive={() => void archiveSystem(s)} />
           ))}
@@ -349,7 +350,7 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup, 
             {middleView === "concept" && (
               <div style={{ position: "absolute", inset: 0, overflowY: "auto", padding: 12, background: "#fff" }}>
                 <button data-testid="concept-add" onClick={() => setConceptDialogOpen(true)} style={{ marginBottom: 10, fontSize: 12, cursor: "pointer", padding: "4px 12px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>＋ 添加概念</button>
-                {concepts.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af" }}>暂无概念——从卡住你的词开始。</p>}
+                {concepts.length === 0 && <EmptyState title="暂无概念——" description="从卡住你的词开始。" compact align="start" />}
                 {concepts.map((c) => (
                   <ConceptCardRow
                     key={c.id}
@@ -363,7 +364,7 @@ export default function KnowledgePage({ focusSystemId, onOpenNote, onOpenGroup, 
             {middleView === "model" && (
               <div style={{ position: "absolute", inset: 0, overflowY: "auto", padding: 12, background: "#fff" }}>
                 <button data-testid="model-add" onClick={() => setModelDialogOpen(true)} style={{ marginBottom: 10, fontSize: 12, cursor: "pointer", padding: "4px 12px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff" }}>＋ 添加模型</button>
-                {models.length === 0 && <p style={{ fontSize: 12, color: "#9ca3af" }}>暂无模型——把可验证的断言写下来。</p>}
+                {models.length === 0 && <EmptyState title="暂无模型——" description="把可验证的断言写下来。" compact align="start" />}
                 {models.map((m) => (
                   <div key={m.id} data-testid={`model-row-${m.id}`} onClick={() => setSelection({ type: "model", id: m.id })} style={{ padding: "6px 8px", borderRadius: 6, cursor: "pointer", background: selection?.type === "model" && selection.id === m.id ? "#f0fdfa" : "transparent", border: selection?.type === "model" && selection.id === m.id ? "1px solid #99f6e4" : "1px solid transparent" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>

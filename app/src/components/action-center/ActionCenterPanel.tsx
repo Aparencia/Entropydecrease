@@ -20,7 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import SopRunOverlay from "../SopRunOverlay";
 import { PracticeOverlay, QuestionsOverlay } from "../PracticeQuestionsOverlays";
-import { Button } from "../../ui/primitives";
+import { Button, EmptyState } from "../../ui/primitives";
 
 /** 响应结构（SopTemplate/ActionQueueRow/CompletionEvent 均 serde camelCase——字段须 camel 读取） */
 interface SopTemplateView {
@@ -352,9 +352,9 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
     </div>
   );
 
-  const empty = (text: string) => (
-    <p style={{ fontSize: 12, color: "#9ca3af", padding: "8px 2px" }}>{text}</p>
-  );
+  // v0.4x（批 4 T13）：空态唯一出口 = `EmptyState`（原为各自内联灰字 <p>——
+  // 同一件事在本文件写了 3 遍）。`compact` 收空气以贴近原来的 12px 行内灰字密度。
+  const empty = (text: string) => <EmptyState title={text} compact />;
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
@@ -457,7 +457,7 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
           </>
         ) : tab === "history" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-            {history.length === 0 ? empty("暂无完成记录——完成即证据，周回顾原料在此沉淀") : history.map((h) => (
+            {history.length === 0 ? <EmptyState title="暂无完成记录——" description="完成即证据，周回顾原料在此沉淀" compact /> : history.map((h) => (
               <div key={h.id} style={{ display: "flex", gap: 8, fontSize: 12, borderBottom: "1px solid #f3f4f6", padding: "4px 2px" }}>
                 <span style={{ color: "#9ca3af", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmtDate(h.ts)}</span>
                 <span style={{ color: h.eventType === "abandoned" ? "#dc2626" : "#0f766e", flexShrink: 0, width: 90 }}>
@@ -493,7 +493,7 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
               </div>
             </div>
             {templates.length === 0 ? (
-              <p style={{ fontSize: 12, color: "#9ca3af" }}>暂无 SOP 模板——选中笔记步骤段落（行范围）即可创建</p>
+              <EmptyState title="暂无 SOP 模板——" description="选中笔记步骤段落（行范围）即可创建" compact />
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {templates.map((t) => (

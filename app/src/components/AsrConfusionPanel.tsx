@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button } from "../ui/primitives";
+import { Button, EmptyState, Loading } from "../ui/primitives";
 
 interface AsrPairView {
   wrong: string;
@@ -110,9 +110,11 @@ export function AsrConfusionPanel() {
         )}
       </div>
       {candidates.length === 0 ? (
-        <div style={{ fontSize: 12, color: "#9ca3af" }}>
-          {view === null ? "加载中…" : "暂无新候选——采纳离线精修草稿后自动积累画像（≥2 次出现才提名）"}
-        </div>
+        view === null ? (
+          <Loading label="加载中…" />
+        ) : (
+          <EmptyState title="暂无新候选——" description="采纳离线精修草稿后自动积累画像（≥2 次出现才提名）" compact />
+        )
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {candidates.map((c) => (

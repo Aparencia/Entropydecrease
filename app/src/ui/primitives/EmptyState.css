@@ -48,6 +48,16 @@
   text-align: start;
 }
 
+/* `start` 档下**次要槽内部**也要跟着左对齐（批 4 T13 结清 T2/T3 评审的 Minor ②）：
+   `__secondary` 自己是一条 flex 行且写死了 `justify-content: center` ⇒ 只改容器两项对齐时，
+   主行动左移了而次要行动仍停在中间（`EmptyStateAlign` 的档位文档说「整块左对齐」，实现必须跟上）。
+   选择器带 `>`：**只**管直接子槽，不波及调用点塞进 `secondary` 的任意节点内部的排版。
+   为什么改 CSS 而不是改档位文档：`start` 的语义就是「落在列表行 / 侧栏里、与同级列表项左对齐」，
+   让次要槽留在中间会与同级行错位——那是可见的排版缺陷，不是文档措辞问题。 */
+.ed-empty--start > .ed-empty__secondary {
+  justify-content: flex-start;
+}
+
 /* 图标：弱化墨度（装饰性顿点，视觉焦点让给标题与主行动按钮）；`flex: none` 防被压扁。
    颜色走 `currentColor`（图标层 `stroke="currentColor"`）⇒ 批 6 想换墨度只需改这一行。 */
 .ed-empty__icon {
@@ -68,7 +78,9 @@
   max-width: 36ch;
 }
 
-/* 次要内容槽（次要行动 / 快捷键提示）：自己是一个可换行的居中行，不与主行动按钮挤在一行。 */
+/* 次要内容槽（次要行动 / 快捷键提示）：自己是一个可换行的居中行，不与主行动按钮挤在一行。
+   `justify-content: center` 只服务**默认档**（居中空态）——`start` 档下由下面那条
+   `--start` 规则把它改成左对齐（见那里的 Why）。 */
 .ed-empty__secondary {
   display: flex;
   flex-wrap: wrap;

@@ -100,3 +100,35 @@ describe("④ 四个槽位在两种对齐下都渲染（对齐档不改结构）
     }
   });
 });
+
+describe("⑤ start 档下**次要槽内部**也左对齐（T2/T3 评审 Minor ② 的结清；批 4 T13）", () => {
+  /** 取 `.ed-empty--start > .ed-empty__secondary` 的规则体（选择器到第一个 `}`） */
+  const SECONDARY_START_BODY = (() => {
+    const sel = ".ed-empty--start > .ed-empty__secondary";
+    const at = CSS.indexOf(sel);
+    return at < 0 ? "" : CSS.slice(at, CSS.indexOf("}", at));
+  })();
+
+  it("`.ed-empty__secondary` 自身仍是居中行（默认档形态逐字不变）", () => {
+    // 锚点带前导换行 ⇒ 命中**基础规则**本身，不会落到 `--start > __secondary` 那条覆盖上
+    const at = CSS.indexOf("\n.ed-empty__secondary {");
+    expect(at, "EmptyState.css 缺 `.ed-empty__secondary` 基础规则").toBeGreaterThanOrEqual(0);
+    expect(CSS.slice(at, CSS.indexOf("}", at))).toContain("justify-content: center");
+  });
+
+  it("`start` 档有一条**只管直接子槽**的左对齐覆盖，且它自己能被辨伪", () => {
+    expect(SECONDARY_START_BODY, "EmptyState.css 缺 `.ed-empty--start > .ed-empty__secondary` 规则").not.toBe("");
+    expect(SECONDARY_START_BODY, "次要槽在 start 档没跟着左对齐").toContain("justify-content: flex-start");
+    // 反例守门：只有 `justify-content: center` 的那条（默认档）必须**不满足**上面这条 ⇒ 断言不是永真
+    expect(SECONDARY_START_BODY).not.toContain("center");
+  });
+
+  it("渲染级对照：start 档的次要槽节点仍带 `__secondary` 类（选择器锚点在盘上真的存在）", () => {
+    const { container } = render(
+      <EmptyState title="t" secondary={<span>按 ⌘K 搜索</span>} align="start" />,
+    );
+    const slot = container.querySelector(".ed-empty--start > .ed-empty__secondary");
+    expect(slot, "渲染树里找不到 `--start > __secondary`（CSS 选择器会落空）").toBeTruthy();
+    expect(slot?.textContent).toBe("按 ⌘K 搜索");
+  });
+});

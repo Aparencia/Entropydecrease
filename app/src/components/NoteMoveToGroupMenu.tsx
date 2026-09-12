@@ -16,6 +16,7 @@ import type { Note, NoteGroup } from "../types";
 import type { MoveNoteResult } from "../types/notes";
 import { paletteHex } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
+import { EmptyState } from "../ui/primitives";
 
 interface Props {
   note: Note;
@@ -132,9 +133,7 @@ export default function NoteMoveToGroupMenu({ note, groups, onChanged, onCleanNo
               移动到组（当前：{groups.find((g) => g.id === currentId)?.name ?? "未分组"}）
             </div>
             {groups.length === 0 && (
-              <div style={{ fontSize: 12, color: "#9ca3af", padding: "2px 8px 6px" }}>
-                暂无组——左侧「＋ 新建组」创建后即可归组
-              </div>
+              <EmptyState title="暂无组——" description="左侧「＋ 新建组」创建后即可归组" compact align="start" />
             )}
             {groups.map((g) => {
               const active = g.id === currentId;

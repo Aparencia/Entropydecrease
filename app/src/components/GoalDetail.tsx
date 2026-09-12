@@ -14,7 +14,7 @@ import InterviewDialog from "./InterviewDialog";
 import GraduateDialog from "./GraduateDialog";
 import RetroTimeline from "./RetroTimeline";
 import GoalPlanApprovalDialog from "./GoalPlanApprovalDialog";
-import { ConfirmDialog } from "../ui/primitives";
+import { ConfirmDialog, EmptyState } from "../ui/primitives";
 
 interface Props {
   goalId: number;
@@ -254,7 +254,7 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
             <button onClick={() => void removeGroup(g.id)} style={smallDanger}>×</button>
           </span>
         ))}
-        {detail.groups.length === 0 && <span style={{ fontSize: 11, color: "#9ca3af" }}>暂无绑定——绑定后结算/复习/弱项才计入进度</span>}
+        {detail.groups.length === 0 && <EmptyState title="暂无绑定——" description="绑定后结算/复习/弱项才计入进度" compact align="start" />}
       </div>
       {bindable.length > 0 && (
         <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
@@ -278,7 +278,7 @@ export default function GoalDetail({ goalId, onChanged, onDeleted }: Props) {
           </div>
         ))
       ) : (
-        <p style={{ fontSize: 11, color: "#9ca3af", margin: "0 0 10px" }}>暂无弱项信号（绑定组无卡）</p>
+        <EmptyState title="暂无弱项信号" description="绑定组无卡" compact align="start" />
       )}
 
       {/* v0.18.2：最弱概念（90 天无引用/未应用——规则信号，M3 真实化） */}

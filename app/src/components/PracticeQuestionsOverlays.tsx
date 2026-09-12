@@ -11,7 +11,7 @@
  *              （`ActionCenterPanel` 的条件挂载）⇒ `open` 恒为 `true`，160ms 退场相位不触发。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Button, Modal } from "../ui/primitives";
+import { Button, Modal, EmptyState } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 
 /** 响应结构（PracticeItem/QuestionItem 均 serde camelCase——字段须 camel 读取） */
@@ -108,7 +108,7 @@ export function PracticeOverlay({ onClose }: { onClose: () => void }) {
         <Button variant="primary" size="md" onClick={() => void create()}>新建</Button>
       </div>
       {items.length === 0 ? (
-        <p style={{ color: "#9ca3af", fontSize: 12 }}>暂无练习条目——把「需要周期练」的行动内建为练习条目</p>
+        <EmptyState title="暂无练习条目——" description="把「需要周期练」的行动内建为练习条目" />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {items.map((it) => (
@@ -211,7 +211,7 @@ export function QuestionsOverlay({ onClose }: { onClose: () => void }) {
           </div>
         ))}
         {open.length === 0 && answered.length === 0 && (
-          <p style={{ color: "#9ca3af", fontSize: 12 }}>暂无问题——学习中的疑问随手记下，答沉淀后归档（可转复习卡出口规划中）</p>
+          <EmptyState title="暂无问题——" description="学习中的疑问随手记下，答沉淀后归档（可转复习卡出口规划中）" />
         )}
       </div>
       {answered.length > 0 && (

@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiProviderInput, AiProviderView } from "../types";
-import { ConfirmDialog, Button } from "../ui/primitives";
+import { ConfirmDialog, Button, EmptyState } from "../ui/primitives";
 
 const btn: React.CSSProperties = {
   padding: "5px 10px",
@@ -152,9 +152,11 @@ export default function AiProviderSettings() {
       </div>
 
       {providers.length === 0 && (
-        <div style={{ color: "#9ca3af", marginBottom: 8 }}>
-          尚未配置 Provider——添加后即可启用 AI 功能（支持 SiliconFlow/DeepSeek/OpenRouter/Ollama 本地等）。
-        </div>
+        <EmptyState
+          title="尚未配置 Provider——"
+          description="添加后即可启用 AI 功能（支持 SiliconFlow/DeepSeek/OpenRouter/Ollama 本地等）。"
+          action={{ label: "＋ 添加 Provider", onClick: () => setShowAdd(true) }}
+        />
       )}
 
       {providers.map((p) => (

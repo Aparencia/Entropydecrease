@@ -16,6 +16,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { zIndex } from "../ui/zIndex";
+import { EmptyState } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AiTaskRecord, AiTaskState, AiTurn, ChatMessage, ChatSession } from "../types";
@@ -156,7 +157,7 @@ export default function AiConversationDock({
   const renderList = () => {
     if (tab === "task") {
       return tasks.length === 0 ? (
-        <div style={{ padding: 12, fontSize: 12, color: "#9ca3af" }}>暂无精修/补充任务</div>
+        <EmptyState title="暂无精修/补充任务" compact />
       ) : (
         tasks.map((t) => {
           const done = t.state === "succeeded" || t.state === "failed";
@@ -184,7 +185,7 @@ export default function AiConversationDock({
       );
     }
     return chatSessions.length === 0 ? (
-      <div style={{ padding: 12, fontSize: 12, color: "#9ca3af" }}>暂无对话会话——到「💬 AI 对话」页新建</div>
+      <EmptyState title="暂无对话会话——" description="到「💬 AI 对话」页新建" compact />
     ) : (
       chatSessions.map((s) => (
         <button
@@ -206,7 +207,7 @@ export default function AiConversationDock({
   /** 会话详情 v1 只读消息（同源——继续对话请到 AI 对话页） */
   const renderChatDetail = () => {
     if (messages.length === 0) {
-      return <div style={{ padding: 14, fontSize: 12, color: "#9ca3af" }}>该会话暂无消息</div>;
+      return <EmptyState title="该会话暂无消息" compact />;
     }
     return messages.map((m) => (
       <div key={m.id} style={{ marginBottom: 8 }}>

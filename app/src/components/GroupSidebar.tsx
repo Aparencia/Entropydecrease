@@ -39,6 +39,7 @@ import GroupCreateDialog from "./GroupCreateDialog";
 // REQ-287：多选拖拽载荷读取（text/note-ids JSON + 单 id 兜底）
 import { crateDndReadIds } from "./NoteTreeSection";
 import { blobToBase64 } from "../utils/blobToBase64";
+import { EmptyState } from "../ui/primitives";
 
 interface Props {
   /** 列宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 240=历史值） */
@@ -460,9 +461,7 @@ export default function GroupSidebar({
         )}
 
         {groups.length === 0 && (
-          <p style={{ fontSize: 12, color: "#9ca3af", padding: "12px 8px" }}>
-            暂无笔记组——会话转笔记时自动归组
-          </p>
+          <EmptyState title="暂无笔记组——" description="会话转笔记时自动归组" compact align="start" />
         )}
       </div>
 

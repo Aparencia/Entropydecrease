@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { KbDiscoveryResult, KbHit } from "../types";
 import { hitLabel } from "../utils/kbHits";
+import { EmptyState } from "../ui/primitives";
 
 interface Props {
   systemId: number;
@@ -131,9 +132,7 @@ export default function DiscoverySuggestSection({ systemId, conceptId, onChanged
       {result && (
         <>
           {result.evidence.length === 0 && (
-            <p style={{ fontSize: 11, color: "#9ca3af", margin: "4px 0 0" }}>
-              暂无未挂接的候选素材——可先沉淀相关笔记/碎片再试
-            </p>
+            <EmptyState title="暂无未挂接的候选素材——" description="可先沉淀相关笔记/碎片再试" compact align="start" />
           )}
           {result.evidence.map((h) => (
             <label
