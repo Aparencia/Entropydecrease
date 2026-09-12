@@ -33,8 +33,18 @@
  *      断言这 14 个文件**不得 import 原语层** ⇒ 迁按钮会绕过 B1，**既有断言不改**，故不迁。
  *   **已补齐的历史缺口**：`components/AiProviderSettings.tsx`（8 处）曾因与 T11 并行撞车暂缓，
  *      T11 落库（`1a7762bd`）后由 T12 的补做提交补齐（13 → 5 处）。
+ *
+ * ★ **收紧 1 处余量**（2026-09-12 收口修复单元，收口评审 **M-3**）：冻结值停在 `f6dd012f` 的
+ *   **394 处 / 114 文件**，而 `271a281c` 把 `components/WindowSelectCard.tsx` 的一处原生 `<button>`
+ *   换成了 `<Button>`（4 → **3**）却**没有同步收紧基线** ⇒ 该文件「加回 1 处」会**同时**通过逐文件
+ *   （4 ≤ 4）与总量（394 ≤ 394）两条判据 = **可静默回潮**。据实收紧：
+ *   `FROZEN_NATIVE_BUTTON_TOTAL 394 → 393` · `["components/WindowSelectCard.tsx"] 4 → 3`
+ *   ⇒ **Σentries == 常量 == 实测 == 393**（`FROZEN == sum(entries)` 由 `buttonMigration.test.ts` ④ 断言）。
+ *   ⚠️ **另一处「余量」不许收紧**：`pages/ChatPage.tsx` 实测 **2** < 冻结 **5** 是**拆件搬运**的正常
+ *   形态 —— 3 处随 `✨ 发起任务` 菜单搬进 `components/chat/ChatLaunchMenu.tsx`（见 `SPLIT_MOVES`），
+ *   两侧之和必须仍等于源键的 5（`nativeButton.ratchet.test.ts` ④ 的守恒判据）。
  */
-export const FROZEN_NATIVE_BUTTON_TOTAL = 394;
+export const FROZEN_NATIVE_BUTTON_TOTAL = 393;
 
 /** `const *Btn*` 样式常量族的冻结**行数**（T12 迁移后实测 56；迁移前 79）。 */
 export const FROZEN_BTN_STYLE_CONST_LINES = 56;
@@ -42,7 +52,7 @@ export const FROZEN_BTN_STYLE_CONST_LINES = 56;
 /** `const *Btn*` 样式常量族的冻结**文件数**（T12 迁移后实测 44；迁移前 55）。 */
 export const FROZEN_BTN_STYLE_CONST_FILES = 44;
 
-/** 相对 `app/src` 的路径 → 基线计数（T12 迁移后实测：394 处 / 114 文件） */
+/** 相对 `app/src` 的路径 → 基线计数（T12 迁移后实测 394/114 ⇒ 收口评审 M-3 收紧总量为 **393**，键数仍 114） */
 export const FROZEN_NATIVE_BUTTON_BY_FILE: Readonly<Record<string, number>> = {
   "components/action-center/ActionCenterPanel.tsx": 11,
   "components/AiConversationDock.tsx": 9,
@@ -152,7 +162,7 @@ export const FROZEN_NATIVE_BUTTON_BY_FILE: Readonly<Record<string, number>> = {
   "components/WebArticleView.tsx": 2,
   "components/WebInboxPanel.tsx": 1,
   "components/WeekContractCard.tsx": 4,
-  "components/WindowSelectCard.tsx": 4,
+  "components/WindowSelectCard.tsx": 3,
   "pages/ChatPage.tsx": 5,
   "pages/GoalsPage.tsx": 2,
   "pages/KnowledgePage.tsx": 10,
