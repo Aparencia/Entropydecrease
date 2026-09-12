@@ -119,7 +119,6 @@
 | app/src-tauri/src/bin/asr_forensic.rs | 321 | 定位"结尾识别不全/短句不清晰/断句不准"根因的三连验证：① 会话原始音频（session-audio/{id}.wav，16k 单声道 PCM16）离线SenseVoice 整段转写 → 与 DB 流式链路段对比（句尾是否更完整）；② 对疑似截断段截取音频窗口（start-200ms..end+1200ms）单独离线转写 → 证明"音频里有没有这个尾字"（二分：链路丢 vs 源缺失）；③ 200ms 块 RMS 统计 → 验证"句尾弱音块被判静音"假设的量化依据。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_ai_chat.rs | 321 | AI 对话双表仓储 + v0.19.1（REQ-260）retrieval/meta_json 补列与行映射（+42）——SQL/行映射内聚（db_* 文件先例） | 若再增长：消息侧读写拆至 db_ai_chat_messages.rs |
 | app/src-tauri/src/engine_worker.rs | 321 | 拆分动机（三维复审 #9 + 豁免登记计划）：engine.rs 在接入超时排空机制（三维复审 #5）后逼近 600 行硬拆线，按 line-limit-exemptions登记的拆分计划把 worker 循环与请求处理拆至本文件——engine.rs 保留 EnginePool 句柄与同步 API。（自动摘取，待细化） | 若再增长：按职责拆分 |
-| app/src/shell/usePhaseFreeze.test.tsx | 319 | usePhaseFreeze.test.tsx — #3「相变凝固」的行为级判据（批 6 波 C · T29；规格 §8.6 第 3 行 ·§8.6.1 第 1/3/4 条 · 裁决 R5.3 / R4.5 / R8.1 / R8.2 / R8.4 / R35.4）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/commands_ai_settings.rs | 318 | AI 设置命令域（视图/密钥/授权/目标 AI） + v0.19.1 ai_set_kb_qa 最小面命令（+28）——read-modify-write 同域先例（ai_set_goal_plan）内聚 | 若再增长：kb/goal 最小面命令拆至 commands_ai_settings_extra.rs |
 | app/src/components/AiConversationDock.tsx | 318 | 全局 AI 对话面板（REQ-274）+ 批 1 终态事件刷新接线——2026-09-09 审查纠偏实测登记（此前漏登），300-600 档 | 若再增长：会话列表段拆至 DockSessionList.tsx |
 | app/src-tauri/src/commands_ai_providers.rs | 317 | v0.11.6 M1：Provider 管理命令域（8 命令 + 视图映射 + 密钥解析口 resolve_default_provider_key/default_provider_ready）内聚于命令层；2026-09-11 探活改 chat_plain。`resolve_input`/`to_view` 与命令同域便于契约一致 | 若再增长：默认 Provider 解析与就绪门禁拆至 ai_provider_resolve.rs |
