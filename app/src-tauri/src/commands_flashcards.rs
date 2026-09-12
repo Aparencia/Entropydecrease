@@ -163,6 +163,9 @@ pub fn count_due_cards(state: State<'_, AppState>, group_id: Option<i64>) -> Res
 }
 
 /// 复习评分（提取优先闭环：front→回忆→back→评分→调度推进）。
+///
+/// @ai-context: IPC 命令壳——只解引用 State 后委托 `review_card_inner`（仓内约定
+///              「inner 等价于测全命令」）；入参校验/调度/落库/埋点全在 inner。
 #[tauri::command]
 pub fn review_card(
     state: State<'_, AppState>,

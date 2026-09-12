@@ -10,9 +10,11 @@ use crate::db::{unix_seconds, Db};
 use crate::error::Result;
 use crate::types::Flashcard;
 
-/// flashcards 表统一查询列（列顺序与 row_to_card 严格对应）。
-const CARD_COLUMNS: &str =
-    "id, group_id, note_id, fragment_id, front, back, kind, state_json, due_at, created_at";
+/// 行映射域（列序契约 + ②域行派生间隔）——见 db_flashcards_interval.rs 模块头。
+#[path = "db_flashcards_interval.rs"]
+mod db_flashcards_interval;
+
+use db_flashcards_interval::{row_to_card, CARD_COLUMNS};
 
 /// 新建闪卡入参（id/created_at 由数据层填充；新卡 state_json=CardState::default 序列化）。
 pub struct NewFlashcard {
@@ -269,29 +271,6 @@ impl Db {
             Ok(affected > 0)
         })
     }
-}
-
-/// 把 rusqlite 行映射为 Flashcard。
-fn row_to_card(row: &rusqlite::Row<'_>) -> rusqlite::Result<Flashcard> {
-    Ok(Flashcard {
-        id: row.get(0)?,
-        group_id: row.get(1)?,
-        note_id: row.get(2)?,
-        fragment_id: row.get(3)?,
-        front: row.get(4)?,
-        back: row.get(5)?,
-        kind: row.get(6)?,
-        state_json: row.get(7)?,
-        due_at: row.get(8)?,
-        created_at: row.get(9)?,
-        interval_days: interval_days_from(row.get(8)?, &row.get::<_, String>(7)?),
-    })
-}
-/// 行派生间隔（整天粒度）：`due_at − stateJson.lastReviewMs` 反推；无复习记录/劣化输入 ⇒ 0.0。
-fn interval_days_from(due_at: i64, state_json: &str) -> f32 {
-    let s: crate::scheduler::CardState = serde_json::from_str(state_json).unwrap_or_default();
-    let days = (due_at.saturating_sub(s.last_review_ms as i64)) as f64 / 86_400_000.0;
-    if s.last_review_ms == 0 || days <= 0.0 { 0.0 } else { days.round().max(1.0) as f32 }
 }
 
 /// 单测独立文件。
