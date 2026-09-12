@@ -61,10 +61,13 @@ export function navComponent<K extends PageKey>(key: K): PageComponent<K> {
 
 export interface NavEntry {
   readonly key: PageKey;
-  /** 顶栏/标题用的短名（规格 §6.1 的 8 项命名） */
+  /**
+   * 顶栏/标题用的短名（规格 §6.1 的 8 项命名）。
+   * T6 过渡期曾并存一列 `legacyLabel`（emoji + 长名，逐字抄自旧 `NAV_ITEMS`）；T7 把顶栏切到本列后
+   * **已删除** —— emoji 出局是控制方裁决 A2（规格 `emoji|表情` 0 命中；规范态是 §1 决策 5 的自绘
+   * 线性图标集）：图标 + emoji + 文字是三重冗余，且 emoji 会污染宽度读数（批 3 陷阱 #16）。
+   */
   readonly label: string;
-  /** T6 过渡期的旧 label（emoji + 长名，**逐字**抄自旧 `NAV_ITEMS`）：T7 切到 `label` 时删掉本列 */
-  readonly legacyLabel: string;
   /** `ui/icons` 的键：`paths.domain.ts` 的 9 个域图标与 9 个 key 一一对应 */
   readonly icon: IconName;
   readonly Component: PageComponent;
@@ -72,21 +75,20 @@ export interface NavEntry {
 
 /** 顶栏 8 项（**顺序 = 今日 `NAV_ITEMS` 顺序**；规格 §6.1 把「设置」下沉到右上齿轮） */
 export const NAV_ENTRIES = [
-  { key: "classroom", label: "课堂", legacyLabel: "📡 课堂助手", icon: "classroom", Component: ClassroomPage },
-  { key: "sessions", label: "会话", legacyLabel: "🗂 会话", icon: "sessions", Component: SessionsPage },
-  { key: "notes", label: "笔记", legacyLabel: "📝 笔记", icon: "notes", Component: NotesPage },
-  { key: "action", label: "行动", legacyLabel: "✅ 行动", icon: "action", Component: ActionPage },
-  { key: "review", label: "复习", legacyLabel: "🔄 复习", icon: "review", Component: ReviewPage },
-  { key: "chat", label: "AI 对话", legacyLabel: "💬 AI 对话", icon: "ai", Component: ChatPage },
-  { key: "knowledge", label: "体系", legacyLabel: "🧠 体系", icon: "knowledge", Component: KnowledgePage },
-  { key: "goals", label: "目标", legacyLabel: "🎯 目标", icon: "goals", Component: GoalsPage },
+  { key: "classroom", label: "课堂", icon: "classroom", Component: ClassroomPage },
+  { key: "sessions", label: "会话", icon: "sessions", Component: SessionsPage },
+  { key: "notes", label: "笔记", icon: "notes", Component: NotesPage },
+  { key: "action", label: "行动", icon: "action", Component: ActionPage },
+  { key: "review", label: "复习", icon: "review", Component: ReviewPage },
+  { key: "chat", label: "AI 对话", icon: "ai", Component: ChatPage },
+  { key: "knowledge", label: "体系", icon: "knowledge", Component: KnowledgePage },
+  { key: "goals", label: "目标", icon: "goals", Component: GoalsPage },
 ] as const satisfies readonly NavEntry[];
 
 /** 非顶栏项（规格 §6.1「设置下沉右上齿轮」）：仍在注册表内 ⇒ 仍受「9 页全走注册表」覆盖 */
 export const SETTINGS_ENTRY = {
   key: "settings",
   label: "设置",
-  legacyLabel: "⚙ 设置",
   icon: "settings",
   Component: SettingsPage,
 } as const satisfies NavEntry;

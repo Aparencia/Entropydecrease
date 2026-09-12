@@ -11,8 +11,8 @@
  *      页面模块**、组件一律经 `navComponent("key")` 取得（这是「全走注册表」的本体）；
  *   ③ 图标：9 个图标名都在 `ui/icons` 注册表里且互不相同（拼错必须报错，不许渲染成空白）；
  *   ④ 取值口：`navEntry` / `isPageKey` 的**正样本 + 阴性样本**；
- *   ⑤ 不变量：顶栏顺序与 label 逐字冻结（T6 不许有观感变化）· `mountedPages` **只增不减**
- *      （批 2 裁决 2 的保活硬要求：访问过的页面永不卸载）。
+ *   ⑤ 不变量：顶栏顺序与 label 逐字冻结（T7 起的规范态 = 图标 + 纯文字，emoji 出局）· `mountedPages`
+ *      **只增不减**（批 2 裁决 2 的保活硬要求：访问过的页面永不卸载）。
  *
  * 口径：页面文件枚举 = `pages/*.tsx` 去掉 `*.test.tsx`（今日恰好 9 个）。
  *   ⇒ 将来加第 10 个页面文件而没登记，① 当场红（这正是「全走注册表」的意思）。
@@ -38,16 +38,24 @@ function pageFiles(): string[] {
     .sort();
 }
 
-/** 顶栏 8 项的**冻结**顺序与 label（逐字抄自 T6 之前的 `NAV_ITEMS`；T7 切到 `e.label` 时同提交改这里） */
+/**
+ * 顶栏 8 项的**冻结**顺序与 label。
+ *
+ * T6 冻结的是旧 `NAV_ITEMS` 的 emoji 长名（T6 不许有观感变化）；**批 3 T7 已按控制方裁决 A2
+ * 把顶栏切到 `NavEntry.label`（纯文字、emoji 出局）并删除 `legacyLabel` 列** ⇒ 这里同步成新值
+ * （T6 交接的硬输入：`navRegistry.ts` 的过渡列注释逐字写着「T7 切到 `label` 时同提交改这里」）。
+ * 判据**没有被削弱**：仍是「顺序 + label 逐字相等」的冻结断言，改任一 label 或换序当场红
+ * （T7 报告附变异体实测）。
+ */
 const FROZEN_TOP_BAR: readonly (readonly [PageKey, string])[] = [
-  ["classroom", "📡 课堂助手"],
-  ["sessions", "🗂 会话"],
-  ["notes", "📝 笔记"],
-  ["action", "✅ 行动"],
-  ["review", "🔄 复习"],
-  ["chat", "💬 AI 对话"],
-  ["knowledge", "🧠 体系"],
-  ["goals", "🎯 目标"],
+  ["classroom", "课堂"],
+  ["sessions", "会话"],
+  ["notes", "笔记"],
+  ["action", "行动"],
+  ["review", "复习"],
+  ["chat", "AI 对话"],
+  ["knowledge", "体系"],
+  ["goals", "目标"],
 ];
 
 describe("导航注册表（规格 §10 批 3「9 页全走注册表」）", () => {
@@ -111,8 +119,8 @@ describe("导航注册表（规格 §10 批 3「9 页全走注册表」）", () 
     expect(() => navEntry("not-a-page" as PageKey)).toThrow(/未注册的页面键/);
   });
 
-  it("⑤ 顶栏 8 项顺序 + label 逐字冻结（T6 零观感变化），设置项只在注册表不在顶栏", () => {
-    expect(NAV_ENTRIES.map((e) => [e.key, e.legacyLabel])).toEqual(FROZEN_TOP_BAR);
+  it("⑤ 顶栏 8 项顺序 + label 逐字冻结（T7 起的规范态：图标 + 纯文字，emoji 出局），设置项只在注册表不在顶栏", () => {
+    expect(NAV_ENTRIES.map((e) => [e.key, e.label])).toEqual(FROZEN_TOP_BAR);
     expect(ALL_ENTRIES.map((e) => e.key)).toEqual([...FROZEN_TOP_BAR.map(([k]) => k), "settings"]);
     // 注：`NAV_ENTRIES` 的键是 8 个字面量，`e.key === "settings"` 会被 tsc 判为「无重叠比较」
     // （TS2367）⇒ 先宽成 string[] 再比（判据不变，仍能红）
@@ -124,7 +132,7 @@ describe("导航注册表（规格 §10 批 3「9 页全走注册表」）", () 
     const app = appSource();
     // 判据必须是**引号定界的字面量**，不能用裸 `includes`：App.tsx 的注释里本来就有
     // 「笔记」「会话」这些词（批 1 实测 6 例子串误判），裸 includes 会把注释判成重复。
-    const duplicated = ALL_ENTRIES.filter((e) => new RegExp(`["'\`]${e.legacyLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'\`]`).test(app)).map(
+    const duplicated = ALL_ENTRIES.filter((e) => new RegExp(`["'\`]${e.label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'\`]`).test(app)).map(
       (e) => e.key,
     );
     expect(duplicated, `这些 label 仍在 App.tsx 里硬编码：\n${duplicated.join("\n")}`).toEqual([]);

@@ -11,6 +11,10 @@
  *              ② 监听 app:close-requested（Rust 侧拦截了关闭）→ 确认框 →
  *                 确认后 stop_live_session 再 close，取消则采集继续。
  *              ai:task-update 全局 toast（REQ-145 第二通道）与采集状态无关，保留。
+ * @ai-context: 批 3 T7：顶栏不再在本文件的行内 JSX 里 —— 它提成 `shell/TopBar`（两档溢出是媒体
+ *              查询的活，内联 style 表达不了）；AI toast 则从导航行搬到本层的 **fixed 覆盖层**
+ *              （控制方裁决 A3：它是 1024 溢出的唯一主因，单项 373.75 px = 视口的 36.5%）。
+ *              本文件负责装配、跨页状态与这层壳级覆盖层。
  */
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
@@ -23,7 +27,15 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 //   「从未访问过的页不进首屏 module graph」与「访问过的页常驻、永不卸载（TD-004）」两条语义
 //   都逐字保留（保活由下面的 PageSlot + mountedPages 实施，本任务未动它们一个字节）。
 // @ai-context: 仍不引入路由库（规格 §3 红线 2）：入口依旧是 useState<Page>。
-import { ALL_ENTRIES, navComponent, type PageKey } from "./shell/navRegistry";
+import { navComponent, type PageKey } from "./shell/navRegistry";
+// 批 3 T7：A′ 顶栏（规格 §6.1）从本文件的 95 行内联 `<nav>` 提成独立组件 —— 两档溢出是媒体查询的活，
+// 内联 style 表达不了；顶栏的宽度也因此第一次有了可测的单一落点（TopBar.tsx / TopBar.css）。
+import { TopBar, TopBarAction } from "./shell/TopBar";
+// 批 3 T7（控制方裁决 A3）：AI toast 从 56px 导航行搬到**固定覆盖层** —— 层级走六档标尺，
+// 不许写裸数字（`ui/zIndex.guard.test.ts` 在看着）。实测 toast 是 1024 溢出的唯一主因
+// （单项 373.75 px = 视口的 36.5%；含它 1375.74 px、剔除它 997.99 px），而规格 §6.1 的顶栏
+// 清单里本来就没有它；自足内联实现（不 import `ui/primitives`）⇒ 不吃首屏余量。
+import { zIndex } from "./ui/zIndex";
 // REQ-274（v0.19.4）：全局 AI 对话面板（丙案——按需唤起 + 内容保活）
 // 批 2 包体治理：从静态 import 改为按需 import，并在它之前加一道「首开挂载」闸门。
 // @ai-context: 原语义（见文件末尾 dock 渲染处的注释）是「常驻挂载——开合仅切 display，
@@ -67,8 +79,9 @@ const KnowledgePage = navComponent("knowledge");
 const GoalsPage = navComponent("goals");
 const SettingsPage = navComponent("settings");
 
-// 顶栏项 = 注册表 map 出来（label 暂用 legacyLabel：T6 零观感变化，T7 切到 e.label 并删该列）
-const NAV_ITEMS: { key: Page; label: string }[] = ALL_ENTRIES.map((e) => ({ key: e.key, label: e.legacyLabel }));
+// 顶栏项不再在本文件里另立清单（批 3 T7）：`NAV_ITEMS`（含 emoji 长名的派生态）已删除，
+// 顶栏直接消费注册表的 `label` / `icon`（规格 §6.1 的短名 + §1 决策 5 的自绘线性图标）。
+// 冻结判据在 `shell/navRegistry.test.ts` 第 ⑤ 层（顺序 + label 逐字），T7 起值 = 纯文字（emoji 出局）。
 
 function App() {
   // URL per-window 标志早返回（不渲染主导航壳）。批 2b 采集控制单一状态源：
@@ -266,102 +279,59 @@ function MainShell() {
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", fontFamily: "system-ui, sans-serif" }}>
       {/* v0.16.1：浏览器痕迹去除——原生右键菜单抑制 + 文本输入应用内右键小菜单 */}
       <BrowserChrome />
-      {/* 顶部导航 */}
-      <nav
-        style={{
-          height: "var(--ed-nav-h)",
-          flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          gap: 4,
-          padding: "0 16px",
-          borderBottom: "1px solid #e5e7eb",
-          background: "#fff",
-        }}
-      >
-        <span style={{ fontWeight: 700, fontSize: 15, marginRight: 20 }}>熵减 · 本地知识提取</span>
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.key}
-            onClick={() => setPage(item.key)}
-            style={{
-              padding: "8px 16px",
-              fontSize: 13,
-              fontWeight: page === item.key ? 600 : 400,
-              color: page === item.key ? "#0d9488" : "#4b5563",
-              background: page === item.key ? "#f0fdfa" : "transparent",
-              border: "none",
-              borderBottom: page === item.key ? "2px solid #0d9488" : "2px solid transparent",
-              cursor: "pointer",
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-        {/* REQ-274：全局 AI 对话面板入口（按需唤起；Ctrl+Shift+A 等效） */}
-        <button
-          data-testid="dock-toggle"
-          onClick={() => setDockOpen((v) => !v)}
-          title="AI 任务对话面板（Ctrl+Shift+A）"
-          style={{
-            marginLeft: "auto",
-            padding: "6px 12px", fontSize: 12, cursor: "pointer",
-            border: dockOpen ? "1px solid #4f46e5" : "1px solid #d1d5db",
-            background: dockOpen ? "#eef2ff" : "#fff",
-            color: dockOpen ? "#3730a3" : "#374151", borderRadius: 8,
-          }}
-        >
-          🤖 对话面板
-        </button>
-        {/* 全局采集徽标（ADR-007）：切页/最小化后仍可见采集状态。
-            批 2b：paused → pausedReason 三态文案（manual/media/foreground 同源，
-            与右栏/浮窗一致）；recovering 与 paused 组合文案保持原语义 */}
-        {capture.active && (
-          <span
-            style={{
-              marginLeft: "auto",
-              fontSize: 12,
-              fontWeight: 600,
-              color: capture.pausedReason || capture.recovering ? "#b45309" : "#0d9488",
-              background: capture.pausedReason || capture.recovering ? "#fffbeb" : "#f0fdfa",
-              border: `1px solid ${capture.pausedReason || capture.recovering ? "#f59e0b" : "#14b8a6"}`,
-              borderRadius: 12,
-              padding: "3px 10px",
-            }}
-          >
-            {/* 审查修复（观察 2026-08-29-2）：恢复态文案区分"暂停挂起"——
-                暂停期重连风暴曾显示"采集中/恢复中"误导，现在明确"暂停中"语义 */}
-            {capture.recovering
-              ? capture.pausedReason
-                ? "⏸ 暂停挂起（重连中）"
-                : "⚠️ 采集恢复中"
-              : capture.pausedReason
-                ? pauseReasonLabel(capture.pausedReason)
-                : "🎙 采集中"}
-          </span>
-        )}
-        {/* v0.8.0 F2：AI 任务完成通知（全局 toast——跨页面可见） */}
-        {aiToast && (
-          <span
-            style={{
-              marginLeft: capture.active ? 8 : "auto",
-              fontSize: 12,
-              fontWeight: 500,
-              color: aiToast.kind === "ok" ? "#047857" : "#b91c1c",
-              background: aiToast.kind === "ok" ? "#ecfdf5" : "#fef2f2",
-              border: `1px solid ${aiToast.kind === "ok" ? "#a7f3d0" : "#fecaca"}`,
-              borderRadius: 12,
-              padding: "3px 10px",
-              maxWidth: 420,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {aiToast.text}
-          </span>
-        )}
-      </nav>
+      {/* 批 3 T7：A′ 顶栏（规格 §6.1）。原内联 9-Tab + 双 `marginLeft:auto` 布局已删除，
+          改为 `shell/TopBar`（8 个域 Tab + ⌘K + ⚙ 齿轮，两档溢出走媒体查询）。
+          `right` 插槽里是**两个常驻状态件**（都是已接线功能，不许在本步消失）：
+            · `dock-toggle` —— REQ-274 全局 AI 对话面板的**唯一显式入口**（T11 决定它进命令面板还是留在顶栏）；
+            · 采集徽标 —— ADR-007，切页/最小化后仍可见采集状态（规格 §6.1 明确列了「采集状态」）。
+          AI toast **不在**这里：它是本文件下方 `MainShell` 最外层渲染的 fixed 覆盖层（裁决 A3）。 */}
+      <TopBar
+        page={page}
+        onSelect={(key) => setPage(key)}
+        onOpenSettings={() => setPage("settings")}
+        // T11 接线命令面板（⌘K 面板与它的数据源都在 T11/T12；本步按钮就位、回调留空）
+        onOpenPalette={() => {}}
+        right={
+          <>
+            <TopBarAction
+              testId="dock-toggle"
+              icon="ai"
+              label="对话面板"
+              title="AI 任务对话面板（Ctrl+Shift+A）"
+              pressed={dockOpen}
+              onClick={() => setDockOpen((v) => !v)}
+            />
+            {/* 全局采集徽标（ADR-007）：切页/最小化后仍可见采集状态。
+                批 2b：paused → pausedReason 三态文案（manual/media/foreground 同源，
+                与右栏/浮窗一致）；recovering 与 paused 组合文案保持原语义。
+                T7：`marginLeft:auto` 删除 —— 定位由 `.ed-topbar__right`（整块 margin-left:auto）负责。 */}
+            {capture.active && (
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: capture.pausedReason || capture.recovering ? "#b45309" : "#0d9488",
+                  background: capture.pausedReason || capture.recovering ? "#fffbeb" : "#f0fdfa",
+                  border: `1px solid ${capture.pausedReason || capture.recovering ? "#f59e0b" : "#14b8a6"}`,
+                  borderRadius: 12,
+                  padding: "3px 10px",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {/* 审查修复（观察 2026-08-29-2）：恢复态文案区分"暂停挂起"——
+                    暂停期重连风暴曾显示"采集中/恢复中"误导，现在明确"暂停中"语义 */}
+                {capture.recovering
+                  ? capture.pausedReason
+                    ? "⏸ 暂停挂起（重连中）"
+                    : "⚠️ 采集恢复中"
+                  : capture.pausedReason
+                    ? pauseReasonLabel(capture.pausedReason)
+                    : "🎙 采集中"}
+              </span>
+            )}
+          </>
+        }
+      />
 
       {/* 页面区（TD-004：保留挂载 + display 切换——页面切换不重挂载，
           避免 ClassroomPage 每次进入重复窗口枚举 100-500ms 停顿；状态与事件监听保留） */}
@@ -475,6 +445,42 @@ function MainShell() {
           <SettingsPage active={page === "settings"} />
         </PageSlot>
       </main>
+      {/* v0.8.0 F2：AI 任务完成通知（全局 toast——跨页面可见）。
+          批 3 T7（控制方裁决 A3）：**从 `<nav>` 行内搬到 fixed 覆盖层** —— 它曾是 1024 溢出的唯一主因
+          （单项 373.75 px = 视口的 36.5%；含它 1375.74、剔除它 997.99），规格 §6.1 的顶栏清单里
+          也没有它。落在 `MainShell` 最外层（**不是** nav 的子节点）⇒ 不参与顶栏宽度分配，
+          1024 档的宽度验收因此**不必**把 toast 剔出去（剔除读数求通过是本批禁止的自我欺骗）。
+          跨页面可见性不变：它挂在导航壳上，与页面切换无关。
+          Why 自足内联、不 import L1 的 `Toast` 原语：批 3 非目标 2 明令不许 import `ui/primitives`
+          （会把整层 CSS 与 `motion.css` 拉进首屏）。批 4 迁移原语时整条交给 `Toast`。
+          文案与三档配色逐字沿用迁移前（零观感变化）；唯一差别是**不再 ellipsis 单行裁切** ——
+          旧裁切只为在 56px 行里抢宽度，脱离行内后换行更可读。
+          ⚠️ 层级（登记给批 4）：`zIndex("toast")` = 500，而对话面板今日仍是裸数字 900
+          （zIndex.guard 冻结名单里的一项）⇒ 面板展开时 toast 可能被它盖住；批 4 把面板迁到
+          `zIndex("panel")`（=100）后按六档标尺自然消解。本任务不擅自改面板层级。 */}
+      {aiToast && (
+        <div
+          data-testid="ai-toast"
+          role="status"
+          style={{
+            position: "fixed",
+            // 顶栏之下 8px：纵向位置消费 --ed-nav-h（M1 的单一真源），不写死 56
+            top: "calc(var(--ed-nav-h) + 8px)",
+            right: 16,
+            zIndex: zIndex("toast"),
+            maxWidth: 420,
+            fontSize: 12,
+            fontWeight: 500,
+            borderRadius: 12,
+            padding: "6px 12px",
+            color: aiToast.kind === "ok" ? "#047857" : "#b91c1c",
+            background: aiToast.kind === "ok" ? "#ecfdf5" : "#fef2f2",
+            border: `1px solid ${aiToast.kind === "ok" ? "#a7f3d0" : "#fecaca"}`,
+          }}
+        >
+          {aiToast.text}
+        </div>
+      )}
       {/* REQ-274：全局 AI 对话面板（常驻挂载——开合仅切 display，选中态/后台任务保活）。
           批 2：闸门只加在**首开之前** —— dockMounted 一旦为真永不复位，此后 open/close
           仍是纯 display 切换（保活语义逐字保留）；独立 Suspense(fallback=null) 与 PageSlot

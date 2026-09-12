@@ -1,0 +1,142 @@
+/*
+ * TopBar.css — A′ 顶栏（规格 §6.1）。批 3 只做静态布局与两档溢出。
+ *
+ * Why 需要这个文件（现网 App.tsx 的顶栏是内联 style）：两档溢出是**媒体查询**的活，内联 style
+ *   表达不了。动效（墨渍 hover / 按下微陷 / 焦点环落纸）属批 6 ⇒ 本文件**不得**出现
+ *   transition / animation / @keyframes（TopBar.test.tsx 的静态守卫逐条扫）。
+ *
+ * 高度消费 --ed-nav-h（批 3 T2 的 token 真源）；三处档位数值消费 `shell/breakpoints.ts`
+ *   （nav / navFull / navActionsFull），但 CSS 媒体查询**读不到 TS 常量** ⇒ 两侧必须同值，
+ *   由 TopBar.test.tsx 的守卫断言钉住（1179 = navFull−1 · 1399 = navActionsFull−1 ·
+ *   1023 = nav−1）。写错数字当场红。
+ *
+ * ⚠️ 顶栏项一律 `flex: 0 0 auto`（批 3 陷阱 #15）：被压缩的 flex 项会让 `scrollWidth` 静默低估
+ *   —— 实测品牌项固有宽 141.8125 在 1024 下读成 83，足以把「溢出 352」读成「余量 26」。
+ *   宁可溢出可见，也不要「压缩后的假余量」：一旦允许压缩，1024 无溢出这条验收就失去意义。
+ *
+ * ⚠️ 横向预算（控制方裁决 A7「R2」，实测口径见任务报告 §宽度表）：规格 §6.1 的「≥1180 图标+文字」
+ *   是按**纯文字**估的（其「约 1070px」漏算 9 个图标 ≈ +234 px）⇒ 满档真实需求 1353.8 px（含最宽
+ *   采集徽标），**连默认窗 1280 都装不下**。1180 这个规格数字由既有测试冻结（`breakpoints.test.ts`）
+ *   ⇒ 只能让内容缩小去装它：Tab 内边距 16→12、Tab 间距 4→2、右簇间距 8→4、右簇文字压到 1399 以下。
+ *   结果是满档 1180 余量 +19.6、默认窗 1280 余量 +119.6（最坏徽标态），1024 余量 +291.89。
+ *
+ * ⚠️ 两组文字的显隐**必须用各自独立的类**（控制方 A7 明文）：
+ *   · `.ed-topbar__tab-label`（8 个域 Tab）—— 只在 ≤1179 收起（规格 §6.1 第二级）；
+ *   · `.ed-topbar__action-label`（⌘K / 对话面板 / ⚙ 三个右侧动作）—— 在 ≤1399 收起。
+ *   混用同一条规则会连 Tab 文字一起藏掉（T7 报告附变异体实测）。
+ */
+.ed-topbar {
+  height: var(--ed-nav-h, 56px);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--ed-border, #eae7e0);
+  background: var(--ed-bg-surface, #fff);
+  box-sizing: border-box;
+}
+
+.ed-topbar__brand {
+  font-weight: 700;
+  font-size: 15px;
+  margin-right: 20px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.ed-topbar__tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /* 不许收缩（陷阱 #15 的同族）：容器一旦可压，标签按钮会**溢出到右侧状态件底下**重叠，
+     而 DOM 读数看不出（容器的 rect 仍然「装得下」）。宁可整行溢出可见，也不许静默重叠。 */
+  flex: 0 0 auto;
+}
+
+.ed-topbar__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ed-ink-2, #4b5563);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+/* 选中态（当前页）与「按下/展开态」（如对话面板开合）共用同一档视觉：
+   旧行内写法用边框 + 底色示意开合，收进本文件后统一成「墨色 + 下边框」这一档，少一套颜色。 */
+.ed-topbar__tab[aria-current="page"],
+.ed-topbar__tab[aria-pressed="true"] {
+  font-weight: 600;
+  color: var(--ed-link, #1f5fbf);
+  border-bottom-color: var(--ed-link, #1f5fbf);
+}
+
+/* 右侧动作簇（⌘K / 对话面板 / ⚙）：**独立类**，不与域 Tab 共用显隐规则（见文件头） */
+.ed-topbar__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ed-ink-2, #4b5563);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.ed-topbar__action[aria-current="page"],
+.ed-topbar__action[aria-pressed="true"] {
+  font-weight: 600;
+  color: var(--ed-link, #1f5fbf);
+  border-bottom-color: var(--ed-link, #1f5fbf);
+}
+
+.ed-topbar__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* ≥1400：右侧动作簇恢复文字（1180–1399 只显示图标 + 悬浮名 —— 实测满档装不下三份文字）。
+   断点数值 = BREAKPOINTS.navActionsFull − 1 */
+@media (max-width: 1399px) {
+  .ed-topbar__action-label {
+    display: none;
+  }
+  .ed-topbar__action {
+    padding: 8px;
+  }
+}
+
+/* 1024–1179：8 个域 Tab 仅图标 + 悬浮名（规格 §6.1 第二级「溢出两级」）。
+   断点数值 = BREAKPOINTS.navFull − 1 */
+@media (max-width: 1179px) {
+  .ed-topbar__tab-label {
+    display: none;
+  }
+  .ed-topbar__tab {
+    padding: 8px;
+  }
+}
+
+/* < 1024：规格 §6.1「由最小窗兜底」—— 最小窗是 1024（批 3 T4），故本档理论不可达。
+   保留一条**防御性**规则：真到 1023 时宁可裁掉品牌，也不让右侧状态件（采集徽标）被推出视口。 */
+@media (max-width: 1023px) {
+  .ed-topbar__brand {
+    display: none;
+  }
+}
