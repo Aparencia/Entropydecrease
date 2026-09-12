@@ -35,7 +35,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import ColumnBar from "../components/ColumnBar";
 import { Button, ViewSwitcher } from "../ui/primitives";
 import type { ViewSwitcherOption } from "../ui/primitives";
-import { baseSelector, offendersIn, responseRules } from "./responseScan";
+import { baseSelector, declaredProps, offendersIn, responseRules } from "./responseScan";
 
 const RULES = responseRules();
 
@@ -55,6 +55,14 @@ const landingOn = (el: Element): readonly string[] =>
 /** 打到这个元素上的**状态**回执（选择器带状态 ⇒ 就是"做完了 / 收到了"可区分的那一半） */
 const stateOn = (el: Element): readonly string[] =>
   RULES.filter((r) => r.selector !== baseSelector(r.selector) && matchesBase(el, baseSelector(r.selector))).map((r) => r.selector);
+
+/** 打到这个元素上、且**声明了过渡**的规则（没有过渡的"回执"是 0ms 硬跳，不是回执） */
+const transitionOn = (el: Element): readonly string[] =>
+  RULES.filter(
+    (r) =>
+      matchesBase(el, baseSelector(r.selector)) &&
+      declaredProps(r.body).some((p) => p === "transition" || p.startsWith("transition-")),
+  ).map((r) => r.selector);
 
 /** 取宿主元素（找不到即抛 —— 判据不许在空节点上变成空真） */
 function el(container: HTMLElement, testId: string): Element {
@@ -97,23 +105,34 @@ const OPTIONS: readonly ViewSwitcherOption[] = [
 afterEach(cleanup);
 
 describe("① 可达性：规则要真的打得到今天的元素形态（`matches` 级，node 侧判不到那一半）", () => {
-  const cases: ReadonlyArray<readonly [string, () => ReactElement]> = [
-    ["裸 button 宿主", () => <BareButton onClick={() => undefined} />],
-    ["原生 checkbox 宿主", () => <Checkbox onCheck={() => undefined} />],
-    ["文本输入宿主", () => <TextInput />],
-    ["details/summary 宿主", () => <Fold />],
-    ["draggable 行宿主", () => <DragRow onDragStart={() => undefined} />],
-    ["role=separator 宿主", () => <Separator />],
+  /** 第三项 = 过渡是否必须由响应层规则**自带**：
+   *  `role="separator"` 的过渡被 `ColumnResizer` 的行内 `transition` shorthand **整条遮蔽**
+   *  （登记在 `responseCoverage.test.ts` 的余量表）⇒ 它只能拿状态回执，平滑半场由调用点自己的 0.15s 承担。 */
+  const cases: ReadonlyArray<readonly [string, () => ReactElement, boolean]> = [
+    ["裸 button 宿主", () => <BareButton onClick={() => undefined} />, true],
+    ["原生 checkbox 宿主", () => <Checkbox onCheck={() => undefined} />, true],
+    ["文本输入宿主", () => <TextInput />, true],
+    ["details/summary 宿主", () => <Fold />, true],
+    ["draggable 行宿主", () => <DragRow onDragStart={() => undefined} />, true],
+    ["role=separator 宿主", () => <Separator />, false],
   ];
 
-  for (const [name, make] of cases) {
-    it(`${name}：至少一条响应层规则命中，且带状态回执（"收到了"与"做完了"可区分）`, () => {
+  for (const [name, make, needsTransition] of cases) {
+    it(`${name}：至少一条响应层规则命中${needsTransition ? "且自带过渡" : "（过渡由调用点承担，登记例外）"}，并有状态回执`, () => {
       const { container } = render(make());
       const host = container.firstElementChild;
       if (host === null) throw new Error(`${name} 没有渲染出元素`);
       const target = name.includes("summary") ? el(container, "summary") : host;
       expect(landingOn(target).length, `${name} 没被任何响应层规则打到（选择器写对了但匹配不上）`).toBeGreaterThanOrEqual(1);
       expect(stateOn(target).length, `${name} 只有过渡声明、没有状态回执 ⇒ 「即时反馈」不成立`).toBeGreaterThanOrEqual(1);
+      if (needsTransition) {
+        expect(
+          transitionOn(target).length,
+          `${name} 的落点里没有一条声明过渡 ⇒ 回执是 0ms 硬跳（只剩状态规则不算回执）`,
+        ).toBeGreaterThanOrEqual(1);
+      } else {
+        expect(transitionOn(target), `${name} 的过渡登记例外不成立了（要么给它补规则、要么改登记）`).toEqual([]);
+      }
     });
   }
 
