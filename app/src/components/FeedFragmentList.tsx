@@ -16,7 +16,7 @@ import type { Fragment, Note, NoteGroup } from "../types";
 // REQ-316（批 7）：碎片删除/升笔记返回契约（源空组清理留痕数据源）
 import type { DeleteFragmentResult, PromoteNoteResult } from "../types/notes";
 import { fragmentPreview, promoteTitleFor } from "../utils/inbox";
-import { ConfirmDialog, StatusLine, Text } from "../ui/primitives";
+import { ConfirmDialog, StatusLine, Surface, Text } from "../ui/primitives";
 
 interface Props {
   /** 列宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 320=历史值） */
@@ -239,7 +239,7 @@ export default function FeedFragmentList({ width = 320, onChanged, onPromoted, o
 
             {/* 升笔记轻确认：内联展开（标题预填首句可改 + 归组下拉默认未归组） */}
             {promote?.fragmentId === f.id && (
-              <div data-testid={`promote-form-${f.id}`} style={{ marginTop: 6, padding: 8, background: "#f9fafb", borderRadius: 6, border: "1px solid #e5e7eb" }}>
+              <Surface level="canvas" testId={`promote-form-${f.id}`} style={{ marginTop: 6, padding: 8 }}>
                 <input
                   data-testid="promote-title"
                   value={promote.title}
@@ -273,7 +273,7 @@ export default function FeedFragmentList({ width = 320, onChanged, onPromoted, o
                     取消
                   </button>
                 </div>
-              </div>
+              </Surface>
             )}
           </div>
         ))}

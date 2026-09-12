@@ -13,7 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 // M8：轮询/事件双通道/卡住检测抽入共用 hook（与 AiRefineCard 同源）
 import { useAiTaskPolling } from "../hooks/useAiTaskPolling";
 import { failureGuide } from "./aiTaskFailure";
-import { Button, StatusLine, Text } from "../ui/primitives";
+import { Button, StatusLine, Surface, Text } from "../ui/primitives";
 import type {
   AiEnrichResult,
   AiSettingsView,
@@ -252,7 +252,7 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
 
       {/* 成本确认 */}
       {phase === "confirm" && est && (
-        <div style={{ border: "1px solid #e5e7eb", background: "#fff", borderRadius: 6, padding: 8, marginBottom: 6, fontSize: 12 }}>
+        <Surface style={{ padding: 8, marginBottom: 6, fontSize: 12 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>成本确认</div>
           <div>
             预估 token：<strong>{est.estTokens}</strong> · 预估费用：<strong>¥{est.estCostYuan.toFixed(4)}</strong>
@@ -277,7 +277,7 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
             </button>
             <Button variant="secondary" size="md" onClick={reset}>取消</Button>
           </div>
-        </div>
+        </Surface>
       )}
 
       {/* 任务进度 */}
@@ -308,9 +308,9 @@ export default function EnrichPanel({ noteId, onUpdated }: { noteId: number; onU
               {(result.droppedReasons ?? []).length > 3 ? "…" : ""}（其余合规块照常展示）
             </div>
           )}
-          <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff", padding: 8, fontSize: 11, fontFamily: "monospace", marginBottom: 6, whiteSpace: "pre-wrap" }}>
+          <Surface style={{ maxHeight: 200, overflowY: "auto", padding: 8, fontSize: 11, fontFamily: "monospace", marginBottom: 6, whiteSpace: "pre-wrap" }}>
             {result.enrichedMarkdown.slice(-800)}
-          </div>
+          </Surface>
           <div style={{ display: "flex", gap: 6 }}>
             <button style={{ ...btn, background: "#7c3aed", color: "#fff", border: "none" }} onClick={() => void apply()}>
               ✅ 采纳（应用补充）

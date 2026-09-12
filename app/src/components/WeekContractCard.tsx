@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { WeekContractStatus } from "../types";
-import { Text } from "../ui/primitives";
+import { Surface, Text } from "../ui/primitives";
 
 interface Props {
   groupId: number;
@@ -81,7 +81,7 @@ export default function WeekContractCard({ groupId }: Props) {
   const cardRatio = status && c ? status.actualCards / c.targetCards : 0;
 
   return (
-    <div style={{ marginTop: 8, padding: 8, background: "#fff", borderRadius: 6, border: "1px solid #e5e7eb" }}>
+    <Surface style={{ marginTop: 8, padding: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
         <span style={{ fontWeight: 600, color: "#374151", fontSize: 12 }}>📅 周契约</span>
         {status?.minimalDayMet && (
@@ -178,6 +178,6 @@ export default function WeekContractCard({ groupId }: Props) {
       )}
 
       {err && <p style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>{err}</p>}
-    </div>
+    </Surface>
   );
 }

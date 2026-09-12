@@ -14,7 +14,7 @@ import type { ChatMessage, KbHit } from "../types";
 import ChatMessageMarkdown from "./ChatMessageMarkdown";
 import CitationChips from "./CitationChips";
 import { parseKbMeta } from "../utils/kbHits";
-import { Text } from "../ui/primitives";
+import { Surface, Text } from "../ui/primitives";
 
 export interface StreamingState {
   /** 流式累积文本（非 null = 流式生成中） */
@@ -113,13 +113,13 @@ export default function ChatMessageList({ messages, streaming, onRegenerate, onE
                       <span>{parseUsage(m.usageJson).tokens} tokens</span>
                     )}
                   </Text>
-                  <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px" }}>
+                  <Surface level="canvas" style={{ padding: "8px 12px" }}>
                     <ChatMessageMarkdown content={m.content} />
                     {/* v0.19.1：引用 chips（answer 与 hits-only 引导同款展示） */}
                     {meta && meta.hits.length > 0 && (
                       <CitationChips hits={meta.hits} onOpenNote={onOpenCitedNote} />
                     )}
-                  </div>
+                  </Surface>
                   {/* v0.16.1：AI 回答整段存为笔记（至该条的完整对话上下文） */}
                   {onSaveMessage && (m.status === "done" || m.status === "aborted") && (
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 2 }}>
@@ -142,11 +142,11 @@ export default function ChatMessageList({ messages, streaming, onRegenerate, onE
       {/* 流式占位（进行中回答）——命中引用随 kb_hits 事件先达 */}
       {streaming?.text !== null && streaming?.text !== undefined && (
         <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 12 }}>
-          <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", maxWidth: "86%" }}>
+          <Surface level="canvas" style={{ padding: "8px 12px", maxWidth: "86%" }}>
             <ChatMessageMarkdown content={streaming.text} />
             {(streaming.hits?.length ?? 0) > 0 && <CitationChips hits={streaming.hits ?? []} onOpenNote={onOpenCitedNote} />}
             <span style={{ display: "inline-block", width: 6, height: 14, background: "#0d9488", verticalAlign: "text-bottom", marginLeft: 2 }} />
-          </div>
+          </Surface>
         </div>
       )}
       <div ref={endRef} />

@@ -13,7 +13,7 @@ import type { ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { SAMPLE_SYSTEM } from "../utils/knowledgeSample";
 import type { KnowledgeSystem } from "../types/knowledge";
-import { StatusLine } from "../ui/primitives";
+import { StatusLine, Surface } from "../ui/primitives";
 
 interface Props {
   /** 复制完成回调（父级刷新体系列表并选中新体系） */
@@ -102,7 +102,7 @@ export default function KnowledgeSampleView({ onCopied, onNeedGlobal, refreshGlo
   };
 
   return (
-    <div data-testid="sample-view" style={{ width: "100%", maxWidth: 560, textAlign: "left", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 16 }}>
+    <Surface radius="overlay" testId="sample-view" style={{ width: "100%", maxWidth: 560, textAlign: "left", padding: 16 }}>
       <div style={{ fontWeight: 700, fontSize: 14, color: "#0f766e", marginBottom: 4 }}>📷 示例：领域体系「{SAMPLE_SYSTEM.name}」</div>
       <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>核心问题：{SAMPLE_SYSTEM.coreQuestion}</div>
       <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>🌳 问题树</div>
@@ -133,6 +133,6 @@ export default function KnowledgeSampleView({ onCopied, onNeedGlobal, refreshGlo
         {busy ? "复制中…" : "📋 复制为我的体系"}
       </button>
       {err && <div style={{ marginTop: 6 }}><StatusLine kind="error">{err}</StatusLine></div>}
-    </div>
+    </Surface>
   );
 }

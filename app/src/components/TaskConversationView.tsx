@@ -12,7 +12,7 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiEnrichResult, AiTaskRecord, AiTurn } from "../types";
 import ChatMessageMarkdown, { truncatePreview } from "./ChatMessageMarkdown";
-import { Text } from "../ui/primitives";
+import { Surface, Text } from "../ui/primitives";
 
 interface Props {
   task: AiTaskRecord;
@@ -75,7 +75,7 @@ export default function TaskConversationView({ task, turns, refTitle, onOpenSess
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "16px 20px" }}>
       {/* 任务卡 */}
-      <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 14px", marginBottom: 14, background: "#fafafa" }}>
+      <Surface level="canvas" radius="overlay" style={{ padding: "10px 14px", marginBottom: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span style={{ fontWeight: 700, fontSize: 14, color: "#111827" }}>
             {isRefine ? "✨ AI 精修" : "📚 AI 知识补充"} · {refTitle}
@@ -173,7 +173,7 @@ export default function TaskConversationView({ task, turns, refTitle, onOpenSess
             background: adoptMsg.startsWith("✅") ? "#ecfdf5" : "#fef2f2",
           }}>{adoptMsg}</div>
         )}
-      </div>
+      </Surface>
 
       {/* 成功结果预览（result_json → refinedMarkdown） */}
       {task.state === "succeeded" && task.resultJson && (
@@ -185,9 +185,9 @@ export default function TaskConversationView({ task, turns, refTitle, onOpenSess
             {openResult ? "▾" : "▸"} 展开精修/补充结果
           </button>
           {openResult && (
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 14px", marginTop: 6, background: "#fcfcfd", maxHeight: 420, overflowY: "auto" }}>
+            <Surface level="canvas" style={{ padding: "10px 14px", marginTop: 6, maxHeight: 420, overflowY: "auto" }}>
               <ChatMessageMarkdown content={truncatePreview(extractResultMarkdown(task.resultJson))} />
-            </div>
+            </Surface>
           )}
         </div>
       )}
@@ -207,11 +207,11 @@ export default function TaskConversationView({ task, turns, refTitle, onOpenSess
             {openTurns[t.turn] ? "▾" : "▸"} 第 {t.turn} 片对话（提示词 + 回答全文）
           </button>
           {openTurns[t.turn] && (
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, marginTop: 6, background: "#fcfcfd" }}>
+            <Surface level="canvas" style={{ marginTop: 6 }}>
               <TrajectoryBlock label="🤖 提示词（system）" text={t.system} mono />
               <TrajectoryBlock label="📄 请求（user）" text={t.user} mono />
               <TrajectoryBlock label="✍️ 回答（assistant）" text={truncatePreview(t.response)} mono />
-            </div>
+            </Surface>
           )}
         </div>
       ))}

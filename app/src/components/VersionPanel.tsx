@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiUsageRecord, DiffOp, NoteVersion, NoteVersionSource } from "../types";
 import RefineWorkbench from "./RefineWorkbench";
-import { ConfirmDialog, StatusLine, Text } from "../ui/primitives";
+import { ConfirmDialog, StatusLine, Surface, Text } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "4px 8px", cursor: "pointer", fontSize: 11, borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" };
 
@@ -111,7 +111,7 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
   const totalCost = usage.reduce((s, u) => s + u.costYuan, 0);
 
   return (
-    <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginBottom: 10, background: "#fcfcfd" }}>
+    <Surface level="canvas" style={{ padding: 10, marginBottom: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <button style={{ ...btn, fontWeight: 600 }} onClick={() => setOpen((o) => !o)}>
           {open ? "▾" : "▸"} 🕘 版本时间线（{versions.length || "…"}）
@@ -174,9 +174,9 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
             </select>
           </div>
           {diff && (
-            <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff", padding: 6, fontSize: 11, fontFamily: "monospace" }}>
+            <Surface style={{ maxHeight: 200, overflowY: "auto", padding: 6, fontSize: 11, fontFamily: "monospace" }}>
               {diff.length === 0 ? <div style={{ color: "#6b7280" }}>两版内容一致</div> : diff.map((op, i) => <DiffLine key={i} op={op} />)}
-            </div>
+            </Surface>
           )}
 
           {/* AI 成本记录（REQ-143 完整：token/费用/模型/切片） */}
@@ -220,6 +220,6 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
         onCancel={() => setPendingRollback(null)}
         testId="version-rollback-confirm"
       />
-    </div>
+    </Surface>
   );
 }

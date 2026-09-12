@@ -13,7 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Text } from "../ui/primitives";
+import { Surface, Text } from "../ui/primitives";
 
 /** 横条最多展示张数（最新 N 张，旧的到「会话」页图集查看） */
 const MAX_SHOWN = 12;
@@ -93,7 +93,7 @@ export default function LiveImageStrip({ sessionId }: { sessionId: number | null
   const shown = images.slice(-MAX_SHOWN);
 
   return (
-    <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, marginBottom: 8, background: "#fff" }}>
+    <Surface style={{ padding: 8, marginBottom: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
         <span style={{ fontSize: 11, color: "#6b7280" }}>🖼 最近画面（{images.length} 张，实时归档）</span>
         <button
@@ -157,6 +157,6 @@ export default function LiveImageStrip({ sessionId }: { sessionId: number | null
         </div>
       )}
       {error && <div style={{ fontSize: 10, color: "#dc2626", marginTop: 4 }}>{error}</div>}
-    </div>
+    </Surface>
   );
 }

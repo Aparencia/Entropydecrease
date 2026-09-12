@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiSettingsView } from "../types/ai";
-import { Text } from "../ui/primitives";
+import { Surface, Text } from "../ui/primitives";
 
 const TIERS = [
   { id: "light", label: "轻量（~4K，快而省）" },
@@ -45,7 +45,7 @@ export default function GoalAiSection() {
   };
 
   return (
-    <div style={{ marginTop: 8, padding: 8, background: "#fff", borderRadius: 6, border: "1px solid #e5e7eb" }}>
+    <Surface style={{ marginTop: 8, padding: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
         <span style={{ fontWeight: 600, fontSize: 12, color: "#374151" }}>🎯 目标 AI（规划师）</span>
         <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
@@ -75,6 +75,6 @@ export default function GoalAiSection() {
         <Text tone="ink-3" style={{ fontSize: 11 }}>预算硬顶·成本/轨迹可查·失败自动回退规则草案</Text>
       </div>
       {msg && <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 0" }}>{msg}</p>}
-    </div>
+    </Surface>
   );
 }
