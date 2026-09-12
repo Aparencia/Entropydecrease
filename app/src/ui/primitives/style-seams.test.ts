@@ -85,11 +85,12 @@ describe("Text 类名 ↔ CSS 规则一致（类名拼错 = 静默无样式）",
   });
 });
 
-/** `Surface.tsx` 产出的 12 个类名（与 `Surface.test.tsx` 的名单同源） */
+/** `Surface.tsx` 产出的 13 个类名（与 `Surface.test.tsx` 的名单同源） */
 const SURFACE_CLASSES: readonly string[] = [
   "ed-surface",
   ...["sunken", "canvas", "surface", "raised"].map((l) => `ed-surface--${l}`),
-  ...["stamp", "control", "panel", "overlay"].map((r) => `ed-surface--r-${r}`),
+  // 批 4 T17：`pill` 是 B17 第 2 条加的药丸档（切片内 `borderRadius: 999` 实测 3 处 ⇒ ≥3）⇒ 12 → 13
+  ...["stamp", "control", "panel", "overlay", "pill"].map((r) => `ed-surface--r-${r}`),
   "ed-surface--bordered",
   "ed-surface--interactive",
   "ed-surface--padded",
@@ -114,7 +115,7 @@ describe("Surface 盒子契约（控制方 2026-09-11 裁决 · 类名 ↔ CSS �
 
   it("Surface.tsx 产出的每个类在 Surface.css 里都有规则；且零颜色字面量、无 z-index", () => {
     const clean = stripComments(SURFACE_CSS);
-    expect(SURFACE_CLASSES).toHaveLength(12);
+    expect(SURFACE_CLASSES).toHaveLength(13);
     for (const cls of SURFACE_CLASSES) {
       expect(clean, `Surface.css 缺少 .${cls} 的规则`).toContain(`.${cls} {`);
     }

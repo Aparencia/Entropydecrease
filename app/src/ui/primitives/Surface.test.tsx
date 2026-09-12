@@ -24,7 +24,7 @@ import type { SurfaceLevel, SurfaceRadius, SurfaceTag } from "./index";
 
 /** 契约名单：与 `Surface.css` 的规则一一对应（改名单必须同时改 CSS 与测试） */
 const LEVELS: readonly SurfaceLevel[] = ["sunken", "canvas", "surface", "raised"];
-const RADIUS: readonly SurfaceRadius[] = ["stamp", "control", "panel", "overlay"];
+const RADIUS: readonly SurfaceRadius[] = ["stamp", "control", "panel", "overlay", "pill"];
 const TAGS: ReadonlyArray<readonly [SurfaceTag, string]> = [
   ["div", "DIV"], ["section", "SECTION"], ["article", "ARTICLE"], ["aside", "ASIDE"], ["li", "LI"],
 ];
@@ -60,7 +60,7 @@ describe("Surface 默认契约", () => {
   });
 });
 
-describe("Surface 四档底 / 四档圆角映射到类", () => {
+describe("Surface 四档底 / 五档圆角映射到类", () => {
   it("4 档 level 各有对应类（sunken 输入槽 · canvas 纸 · surface 卡面 · raised 弹层）", () => {
     for (const level of LEVELS) {
       const cls = classesOf(render(<Surface level={level}>x</Surface>).container);
@@ -68,11 +68,18 @@ describe("Surface 四档底 / 四档圆角映射到类", () => {
     }
   });
 
-  it("4 档 radius 各有对应类（3/5/8/10px 由 token 决定，原语只出档名）", () => {
+  it("5 档 radius 各有对应类（3/5/8/10px 由 token 决定，原语只出档名）", () => {
     for (const radius of RADIUS) {
       const cls = classesOf(render(<Surface radius={radius}>x</Surface>).container);
       expect(cls, `圆角 ${radius}`).toContain(`ed-surface--r-${radius}`);
     }
+  });
+
+  it("第五档 `pill`（批 4 T17 的药丸裁决）：类名与档名一致，且**不**落内联 style（值由 CSS 的 var 兜底给）", () => {
+    const { container } = render(<Surface radius="pill">x</Surface>);
+    expect(classesOf(container)).toContain("ed-surface--r-pill");
+    // 原语只出档名、值只在 CSS：这条守住「token 真源补 pill 之前也不许把 999px 内联进来」
+    expect(root(container).style.borderRadius).toBe("");
   });
 
   it("结构不变量：level 类与 radius 类各至多一个（不产生两档叠加态）", () => {

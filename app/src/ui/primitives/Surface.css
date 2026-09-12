@@ -38,12 +38,24 @@
 .ed-surface--surface { background: var(--ed-bg-surface); } /* 卡片 / 列 / 阅读面（= 基类，显式写出让四档对称） */
 .ed-surface--raised { background: var(--ed-bg-raised); box-shadow: var(--ed-shadow-1); } /* 弹层 / 菜单 / 浮窗 */
 
-/* 四档圆角：token 真源是 `SCALE_TOKENS.radiusScale`（3/5/8/10），类名带 `r-` 前缀以免与
-   同名的 level 档（如 `--surface`）撞在一起 */
+/* 五档圆角：前四档的 token 真源是 `SCALE_TOKENS.radiusScale`（3/5/8/10），类名带 `r-` 前缀以免与
+   同名的 level 档（如 `--surface`）撞在一起。
+
+   ⚠️ 第五档 `pill`（批 4 T17 · B17 第 2 条的药丸裁决）**不在 token 真源里** —— `SCALE_TOKENS.radiusScale`
+   今日仍只有 4 档，而 `tokens.drift.test.ts` 钉着 `[3, 5, 8, 10]`、`app/scripts/gen-tokens.mjs` 是它的
+   生成器 ⇒ 补这一档要动 token 层四处（生成器 / `tokens.gen.ts` / `tokens.css` / drift 测试），**不属
+   本单元范围**。故本档今日走 `var()` 兜底（与 `Text.css` 的 `var(--ed-type-1-size, 25px)` 同范式）：
+   值可用、名字已占位；token 真源补齐是**批 5/6 的 token 层工作**（已登记为 follow-up）。
+
+   Why 加这一档而不是让调用点写行内 `style`：规格 §4.2 只给四档，而切片内 `borderRadius: 999` 实测
+   **3 处**（≥ B6 阈值）⇒ 按 B17 回来改原语；在调用点用行内 `style` 补圆角被 ADR-033 §4 禁止。
+   ⚠️ 这与规格 §4.2 的「圆角 | 3 印章 · 5 控件与卡 · 8 面板 · 10 浮层」**不一致**（新增第五档）
+   ⇒ 规范回写属 **T18**，本单元不改规范文档。 */
 .ed-surface--r-stamp { border-radius: var(--ed-radius-stamp, 3px); }
 .ed-surface--r-control { border-radius: var(--ed-radius-control, 5px); }
 .ed-surface--r-panel { border-radius: var(--ed-radius-panel, 8px); }
 .ed-surface--r-overlay { border-radius: var(--ed-radius-overlay, 10px); }
+.ed-surface--r-pill { border-radius: var(--ed-radius-pill, 999px); }
 
 .ed-surface--padded { padding: var(--ed-space-12, 12px); }
 

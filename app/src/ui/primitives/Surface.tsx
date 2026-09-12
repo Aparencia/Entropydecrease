@@ -30,8 +30,9 @@ import "./Surface.css";
 /** 四档底，与 `COLOR_TOKENS` 的 `bg-*` 四个颜色 token 一一对应（值只在 `ui/tokens.css`） */
 export type SurfaceLevel = "sunken" | "canvas" | "surface" | "raised";
 
-/** 四档圆角，与 `SCALE_TOKENS.radiusScale` 同序（3 / 5 / 8 / 10px） */
-export type SurfaceRadius = "stamp" | "control" | "panel" | "overlay";
+/** 五档圆角：四档与 `SCALE_TOKENS.radiusScale` 同序（3 / 5 / 8 / 10px），第五档 `pill` 是批 4 T17 加的**药丸**形态
+ *  （`radiusScale` 里还没有它 ⇒ `Surface.css` 的该档走 `var(--ed-radius-pill, 999px)` 兜底；补 token 见彼处注释） */
+export type SurfaceRadius = "stamp" | "control" | "panel" | "overlay" | "pill";
 
 /** 可渲染的语义标签（不含 `button` / `a` —— 可交互元素属 `Button` 与调用点） */
 export type SurfaceTag = "div" | "section" | "article" | "aside" | "li";

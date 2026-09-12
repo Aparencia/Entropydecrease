@@ -110,6 +110,9 @@ const RADIUS_CLASS: Record<SurfaceRadius, string> = {
   control: "ed-surface--r-control",
   panel: "ed-surface--r-panel",
   overlay: "ed-surface--r-overlay",
+  // 批 4 T17（B17 第 2 条）：切片内 `borderRadius: 999` 实测 3 处 ⇒ ≥3 ⇒ 加**药丸**档。
+  // ⚠️ 这与规格 §4.2 的「四档圆角」不一致（新增第五档）⇒ 规范回写属 T18。
+  pill: "ed-surface--r-pill",
 };
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
   primary: "ed-btn--primary",
@@ -161,7 +164,7 @@ const CONTRACTS: readonly UnionContract[] = [
   { union: "TextSize", css: "Text.css", members: SIZE_CLASS, expected: 6 },
   { union: "TextFont", css: "Text.css", members: FONT_CLASS, expected: 3 },
   { union: "SurfaceLevel", css: "Surface.css", members: LEVEL_CLASS, expected: 4 },
-  { union: "SurfaceRadius", css: "Surface.css", members: RADIUS_CLASS, expected: 4 },
+  { union: "SurfaceRadius", css: "Surface.css", members: RADIUS_CLASS, expected: 5 },
   { union: "ButtonVariant", css: "Button.css", members: VARIANT_CLASS, expected: 3 },
   { union: "ButtonSize", css: "Button.css", members: BTN_SIZE_CLASS, expected: 3 },
   { union: "StatusKind", css: "StatusLine.css", members: STATUS_CLASS, expected: 4 },
