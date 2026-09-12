@@ -250,8 +250,8 @@ describe("接线面全量一致（manualChunks 不许有第二套逻辑）", () 
   });
 });
 
-// Task 5（不装 GSAP）：预留槽 + 循环 chunk 的**反例守卫**。槽位本身见 EXACT 的 gsap 两行。
-describe("批 6 预留：GSAP 必须落进独立 chunk（本批不安装 GSAP）", () => {
+// 批 6 已装 GSAP（T4 按 R15.4② 更正标签）：验收动作 = 去构建一次核对 vendor-gsap 独立生成且只经 import() 到达；槽位见 EXACT 两行。
+describe("批 6 已装 GSAP：GSAP 必须落进独立 chunk（槽位在表 + package.json 已装）", () => {
   it("GSAP 的两个包名都归 vendor-gsap，且与 react 不同组", () => {
     const gsap = vendorGroupOf("/r/node_modules/gsap/index.js");
     const gsapReact = vendorGroupOf("/r/node_modules/@gsap/react/dist/index.js");
