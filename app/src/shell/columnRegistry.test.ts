@@ -15,6 +15,11 @@
  *      `breakpointFor(...)` / `autoFoldBelow` —— 规格与阈值都住在注册表里。⑤ 按**目录发现**
  *      而非硬列文件名；判据只看**代码行**（丢注释行——注释里提到字段名不是「自建」，
  *      首版未丢被自己误伤过）。
+ *      ⑤ 另有两条**身份**判据（2026-09-12 补，纯新增断言、实现未动）：(a) 两个实参的键必须
+ *      **同一** —— 只判「同一行同时出现」时 `useColumnLayout("notes-list",
+ *      columnSpec("notes-groups"))` 判绿；(b) `min===max===0` 的行（`clamp(d,0,0)=0`
+ *      ⇒ 静默 0 宽，`settings-main` 是其一）不得作为 hook 的键实参 —— 注册表里的 ⚠️ 注释
+ *      不是判据。
  *
  * ⚠️ 仪器局限（诚实边界）：本文件**读不到**「组件实际渲染了多宽」—— 那是 jsdom 侧
  *   `components/notes/NotesReadingColumn.outline.test.tsx`（大纲列接线）与 T14 的像素探针的活。
@@ -72,6 +77,44 @@ function hits(hit: RegExp): string[] {
     }
   }
   return out;
+}
+
+/** ⑤(a) 的捕获器：`useColumnLayout("a", columnSpec("b"))` 的**两个**实参都抓下来。
+ *  Why 要升级：只要求同一行同时出现 `useColumnLayout(` 与 `columnSpec(` 时，把某一列的
+ *  规格喂给另一列（`("notes-list", columnSpec("notes-groups"))`）会判绿 —— 2026-09-12
+ *  变异体 A5d 在旧判据下实测绿、在新判据下红。 */
+const CALL_PAIR = /useColumnLayout\(\s*"([^"]+)"\s*,\s*columnSpec\(\s*"([^"]+)"\s*\)\s*\)/g;
+
+/** ⑤(b) 的捕获器：`useColumnLayout(` 后的**第一个字符串实参**（不要求同行有 `columnSpec`
+ *  —— 0/0 行即便配了规格也必须红；多行写法也逃不出本正则）。 */
+const HOOK_KEY = /useColumnLayout\(\s*"([^"]+)"/g;
+
+interface CallPair {
+  /** `hits()` 给的 `域路径:行` 前缀（格式固定为 `路径:行<两空格>原文`） */
+  where: string;
+  hookKey: string;
+  specKey: string;
+}
+
+function whereOf(hit: string): string {
+  return hit.slice(0, hit.indexOf("  "));
+}
+
+function callPairs(): CallPair[] {
+  const out: CallPair[] = [];
+  for (const hit of hits(/useColumnLayout\(/)) {
+    for (const m of hit.matchAll(CALL_PAIR)) {
+      out.push({ where: whereOf(hit), hookKey: m[1], specKey: m[2] });
+    }
+  }
+  return out;
+}
+
+/** ⑤(a) 判据本体 —— 抽成函数是为了让**仪器自检走同一条代码路径**（不是复述判据） */
+function crossedKeys(pairs: CallPair[]): string[] {
+  return pairs
+    .filter((p) => p.hookKey !== p.specKey)
+    .map((p) => `${p.where} → useColumnLayout("${p.hookKey}", columnSpec("${p.specKey}"))`);
 }
 
 describe("列注册表（规格 §6.2）", () => {
@@ -159,6 +202,45 @@ describe("调用点判据（规格 §6.2「页面不再自建 hook」）", () =>
   it("⑤ 扫描域内的 useColumnLayout 调用一律从注册表取规格", () => {
     const bad = hits(/useColumnLayout\(/).filter((d) => !/columnSpec\(/.test(d));
     expect(bad, `这些调用点仍在自建列规格（应写 columnSpec("<key>")）：\n${bad.join("\n")}`).toEqual([]);
+  });
+
+  it("⑤ 每个调用点的 hook 键与 columnSpec 键**同一**（捕获并比对，不只判同现）", () => {
+    // 仪器自检①：阳性样本（写岔键）必红、阴性样本（合法写法）不误伤 —— 走的是同一条判据
+    expect(crossedKeys([{ where: "<样本>", hookKey: "notes-list", specKey: "notes-groups" }]))
+      .toEqual(['<样本> → useColumnLayout("notes-list", columnSpec("notes-groups"))']);
+    expect(crossedKeys([{ where: "<样本>", hookKey: "x", specKey: "x" }])).toEqual([]);
+
+    const lines = hits(/useColumnLayout\(/);
+    // 仪器自检②：捕获必须覆盖**每一个**命中行 —— 否则「实参换成变量 / 换行写法」会让本条静默空转
+    const uncaptured = lines.filter((l) => [...l.matchAll(CALL_PAIR)].length === 0);
+    expect(uncaptured, `这些调用点逃出了捕获（本条会静默空转）：\n${uncaptured.join("\n")}`).toEqual([]);
+
+    const pairs = callPairs();
+    expect(pairs.length, "捕获到 0 个调用点 ⇒ 本条空转").toBeGreaterThan(3);
+    const bad = crossedKeys(pairs);
+    expect(bad, `这些调用点把某一列的规格喂给了另一列：\n${bad.join("\n")}`).toEqual([]);
+  });
+
+  it("⑤ 0/0 行（clamp 恒得 0 ⇒ 静默 0 宽）不得喂给 useColumnLayout", () => {
+    // Why 按**形状**（min===max===0）而非点名 `settings-main`：陷阱的成因是 `clamp(d,0,0)=0`，
+    // 任何 0/0 行都一样。注册表 `columnRegistry.ts` 对该行只有 ⚠️ 注释 —— 注释不是判据：
+    // 2026-09-12 变异体 M1a（SettingsPage 写 `useColumnLayout("settings-main", …)`）在旧判据下
+    // 判绿、在本条下红。
+    const zeroSpan: string[] = COLUMN_SPECS.filter((c) => c.min === 0 && c.max === 0).map((c) => c.key);
+    expect(zeroSpan.length, "0/0 行集合为空 ⇒ 本条会静默空转").toBeGreaterThan(2);
+    // 形状判据必须仍然覆盖 §6.2「居中 860」那一行（本条正是因它而写）
+    expect(zeroSpan).toContain("settings-main");
+
+    const fed = (line: string) =>
+      [...line.matchAll(HOOK_KEY)].map((m) => m[1]).filter((k) => zeroSpan.includes(k));
+    // 仪器自检：阳性样本必命中、阴性样本不误伤（与正式判据同一个函数）
+    expect(fed('const c = useColumnLayout("settings-main", columnSpec("settings-main"));')).toEqual(["settings-main"]);
+    expect(fed('const c = useColumnLayout("notes-outline", columnSpec("notes-outline"));')).toEqual([]);
+
+    const bad = hits(/useColumnLayout\(/).flatMap((h) =>
+      fed(h).map((k) => `${whereOf(h)} → useColumnLayout("${k}", …)（min 0 / max 0 ⇒ clamp 得 0）`),
+    );
+    expect(bad, `这些 0/0 行不得喂给 useColumnLayout：\n${bad.join("\n")}`).toEqual([]);
   });
 
   it("⑤ 扫描域内不得再出现断点阈值（阈值住在注册表 / breakpoints）", () => {
