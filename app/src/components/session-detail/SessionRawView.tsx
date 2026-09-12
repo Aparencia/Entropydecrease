@@ -28,8 +28,9 @@
  *              ② 每段加 `data-seg-id`（`useRevealChoreography` 的逐段锚点 = `[data-seg-id]`）；
  *              ③ 段正文 `<Text>` 追加 `lowConfidenceClass(seg.confidence)` —— 这是 R11.3 /
  *              R12.4 点名要落地的**低置信墨度起伏**（环境层第 ③ 件）的**生产过程调用点**：
- *              它与显影**共用同一个元素**，所以两者必须**互不覆盖** —— 那条 CSS `animation` 动
- *              `opacity`，显影的 GSAP 只动 `transform`（见 `useRevealChoreography.ts` 的文件头）。
+ *              它与显影**落在同一段落、但不是同一个元素**（显影动段落行 `<div>`，本类名在行内正文
+ *              `<span>` 上 —— `transform` 对行内元素无效，见 `useRevealChoreography.ts` 文件头），
+ *              所以两者**互不覆盖**：那条 CSS `animation` 动 `opacity`，显影的 GSAP 只动 `transform`。
  *              ④ `data-reveal-epoch` 把「持有的世代号」暴露到 DOM（R8.5：结构锚点优先于时间判据）。
  *              ⚠️ 因此本件新增一条 import 边：`components/structuredBlocks.ts`（它顶层 `import katex`
  *              + `katex.min.css`）⇒ **KaTeX 会成为会话详情惰性 chunk 的依赖**（首屏静态闭包不含本件，
