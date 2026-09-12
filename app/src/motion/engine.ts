@@ -53,7 +53,12 @@ export { gsap, useGSAP };
 
 /**
  * `gsap.core.Timeline` 的**转出**（计划 T10 Interfaces 逐字：`export type { gsap }` 转不出命名空间成员）。
- * 为什么必须由本文件转出：`import { gsap } from "gsap"` 绑定的**值**会遮蔽 `gsap` 这个**全局命名空间**，
- * 使用方直接写 `gsap.core.Timeline` 过不了类型检查。测试底座只以 `import type` 取它（不进产物）。
+ * ⚠️ **这是便利，不是类型检查的必需品**（T13b 按合并评审 I-2 更正了本段的旧说法）：旧注释称
+ * 「`import { gsap } from "gsap"` 绑定的**值**会遮蔽 `gsap` 这个**全局命名空间** ⇒ 使用方直接写
+ * `gsap.core.Timeline` 过不了类型检查」—— **实测为假**（同一棵提交树上三个 tsc case）：① 消费方
+ * `import { gsap } from "./engine"` 后写 `gsap.core.Timeline` ⇒ **exit 0**；② **不 import 任何东西**
+ * 直接写该类型 ⇒ **exit 0**；③ 阳性对照（同树 `app/src/**` 新文件里故意写错类型）⇒ **exit 2 / TS2322**
+ * —— 前两个 0 **不是**「没检查」。它今天仍被两处以 `import type` 消费（`motion/controls.ts` /
+ * `test/motionHarness.ts`，类型边不进产物），留着是因为**这个别名读起来稳、且是计划冻结的接口面**。
  */
 export type GsapTimeline = gsap.core.Timeline;
