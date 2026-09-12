@@ -45,8 +45,8 @@ describe("vendorGroupOf 钉值", () => {
     ["/r/node_modules/hast-util-to-text/lib/index.js", "vendor-katex"],
     ["/r/node_modules/hast-util-from-dom/lib/index.js", "vendor-katex"],
     ["/r/node_modules/hast-util-to-jsx-runtime/lib/index.js", "vendor-md"],
-    ["/r/node_modules/property-information/lib/index.js", "vendor-katex"],
-    ["/r/node_modules/hastscript/index.js", "vendor-katex"],
+    ["/r/node_modules/property-information/lib/index.js", "vendor-md"],
+    ["/r/node_modules/hastscript/index.js", "vendor-md"],
     ["/r/node_modules/@tauri-apps/api/core.js", "vendor-tauri"],
     ["/r/node_modules/@tauri-apps/plugin-dialog/dist-js/index.js", "vendor-tauri"],
     ["/r/node_modules/codemirror/dist/index.js", "vendor-editor"],
@@ -131,9 +131,9 @@ const EXACT_PINS: readonly (readonly [string, VendorGroup])[] = [
   ["hast-util-from-html-isomorphic", "vendor-katex"],
   ["hast-util-is-element", "vendor-katex"],
   ["hast-util-parse-selector", "vendor-katex"],
-  ["hastscript", "vendor-katex"],
-  ["property-information", "vendor-katex"],
-  ["web-namespaces", "vendor-katex"],
+  ["property-information", "vendor-md"],
+  ["hastscript", "vendor-md"],
+  ["web-namespaces", "vendor-md"],
   ["codemirror", "vendor-editor"],
   ["crelt", "vendor-editor"],
   ["style-mod", "vendor-editor"],
@@ -247,5 +247,46 @@ describe("接线面全量一致（manualChunks 不许有第二套逻辑）", () 
       "/r/app/src/App.tsx",
     ];
     expect(ids.map(manualChunks)).toEqual(ids.map((id) => vendorGroupOf(id)));
+  });
+});
+
+// Task 5（不装 GSAP）：预留槽 + 循环 chunk 的**反例守卫**。槽位本身见 EXACT 的 gsap 两行。
+describe("批 6 预留：GSAP 必须落进独立 chunk（本批不安装 GSAP）", () => {
+  it("GSAP 的两个包名都归 vendor-gsap，且与 react 不同组", () => {
+    const gsap = vendorGroupOf("/r/node_modules/gsap/index.js");
+    const gsapReact = vendorGroupOf("/r/node_modules/@gsap/react/dist/index.js");
+    expect(gsap).toBe("vendor-gsap");
+    expect(gsapReact).toBe("vendor-gsap");
+    expect(gsap).not.toBe(vendorGroupOf("/r/node_modules/react/index.js"));
+  });
+
+  it("槽位在表里，且 package.json 此刻没有 gsap（两半必须同时成立）", () => {
+    // 只查 package.json ⇒ 槽位被删也通过；只查表 ⇒ 批 6 装了依赖却没人复核产物也通过。
+    // devDependencies 也查：本段问的是「gsap 装了没有」，不是「它进不进浏览器产物」。
+    const pkg = JSON.parse(readFileSync(join(HERE, "..", "..", "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const all = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+    // 批 6 装上后这条会红 ⇒ 去构建一次，核对 vendor-gsap chunk 独立生成且只经 import() 到达。
+    expect(Object.keys(all).filter((d) => d === "gsap" || d === "@gsap/react")).toEqual([]);
+    expect(vendorGroupOf("/r/node_modules/gsap/index.js")).toBe("vendor-gsap");
+  });
+
+  it("反例：槽位不得被任何前缀规则吞掉（防将来有人加宽前缀）", () => {
+    expect(vendorGroupOf("/r/node_modules/gsap-core/index.js")).toBeUndefined();
+    expect(vendorGroupOf("/r/node_modules/not-gsap/index.js")).toBeUndefined();
+  });
+});
+
+// 实测（Task 4）：vite 警告 `Circular chunk: vendor-katex -> vendor-md -> vendor-katex`，两 chunk
+// 首行互指 ⇒ 130.66 kB gzip 熔成不可分簇。断环只靠**方向**（不靠把 katex 并进 md —— 那会被
+// 上面的 EXACT 钉值表抓住）：md→katex 的桥留在 md 侧，katex→md 的单向边保留。
+describe("循环 chunk 反例守卫（vendor-md ⇄ vendor-katex 不许成环）", () => {
+  it("md→katex 的桥（property-information 族）必须留在 vendor-md", () => {
+    for (const n of ["property-information", "hastscript", "web-namespaces"]) {
+      expect(EXACT[n]).toBe("vendor-md");
+      expect(vendorGroupOf(`/r/node_modules/${n}/index.js`)).toBe("vendor-md");
+    }
   });
 });
