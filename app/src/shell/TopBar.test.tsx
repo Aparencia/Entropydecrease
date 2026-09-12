@@ -159,11 +159,13 @@ describe("TopBar（规格 §6.1）", () => {
   /**
    * G1 改判（R1.2 / §七 G1 / R4.2）：旧断言「顶栏 CSS 里没有动效声明」⇒「动效只许 token + 落点可被
    * reduced-motion 覆盖」。**为什么不做计划 Task 14 的 `decls.length > 0`**：T12 的元素级回执
-   * （`motion.css:66-73` 的 `button:not(.ed-btn)`）已落在顶栏每个交互元素上（域 Tab 与两个动作按钮
-   * 都是裸 `<button>`）⇒ 顶栏再写一份 = R1.1 明禁的第二个真源（同 `motion.css:63` 对 `.ed-btn` 的论证）。
-   * 故：① 真写动效时时长/缓动只许 token；② `@keyframes` 仍禁（§8.2 桶边界）；③ **无条件** —— 顶栏的
-   * 交互元素必须留在那条回执的覆盖面内，且回执必须存在、声明时长、在那条唯一的 reduced-motion 名单里。
-   * 解禁新开的洞（本文件自写第二条 reduced-motion 块）一并封住。
+   * （`motion.css:66-73` 的 `button:not(.ed-btn)`）已落在顶栏每个交互元素上（域 Tab 与两个动作按钮都是
+   * 裸 `<button>`）⇒ 顶栏再写一份 = R1.1 明禁的第二个真源（同 `motion.css:63` 对 `.ed-btn` 的论证）。
+   * 三条判据：① 真写动效时时长/缓动只许 token；② `@keyframes` 仍禁（§8.2 桶边界）；
+   * ③ **无条件** —— 顶栏交互元素必须留在那条回执的覆盖面内（自写的每处动效，落点类也必须长在它们上），
+   * 回执本身必须存在、声明时长、在那条唯一的 reduced-motion 名单里；解禁新开的洞（本文件自写第二条
+   * reduced-motion 块）一并封住。旧口径对照读数见 `task-14-report.md`（探针实测：旧断言对**合法 token
+   * 用法假红**、对「动效载体没进名单」**无牙**）。
    */
   it("③ 顶栏动效只许 token，且落点必须留在元素级回执的覆盖面内（改判自「一律禁止」）", () => {
     const decls = motionDecls(CSS);
@@ -184,6 +186,11 @@ describe("TopBar（规格 §6.1）", () => {
       classes,
       "顶栏按钮的类序变了：带 `ed-btn` ⇒ 掉出 `button:not(.ed-btn)` 的元素级回执（也就掉出 reduced-motion 名单）",
     ).toEqual([...NAV_ENTRIES.map(() => "ed-topbar__tab"), "ed-topbar__action", "ed-topbar__action"]);
+    // ③a-2 落点覆盖面（今天 0 处声明 ⇒ 条件式；变异体证明有牙：把落点写到 `.ed-topbar__brand`（`<span>`）⇒ 红）
+    const buttons = new Set(classes.flatMap((c) => c.split(/\s+/)));
+    const rules = [...CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => motionDecls(m[2]).length > 0);
+    const landing = [...new Set(rules.flatMap((m) => [...m[1].matchAll(/\.(ed-[A-Za-z0-9_-]+)/g)].map((c) => c[1])))];
+    expect(landing.filter((c) => !buttons.has(c)), "这些类上声明了动效、却不长在裸 `<button>` 上 ⇒ reduced-motion 名单打不到它们").toEqual([]);
     // ③b 真源侧：回执存在、声明了时长/缓动、且在**唯一**的 reduced-motion 名单里
     const at = MOTION_CSS.indexOf("button:not(.ed-btn)");
     expect(at, "motion.css 里找不到 `button:not(.ed-btn)`（顶栏元素级回执的真源）").toBeGreaterThan(-1);
