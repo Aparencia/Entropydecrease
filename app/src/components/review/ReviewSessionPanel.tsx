@@ -19,6 +19,8 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Flashcard } from "../../types/notes";
 import PromoteCardButton from "../PromoteCardButton";
+import DueScale from "./DueScale";
+import { intervalToScale, useScaleGrowth } from "./useScaleGrowth";
 import { Loading, Skeleton, StatusLine, Text } from "../../ui/primitives";
 
 /** 四档评分按钮（文案=回忆质量自评） */
@@ -89,6 +91,11 @@ export default function ReviewSessionPanel({ groupId, groupName, active = true, 
 
   const current = queue[index] ?? null;
 
+  // 刻度生长的落点（§8.6 #4）：目标只由 `review_card` 的 `intervalDays`（PB2 ①域 = 精确值）驱动，
+  // **不**由 `due` 计数驱动（绑总数会出现「回缩了但数字没变」—— 本页总到期数走 token 门控重载）。
+  const growTo = intervalToScale(lastInterval);
+  const growth = useScaleGrowth(growTo);
+
   const rate = async (rating: string) => {
     if (!current) return;
     try {
@@ -127,6 +134,19 @@ export default function ReviewSessionPanel({ groupId, groupName, active = true, 
         >
           ✕ 退出本轮
         </button>
+      </div>
+
+      {/* 本卡刻度生长/回缩的落点（§8.6 #4）：间隔取 `review_card` 的**精确值**（`granularity="exact"`
+          —— 行派生的整天值不许冒充精确值，PB2 双精度域）；`due` 恒 = 1 = 当前这张卡。 */}
+      <div style={{ padding: "0 16px 8px", flexShrink: 0 }}>
+        <DueScale
+          due={current ? 1 : 0}
+          intervals={lastInterval === null ? undefined : [lastInterval]}
+          granularity="exact"
+          growTo={growTo}
+          growRef={growth.ref}
+          testId="session-interval-scale"
+        />
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 24 }}>

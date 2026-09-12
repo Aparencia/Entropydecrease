@@ -6,8 +6,9 @@
  *              而签名动效 #4 要「生长 / 回缩」，前提是先有一个**可补间的几何量**（刻度长度）。
  *              本件就是那个承载面：长度 = 后端计数；逐段长度 = 单卡间隔。形态是 **div 条阵列**
  *              （不是内联 svg —— `ui/icons/no-inline-svg.test.ts` 明禁新增内联 svg）。
- *              🔴 交付边界：本件**只建静态形态**（承载面 + 数据接线 + 判据）。生长 / 回缩动效归
- *              **T30**（波 C）—— 本件交付时刻度是**静止的**，不许把 #4 说成已交付。
+ *              🔴 交付边界（T30 已更新本条）：本件仍是**静态承载面** —— 段数 / 段高只由 `due` 与
+ *              `intervals` 决定（零 GSAP、零 effect）；「生长 / 回缩」由**调用方**经 `growTo` + `growRef`
+ *              注入（编排在 `useScaleGrowth`，唯一 timeline），本件只提供落点（首段）与基调声明。
  * @ai-context: 数据真源（各一，且只此两处）：① 段数 = `count_due_cards` 的计数（`due` prop，由调用点
  *              透传 —— 本件**不发 IPC、不二次查询**，全件零 `@tauri-apps` 依赖）；② 逐段间隔 =
  *              `Flashcard.intervalDays`（`intervals` prop）。🔴 **禁止自造间隔**：本件不解析
@@ -23,7 +24,8 @@
  *              是 R4.5 琥珀族的**唯一**来源 —— 本件不写任何琥珀字面量，段色取 `currentColor` 继承）。
  *              基类 `ed-surface` 与它同元素（同 `ed-text--low-confidence` 的用法）；本件**不**用
  *              `<Surface>` 原语，因为新调用点要登记进 `surfaceResidual.ts`（本任务禁碰棘轮表）。
- * 副作用：**无**（纯展示：不读 store、不发 IPC、不写盘、无定时器、无 effect、无 GSAP）。
+ * 副作用：**无**（纯展示：不读 store、不发 IPC、不写盘、无定时器、无 effect、无 GSAP —— 即便 `growTo`
+ *      已给：动画由调用方的 hook 经 `growRef` 写 `transform`，本件自身不碰任何动效 API）。
  * 边界：① `due === 0` ⇒ 渲染**空刻度**（不落空态文案 —— 空态归调用点 `ReviewPage`）；
  *      ② `intervals[i] <= 0`（新卡 / 无复习记录）⇒ 画「无间隔」档，**不是** 0 长度（0 长度会让
  *      「新卡」与「这段不存在」不可分）；③ `intervals` 短于 `due`（后端队列上限 200 < 全量到期数）
@@ -31,7 +33,7 @@
  *      ④ 段数多时靠 flex 压缩与裁切，**不省略 DOM 段** —— 段数恒等于 `due`（那正是判据 V1）。
  *      ⑤ 零裸 `<button>`（纯展示；`components/**` 在 `nativeButton` 棘轮域内）。
  */
-import type { CSSProperties, ReactElement } from "react";
+import type { CSSProperties, ReactElement, Ref } from "react";
 
 export interface DueScaleProps {
   /** 到期卡张数（来自 count_due_cards；**唯一**的"有多少"真源） */
@@ -44,13 +46,22 @@ export interface DueScaleProps {
    * `review_card` 返回体的**精确值**（PB2 ①域）。两个域**不得**互相冒充。
    */
   readonly granularity?: "day" | "exact";
+  /**
+   * **生长目标**（归一长度 0..1，T30/§8.6 #4）—— **受控**：由调用方从 `review_card` 的**精确**
+   * `intervalDays` 换算（`useScaleGrowth` 的 `intervalToScale`）。`null` / 缺省 ⇒ **不生长**：
+   * 刻度静止在 T21 的静态形态（本件**不**自造目标、不读 IPC）。
+   */
+  readonly growTo?: number | null;
+  /** 生长刻度的元素句柄（`useScaleGrowth` 的 `ref`）—— 被动画的**只有首段**（本轮在评的那张卡）。 */
+  readonly growRef?: Ref<HTMLSpanElement>;
 }
 
 /** 「无间隔」档的段高（px）—— 新卡 / 间隔 0 / 不在本轮队列内。**视觉常量，不是数据真源**。 */
-const TICK_NONE_PX = 6;
+export const TICK_NONE_PX = 6;
 /** 按天刻度的段高区间：1 天 ⇒ 8px，`TICK_DAY_CAP` 天及以上 ⇒ 28px（单调不减 ⇒ 间隔越长刻度越长）。 */
 const TICK_DAY_MIN_PX = 8;
-const TICK_DAY_MAX_PX = 28;
+/** 满刻度段高（px）—— **归一长度的分母**（`useScaleGrowth` 的 `intervalToScale` 复用同一个数）。 */
+export const TICK_DAY_MAX_PX = 28;
 /** 封顶天数：再长的间隔不再变高 —— 刻度要的是「可感觉」，不是「可测量」（不发明数字）。 */
 const TICK_DAY_CAP = 30;
 
@@ -59,8 +70,11 @@ function tickTier(days: number | undefined): "none" | "day" {
   return days === undefined || !Number.isFinite(days) || days <= 0 ? "none" : "day";
 }
 
-/** 一段刻度的**视觉长度**（px）。`days <= 0` 或未知 ⇒ 「无间隔」档的定长（**不是** 0 长度）。 */
-function tickHeight(days: number | undefined): number {
+/**
+ * 一段刻度的**视觉长度**（px）。`days <= 0` 或未知 ⇒ 「无间隔」档的定长（**不是** 0 长度）。
+ * **导出**给 `useScaleGrowth`：生长必须复用这**同一个**单调映射（两处各写一份必然会漂）。
+ */
+export function tickHeight(days: number | undefined): number {
   if (tickTier(days) === "none") return TICK_NONE_PX;
   const capped = Math.min(days as number, TICK_DAY_CAP);
   return Math.round(TICK_DAY_MIN_PX + ((capped - 1) / (TICK_DAY_CAP - 1)) * (TICK_DAY_MAX_PX - TICK_DAY_MIN_PX));
@@ -78,7 +92,7 @@ function tickLabel(index: number, days: number | undefined, granularity: "day" |
  *
  * 刻度底轨的琥珀来自 `ed-surface--due-glow` 的 `color: var(--ed-due)`（R4.5 的唯一合法来源）。
  */
-export default function DueScale({ due, intervals, testId, granularity = "day" }: DueScaleProps): ReactElement {
+export default function DueScale({ due, intervals, testId, granularity = "day", growTo = null, growRef }: DueScaleProps): ReactElement {
   // 段数 = 计数（防御：非有限值 / 负数 / 小数一律按 0 段或截断处理 —— 不 panic、不造幽灵段）
   const count = Number.isFinite(due) ? Math.max(0, Math.trunc(due)) : 0;
   const queueMarks = Math.min(intervals?.length ?? 0, count);
@@ -93,19 +107,34 @@ export default function DueScale({ due, intervals, testId, granularity = "day" }
     flex: "1 1 0", minWidth: 1, maxWidth: 5, background: "currentColor", borderRadius: 1,
   };
   return (
-    <div data-testid={testId} data-due={count} data-granularity={granularity} title={label} role="img" aria-label={label}>
+    <div
+      data-testid={testId}
+      data-due={count}
+      data-granularity={granularity}
+      data-grow-to={growTo === null ? undefined : String(growTo)}
+      title={label}
+      role="img"
+      aria-label={label}
+    >
       {count > 0 && (
         <div className="ed-surface ed-surface--sunken ed-surface--due-glow" style={lane}>
           {Array.from({ length: count }, (_, i) => {
             const days = intervals?.[i];
+            // 生长落点 = **首段**（当前卡的那一段）：它声明基调（R3.4：#4 = 读数面 ⇒ instrument）并接住
+            // 句柄；`transformOrigin: bottom` 是**静态**样式（不参与动画 —— 否则属性集合会多出
+            // `transform-origin`，越出 R8.4 的合成属性白名单）。
+            const grows = i === 0 && growTo !== null;
             return (
               <span
                 key={i}
+                ref={grows ? growRef : undefined}
                 data-tick={i}
                 data-tier={tickTier(days)}
+                data-grow={grows ? "1" : undefined}
+                data-tone={grows ? "instrument" : undefined}
                 data-interval={days === undefined ? undefined : String(days)}
                 title={tickLabel(i, days, granularity)}
-                style={{ ...tick, height: tickHeight(days) }}
+                style={{ ...tick, height: tickHeight(days), transformOrigin: grows ? "bottom" : undefined }}
               />
             );
           })}

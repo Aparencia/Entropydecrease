@@ -14,6 +14,7 @@ const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
 
 import ReviewSessionPanel from "./ReviewSessionPanel";
+import { intervalToScale } from "./useScaleGrowth";
 
 function card(id: number, front: string, back: string, kind = "fact"): Flashcard {
   return {
@@ -123,5 +124,67 @@ describe("ReviewSessionPanel 复习流", () => {
     rerender(<ReviewSessionPanel groupId={null} groupName="全部组" active={true} onExit={onExit} />);
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ReviewSessionPanel · 刻度生长（批 6 T30 · §8.6 #4 · PB2 精确域）", () => {
+  /** 生长刻度的**受控目标回声**（`DueScale` 根上的 `data-grow-to`）—— 由 `review_card` 的精确值换算 */
+  const growToAttr = (): string | null =>
+    screen.getByTestId("session-interval-scale").getAttribute("data-grow-to");
+  const scaleTick = (): HTMLElement =>
+    screen.getByTestId("session-interval-scale").querySelector("[data-tick]") as HTMLElement;
+  /** 两张卡的队列 + 按 cardId 给不同的精确 `intervalDays`（模拟「记得 ⇒ 变长 / 忘了 ⇒ 回缩」） */
+  const mockExact = (byCard: Readonly<Record<number, number>>): void => {
+    invokeMock.mockImplementation(async (cmd: string, args: Record<string, unknown>) => {
+      const id = Number(args.cardId);
+      if (cmd === "list_due_cards") return [card(41, "甲卡", "甲背"), card(42, "乙卡", "乙背")];
+      if (cmd === "review_card") return { ...card(id, "卡", "背"), intervalDays: byCard[id] ?? 1 };
+      throw new Error(`unexpected: ${cmd}`);
+    });
+  };
+
+  it("R1 · 目标由精确 intervalDays 驱动（不是 due 计数）：返回 10 ⇒ data-grow-to == intervalToScale(10)", async () => {
+    mockExact({ 41: 10, 42: 10 });
+    renderPanel();
+    // 评分前：没有精确值 ⇒ 零目标（不猜、不预置 0）
+    expect(await screen.findByTestId("session-interval-scale")).toBeTruthy();
+    expect(growToAttr()).toBeNull();
+    expect(scaleTick().getAttribute("data-tier")).toBe("none");
+    fireEvent.click(screen.getByText("回忆完成 · 查看答案"));
+    fireEvent.click(screen.getByText("记得"));
+    await waitFor(() => expect(growToAttr()).toBe(String(intervalToScale(10))));
+    expect(growToAttr(), "若目标由 due（=1）驱动，读数会等于 intervalToScale(1)").not.toBe(
+      String(intervalToScale(1)),
+    );
+    expect(screen.getByTestId("session-interval-scale").getAttribute("data-granularity")).toBe("exact");
+    expect(screen.getByTestId("session-interval-scale").getAttribute("data-due")).toBe("1");
+    expect(scaleTick().getAttribute("data-interval"), "精确域：10 天（行派生的整天近似冒充不了它）").toBe("10");
+    expect(scaleTick().getAttribute("title"), "精确域的标签不带「约…整天粒度」").toBe("第 1 段 · 10 天");
+  });
+
+  it("R2 · 答「忘了」⇒ 目标回缩（30 → 1：终值 < 起始值的 1/2，方向断言）", async () => {
+    mockExact({ 41: 30, 42: 1 });
+    renderPanel();
+    fireEvent.click(await screen.findByText("回忆完成 · 查看答案"));
+    fireEvent.click(screen.getByText("记得"));
+    await waitFor(() => expect(growToAttr()).toBe(String(intervalToScale(30))));
+    const grown = Number(growToAttr());
+    fireEvent.click(await screen.findByText("回忆完成 · 查看答案"));
+    fireEvent.click(screen.getByText("忘了"));
+    await waitFor(() => expect(growToAttr()).toBe(String(intervalToScale(1))));
+    const shrunk = Number(growToAttr());
+    expect(shrunk, "防空真：两个目标必须不同").toBeLessThan(grown);
+    expect(shrunk, "回缩方向：终值必须不到起始值的一半").toBeLessThan(grown / 2);
+    expect(shrunk).toBeGreaterThan(0);
+  });
+
+  it("R3 · 缺 intervalDays（后端只回 true）⇒ 不生长、不抛、不猜（「缺失」≠「间隔为 0」）", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByText("回忆完成 · 查看答案"));
+    fireEvent.click(screen.getByText("记得"));
+    await waitFor(() => expect(screen.getByTestId("session-progress").textContent).toBe("2/2"));
+    expect(growToAttr(), "缺字段 ⇒ 零目标（把它当 0 天就会把刻度清零）").toBeNull();
+    expect(scaleTick().getAttribute("data-tier")).toBe("none");
+    expect(screen.queryByTestId("session-last-interval")).toBeNull();
   });
 });

@@ -136,3 +136,46 @@ describe("DueScale · 源码面判据（R5.4 的明文禁止 → 守卫）", () 
     expect(readProd(PROD[0]).stripped.join("\n").includes("@tauri-apps")).toBe(false);
   });
 });
+
+describe("DueScale · 生长落点（批 6 T30 · §8.6 #4「刻度生长」）", () => {
+  /** 句柄形态 = React 的 ref 对象（本件不碰 GSAP：动画归调用方的 `useScaleGrowth`）。 */
+  const newRef = (): { current: HTMLSpanElement | null } => ({ current: null });
+  const origins = (c: HTMLElement): string[] =>
+    [...c.querySelectorAll("[data-tick]")].map((el) => (el as HTMLElement).style.transformOrigin);
+
+  it("G1 · 目标回声 + 生长标记**只在首段**（逐序），句柄落在首段，且几何仍只由 intervals 决定", () => {
+    const growRef = newRef();
+    const { container } = render(
+      <DueScale due={3} intervals={[10, 2, 30]} granularity="exact" growTo={0.5} growRef={growRef} testId="scale" />,
+    );
+    expect(rootOf(container).getAttribute("data-grow-to")).toBe("0.5");
+    expect(attr(container, "data-grow"), "生长落点**恰**首段（逐序数组相等：集合相等测不出换位）").toEqual([
+      "1", null, null,
+    ]);
+    expect(attr(container, "data-tone"), "R3.4：#4 是「读数」面 ⇒ 首段声明 instrument").toEqual([
+      "instrument", null, null,
+    ]);
+    expect(growRef.current, "句柄必须落在首段（被动画的只有它）").toBe(container.querySelectorAll("[data-tick]")[0]);
+    expect(origins(container), "只有生长段有 transform-origin（静态样式，不进动效属性集合）").toEqual([
+      "bottom", "", "",
+    ]);
+    // 目标**不是**几何真源：段数与段高仍只由 due / intervalDays 决定（R8.4：不动 layout 属性）
+    expect(ticks(container)).toEqual(["0", "1", "2"]);
+    expect(attr(container, "data-interval")).toEqual(["10", "2", "30"]);
+  });
+
+  it("G2 · 不给 growTo ⇒ 零生长标记、零 transform-origin（T21 的静态形态逐字保留）", () => {
+    const { container, rerender } = render(<DueScale due={3} intervals={[10, 2, 30]} testId="scale" />);
+    expect(rootOf(container).getAttribute("data-grow-to")).toBeNull();
+    expect(attr(container, "data-grow")).toEqual([null, null, null]);
+    expect(attr(container, "data-tone")).toEqual([null, null, null]);
+    expect(origins(container)).toEqual(["", "", ""]);
+    const heights = [...container.querySelectorAll("[data-tick]")].map((el) => (el as HTMLElement).style.height);
+    rerender(<DueScale due={3} intervals={[10, 2, 30]} growTo={0.5} testId="scale" />);
+    expect(
+      [...container.querySelectorAll("[data-tick]")].map((el) => (el as HTMLElement).style.height),
+      "给了目标也不许改分段几何（height 不是动效属性）",
+    ).toEqual(heights);
+    expect(ticks(container)).toEqual(["0", "1", "2"]);
+  });
+});
