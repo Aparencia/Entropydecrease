@@ -171,8 +171,23 @@ describe("T33 · 列折叠 Flip（路径 B：`data-flip-id` 跨元素配对）",
     expect(before.filter((p) => ANIMATABLE_PROPERTIES.includes(p)), "渲染期不该写合成属性").toEqual([]);
   });
 
-  it("C4 reduced-motion 降级：命中 `prefers-reduced-motion: reduce` ⇒ **不建**时间线（宽度照旧瞬跳）", async () => {
-    const stub = installMatchMediaStub({ reduce: true });
+  it("C4 reduced-motion 优先于档位：命中 `reduce` ⇒ **不建**时间线（同树下 `reduce:false` 为**阳性对照**）", async () => {
+    // 🔴 档位必须**显式**记成 standard：`useMotionIntensity` 的初值**跟随系统** ⇒ reduce 命中时档位自身就变成
+    // `eco`，那样本判据会被「eco 不播」这条旁路**假绿**（T33 变异体 M4 实测踩到：删掉 reduced 分支仍全绿）。
+    window.localStorage.setItem("motion:intensity", "standard");
+    const noReduce = installMatchMediaStub({ reduce: false });
+    try {
+      render(<Harness />);
+      await flush();
+      fireEvent.click(screen.getByTestId("toggle"));
+      await flush();
+      expect(handle?.current, "阳性对照失败：未 reduce 时本该建时间线（否则本判据测不到东西）").not.toBeNull();
+    } finally {
+      noReduce.restore();
+    }
+    cleanup();
+
+    const reduce = installMatchMediaStub({ reduce: true });
     try {
       render(<Harness />);
       await flush();
@@ -181,7 +196,7 @@ describe("T33 · 列折叠 Flip（路径 B：`data-flip-id` 跨元素配对）",
       expect(handle?.current, "reduced-motion 下仍建了时间线（§8.5 要求跳终态）").toBeNull();
       expect(screen.getByTestId("column-bar").getAttribute("data-flip-id"), "降级不该破坏结构契约").toBe(ID);
     } finally {
-      stub.restore();
+      reduce.restore();
     }
   });
 
