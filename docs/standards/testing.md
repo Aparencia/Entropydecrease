@@ -174,6 +174,19 @@ before-release:
   - 性能基准测试（可选）
 ```
 
+### 第八部分：GSAP / 动效测试（L4 动效层）
+
+底座 = `app/src/test/motionHarness.ts`（**局部**桩 + 确定性推进；**不是**全局 setup —— `src/test/setup.ts` 不加 `matchMedia` 桩）。下游引用下列条目时**逐字**照抄：
+
+- **确定性推进只有一个正解**：`gsap.timeline({ paused: true })` + `tl.time(t)`（底座 = `freezeAt(tl, t)`）。实测逐字精度：`power2` tween（dur 0.5、`x: 0 → 100`）在 `tl.time(0.25)` ⇒ `translate3d(87.5px, 0px, 0px)`。
+- **禁用四个假正解**：`gsap.updateRoot(t)`（`globalTimeline._start` 会漂移）· `gsap.ticker.tick()`（墙钟驱动）· `gsap.ticker.sleep()`（新建 tween 会同步唤醒它）· `await sleep()` / 真实定时器 / fake timers（不可复现）。
+- **可中断 / 覆盖类判据必须双断言**：**同时**断 tween 计数（`tweenCount(el)` / `gsap.globalTimeline.getChildren().length`，或旧 tween 的 `totalTime()` 冻结）**与** `currentTransform(el)` —— GSAP 3 默认 `overwrite: false`，覆盖同属性时旧 tween 仍在跑，**只看 `style.transform` 会假绿**。
+- **`matchMedia` 桩必须实现 `addListener` / `removeListener`**：jsdom 30 没有 `window.matchMedia`，而 GSAP 走 legacy 分支（`gsap-core.js:4078`），只实现 `addEventListener` 的桩**不会被调用**。桩是**用例级**的：谁装谁 `restore()`。
+- **绝不可把 jsdom 的 `performance` 挂到 `globalThis`**（`Performance-impl.js:14` 自调用 ⇒ 栈溢出打挂进程）；GSAP 用例**全同步**，不需要 `await`。
+- **`tl.to()` 返回 Timeline 本身**，不是 Tween —— 要 tween 句柄用 `tl.to(...).getChildren()` 或 `gsap.to`。
+
+依据与「可测 / 不可测」的完整边界见[动效规范](motion.md)的「判据纪律（可测与不可测）」。
+
 ## 检查清单
 
 - [ ] 测试金字塔比例合理（单元 > 集成 > E2E）

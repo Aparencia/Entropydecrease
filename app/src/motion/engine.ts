@@ -50,3 +50,10 @@ gsap.registerPlugin(useGSAP, Flip, ScrollToPlugin, CustomEase);
 CustomEase.create("ed-paper-bleed", "M0,0 C0.215,0.61 0.355,1 1,1");
 
 export { gsap, useGSAP };
+
+/**
+ * `gsap.core.Timeline` 的**转出**（计划 T10 Interfaces 逐字：`export type { gsap }` 转不出命名空间成员）。
+ * 为什么必须由本文件转出：`import { gsap } from "gsap"` 绑定的**值**会遮蔽 `gsap` 这个**全局命名空间**，
+ * 使用方直接写 `gsap.core.Timeline` 过不了类型检查。测试底座只以 `import type` 取它（不进产物）。
+ */
+export type GsapTimeline = gsap.core.Timeline;
