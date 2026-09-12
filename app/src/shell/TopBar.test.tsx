@@ -185,9 +185,9 @@ describe("TopBar（规格 §6.1）", () => {
     // 前缀 / 大写属性名（R1.2）：旧口径的子串匹配挡得住，新口径漏掉前缀支 = 强度回退 ⇒ 两者都必须判红
     const pre = motionDecls(".a { -webkit-transition: color 120ms ease-out; }"), up = motionDecls(".a { ANIMATION: ed-x 1s infinite; }");
     expect([pre.length, up.length, rawTimes([pre[0]]), rawEases([pre[0]]), rawTimes([up[0]])], "前缀 / 大写属性名逃出扫描器，或裸值未被判红").toEqual([1, 1, [pre[0]], [pre[0]], [up[0]]]);
-    // 裸缓动关键字（Important ②）：三者同样是绕过 token 的写法；末项 = 反向对照（无兜底的合法 token 必须绿）
+    // 裸缓动关键字（Important ②）：三者同样是绕过 token 的写法；末项 = 反向对照（`ease-<name>` 家族 token 必须绿）
     const bare = [".a { transition: opacity linear 200ms; }", ".a { transition: opacity ease 200ms; }", ".a { transition: opacity steps(4); }"].map((s) => motionDecls(s)[0]);
-    expect([bare.map((d) => rawEases([d])), rawEases(motionDecls(".a { transition: color var(--ed-dur-micro) var(--ed-ease); }"))], "裸关键字漏判 / 合法无兜底 token 被误判").toEqual([bare.map((d) => [d]), []]);
+    expect([bare.map((d) => rawEases([d])), rawEases(motionDecls(".a { transition: color var(--ed-dur-micro, 120ms) var(--ed-ease-instrument, cubic-bezier(0.4, 0, 0.2, 1)); }"))], "裸关键字漏判 / `ease-<name>` 家族 token 被误判").toEqual([bare.map((d) => [d]), []]);
     // ③a 覆盖面（类序**逐序数组相等**：带 `ed-btn` 会掉出那条回执，少一个 = 覆盖面缩水）
     render(<TopBar {...base} />);
     const classes = [...screen.getByTestId("topbar").querySelectorAll("button")].map((b) => b.className);
