@@ -23,8 +23,11 @@
  *   M2 把余量冻结值抬高 1 ⇒ ④ 红（**第一版判据无牙、实测 6/6 绿，已改成「冻结值恰等于实测值」**）；
  *   M3 新增一个带词表的文件 ⇒ ④ 红；M4 删掉 `ChatLaunchMenu` 的必填 prop ⇒ `tsc` 红（vitest 不暴露）；
  *   M0 反方向：把这套守卫放进**迁移前的基线树** ⇒ ② 红（证明判据不是永真）。
+ *
+ * ★ 净克隆形态（T13–T15 评审 M-6）：⑥a 依赖 gitignored 探针 ⇒ 探针缺席即 `skip`（`console.warn` 说明），
+ *   不再让净克隆必红 1 条；⑥b 的盘上复算在净克隆里照跑（② 的 `pages/**` · ③ 的同名测试）。
  */
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -178,6 +181,18 @@ const unmigratedOf = (file: string): Hit[] => {
 };
 const describeHits = (hits: readonly Hit[]): string => hits.map((h) => `${h.file}:${h.line}  ${h.text}`).join("\n");
 
+/**
+ * 探针（gitignored，`tmp/t13/slice.json`）：**在场**时 ⑥a 做双向对拍；**缺席**（净克隆 / `git archive`
+ * 树 / CI）时 ⑥a 走 `skipIf` 并打印原因，而不是用必然失败的哨兵把「净克隆」判成红 —— T13–T15 评审
+ * M-6 的结清。第二源不因此消失：⑥b 是**盘上可复算**的那半（② 在 `pages/` 下 · ③ 有同名测试），
+ * 任何树里都跑，故判据在净克隆里仍有牙。
+ */
+const PROBE = join(SRC, "..", "..", ".superpowers/sdd/2026-09-12-frontend-redesign-batch4-primitives/tmp/t13/slice.json");
+const PROBE_ABSENT = !existsSync(PROBE);
+if (PROBE_ABSENT) {
+  console.warn("⑥a 未跑到：探针 tmp/t13/slice.json 不在场（净克隆 / CI）⇒ 只跑 ⑥b 的盘上复算");
+}
+
 describe("空态切片棘轮（B11）", () => {
   it("① 切片清单是显式 28 文件，判据来源逐条合法", () => {
     expect(SLICE).toHaveLength(28);
@@ -252,36 +267,30 @@ describe("空态切片棘轮（B11）", () => {
     expect(stripComments("const b = `\u6682\u65e0`;").match(EMPTY_RE), "真文案被误剥").not.toBeNull();
   });
 
-  it("⑥ 与 gitignored 探针 `tmp/t13/slice.json` 双向对拍（探针不在场 ⇒ 明说未跑到）", () => {
-    const probe = join(
-      SRC, "..", "..",
-      ".superpowers/sdd/2026-09-12-frontend-redesign-batch4-primitives/tmp/t13/slice.json",
+  it.skipIf(PROBE_ABSENT)("⑥a 与 gitignored 探针 `tmp/t13/slice.json` 双向对拍（探针不在场 ⇒ 本用例 skip，见 ⑥b）", () => {
+    const payload: { slice: { rel: string; why: string }[]; rest: { rel: string }[] } = JSON.parse(
+      readFileSync(PROBE, "utf8"),
     );
-    let payload: { slice: { rel: string; why: string }[]; rest: { rel: string }[] } | null = null;
-    try {
-      const parsed: { slice: { rel: string; why: string }[]; rest: { rel: string }[] } = JSON.parse(
-        readFileSync(probe, "utf8"),
-      );
-      payload = parsed;
-    } catch {
-      payload = null;
-    }
-    if (payload === null) {
-      // 干净克隆 / 导出树没有 `.superpowers/`（gitignored）⇒ **不假装有牙**：用一条必然失败的哨兵
-      // 把「今天这条对拍没跑到」显形，而不是静默通过。唯一例外：变异体实验的导出树显式设
-      // `T13_NO_PROBE=1`（那些树里没有探针，但 ①–⑤ 仍逐条在跑）——那是**登记过的跳过**，不是默认值。
-      expect(
-        process.env.T13_NO_PROBE === "1" || readdirSync(SRC).includes("__t13_probe_absent__"),
-        "探针缺失 ⇒ 清单对拍未跑到（本判据今日未验证；请在有 .superpowers/ 的工作树里跑）",
-      ).toBe(true);
-      return;
-    }
-    const probeSlice: { rel: string; why: string }[] = payload.slice;
-    const probeRest: { rel: string }[] = payload.rest;
-    expect([...SLICE].sort(), "切片集与探针不一致（双向差集必须为空）").toEqual(probeSlice.map((s) => s.rel).sort());
-    expect(Object.keys(FROZEN_REST).sort(), "冻结余量集与探针的余量集不一致").toEqual(probeRest.map((r) => r.rel).sort());
+    expect([...SLICE].sort(), "切片集与探针不一致（双向差集必须为空）").toEqual(payload.slice.map((s) => s.rel).sort());
+    expect(Object.keys(FROZEN_REST).sort(), "冻结余量集与探针的余量集不一致").toEqual(payload.rest.map((r) => r.rel).sort());
     const why: Record<string, string> = {};
-    for (const s of probeSlice) why[s.rel] = s.why;
+    for (const s of payload.slice) why[s.rel] = s.why;
     for (const f of SLICE) expect(why[f], `${f} 的判据来源与探针不一致`).toBe(SLICE_REASONS[f]);
+  });
+
+  it("⑥b 判据来源**盘上可复算**（净克隆也跑）：② 必须在 `pages/` 下 · ③ 必须有同名测试", () => {
+    const testRels = new Set(walkSources(SRC).map((f) => relOf(SRC, f)).filter((r) => /\.test\.tsx?$/.test(r)));
+    const bad: string[] = [];
+    for (const f of SLICE) {
+      const why = SLICE_REASONS[f];
+      if (why.includes("2") && !f.startsWith("pages/")) bad.push(`${f}: 判据含 ②（pages/**）却不在 pages/ 下`);
+      if (why.includes("3") && !testRels.has(f.replace(/\.(tsx?)$/, ".test.$1")))
+        bad.push(`${f}: 判据含 ③（同名测试）却找不到同名测试文件`);
+    }
+    expect(bad, `切片判据来源与盘上事实不符（净克隆里的第二源）：\n${bad.join("\n")}`).toEqual([]);
+    // 反向（防真空）：域内所有 `pages/**` 的命中文件都必须在切片里 —— 少一个 = 切片不完整（判 ② 的漏登记）
+    const pagesHits = [...new Set(ALL_HITS.map((h) => h.file))].filter((f) => f.startsWith("pages/"));
+    expect(pagesHits.length, "域内 pages/** 一处命中都没有 ⇒ 上一条空真").toBeGreaterThan(0);
+    expect(pagesHits.filter((f) => !SLICE.includes(f)), "这些 pages/** 有命中却不在切片里").toEqual([]);
   });
 });
