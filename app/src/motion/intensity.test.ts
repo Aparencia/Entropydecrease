@@ -10,8 +10,19 @@
  * 口径：`useMotionIntensity` 用 `react-dom/server` 的 `renderToString` 真跑 hook（node 下唯一入口）。
  *   ⚠️ 服务端**不执行** `useEffect` ⇒ 「挂载即把档位落到 `<html>`」这条由 T7 的 jsdom 组件判据承担
  *   （T7 V2 断 `documentElement.dataset.motion`）；本文件判的是**初值**与 `select` 通道。
+ * 🔴 `select` 的 **state 半**怎么判（R18.2 / P-22 通条 · R21.1 指派 T6b）：`renderToString` **返回之后**
+ *   再调 `select` 是**空操作** —— Fizz 的 `dispatchAction` 只在 `componentIdentity ===
+ *   currentlyRenderingComponent` 时才入队，否则整段什么都不做（react-dom 19.2.8
+ *   `react-dom-server-legacy.node.development.js:3971` 逐字）⇒ 渲染期捕获的 `seen` **永远读到切换前
+ *   的值**，删 `intensity.ts:56` 的 `setValue(next)` 仍 12/12 绿（T6 评审 I-1 实测）。
+ *   正解 = 在**首次渲染期内**提交一次切换：React 的「渲染期更新」会让 Fizz **立即重跑本组件**
+ *   （`didScheduleRenderPhaseUpdate` ⇒ 再调一次 `Component`），重跑时 `useState` 读的是
+ *   `basicStateReducer` 应用后的**新值** ⇒ 才真的观测到 state；删 `setValue(next)` 时这一轮**不会
+ *   发生**，断言当场红。见 `renderProbeSwitching`。
  * 副作用：临时改写 `globalThis` 上的 `window` / `document` / `localStorage`（逐条还原）。
- * 边界：`el.dataset.motion` 用**假元素**判写入路径；真实 `<html>` 的同一断言见 T7。
+ * 边界：① `el.dataset.motion` 用**假元素**判写入路径，真实 `<html>` 的同一断言见 T7；
+ *   ② 本文件的切换发生在**渲染期**（node 环境唯一可观测的形态）；**事件处理器里**（渲染之后）的
+ *   切换由 T7 的 jsdom 判据承担（`MotionIntensityControl.test.tsx` ⑤）—— 两侧互补，都不可删。
  */
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
@@ -77,6 +88,28 @@ function renderProbe(): { value: MotionIntensity; select: (v: MotionIntensity) =
   return { value: seen, select };
 }
 
+/**
+ * 真跑一次 hook，并在**首次渲染期内**提交一次切换（`select(next)`）⇒ 取回**逐次渲染**读到的档位。
+ * @ai-context Why 必须这样（R18.2 / P-22 通条）：`renderToString` **返回之后**调 `select` 在 SSR 下是
+ *   **空操作**（Fizz 的 `dispatchAction` 要求 `componentIdentity === currentlyRenderingComponent`
+ *   才入队）⇒ 那样捕获的 `seen` 永远读到切换**前**的值，是空真判据。渲染期内提交才会被记为
+ *   「渲染期更新」，React 因此**立即重跑本组件**；重跑时 `useState` 返回的是应用该更新后的**新值**
+ *   ⇒ 这才是「切换后重新渲染所得的值」（删 `setValue(next)` ⇒ 不会重跑 ⇒ 只读到 1 项）。
+ * @ai-context 副作用：走 `select` 的完整路径（`setValue` + `writeIntensity`）⇒ 也会写内存桩。
+ * 边界：恰提交**一次**（`seen.length === 1` 守卫）⇒ 不触碰 React 的「最多重渲染 25 次」上限。
+ */
+function renderProbeSwitching(next: MotionIntensity): MotionIntensity[] {
+  const seen: MotionIntensity[] = [];
+  const Probe = (): string => {
+    const [value, select] = useMotionIntensity();
+    seen.push(value);
+    if (seen.length === 1) select(next);
+    return value;
+  };
+  renderToString(createElement(Probe));
+  return seen;
+}
+
 describe("初值跟随系统（§8.5 逐字：reduce ⇒ eco，否则 standard）", () => {
   it("defaultIntensity：reduce ⇒ eco；非 reduce / 无 mql ⇒ standard", () => {
     expect(defaultIntensity({ matches: true })).toBe("eco");
@@ -132,14 +165,14 @@ describe("持久化：键逐字 motion:intensity（照 useViewMemory 范式：�
     expect(readIntensity(denied)).toBeNull();
   });
 
-  it("hook：已存值优先于系统初值；`select` 同时写状态与持久化", () => {
+  it("hook：已存值优先于系统初值；`select` 切换后**重渲染**读到新档，且已写持久化", () => {
     const storage = fakeStorage("memory", "rich");
-    const seen = withGlobal("localStorage", storage, () => {
-      const { value, select } = renderProbe();
-      select("eco");
-      return value;
-    });
-    expect(seen, "已存的选择必须盖过系统初值（此处系统未 reduce ⇒ 初值本会是 standard）").toBe("rich");
+    const seen = withGlobal("localStorage", storage, () => renderProbeSwitching("eco"));
+    expect(seen[0], "已存的选择必须盖过系统初值（此处系统未 reduce ⇒ 初值本会是 standard）").toBe("rich");
+    expect(
+      seen,
+      '`select("eco")` 必须真的改了 state：重渲染后读到 eco。删掉 intensity.ts 的 `setValue(next)` ⇒ 不重渲染 ⇒ 这里只剩 ["rich"]',
+    ).toEqual(["rich", "eco"]);
     expect(storage.getItem(MOTION_INTENSITY_KEY)).toBe("eco");
   });
 });
