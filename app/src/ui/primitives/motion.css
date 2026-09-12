@@ -188,6 +188,80 @@ details[open] > summary { color: var(--ed-ink-1); }
 }
 /* ▲▲▲ 环境层结束（第 ① 件探针摆动复用 `Loading.css` 的既有落点，档位调制见下面的强度三档块）▲▲▲ */
 
+/* ▼▼▼ 相变态（T19；规格 §6.3 相变态表 + §8.4 / 裁决 R4.4）—— 三态 chrome 的换形与交叉淡入 ▼▼▼
+   三态逐字（§6.3 表）：**常态** = A′ 顶栏 + 域导航显示；**采集态** = 58px LIVE 仪表 + 域导航**隐藏** +
+   **源列保留**；**复习态** = **零 chrome** + 域导航隐藏 + 单列卡片居中 640。
+   本节只做**壳层 chrome**：域导航不必另立规则 —— 域 Tab 是 A′ 顶栏（`.shell-phase__idle` 那一层）的
+   子树 ⇒ 整层淡出即同时兑现「顶栏换形」与「域导航隐藏」两栏。
+
+   🔴 **不 animate height**（§8.4 逐字 / R4.4 的硬判据）：本节**不写 `height` / `max-height`**，
+   也不写任何 `transition` / `animation` 里的 `height` —— 交叉淡入只用 `opacity`。
+   实现手段 = **两态叠在同一格**：两层同处一个容器，被隐藏的那层 `position: absolute` 浮起来；
+   容器高度由**在流**的那一层给 ⇒ 相位切换时布局高度**瞬跳、不插值**（采集态 58px 来自 LiveBar 自己的
+   `var(--ed-nav-h-live, 58px)`，常态/复习态 56px 来自 `TopBar.css` 的 `var(--ed-nav-h, 56px)`）。
+
+   ⚠️ **源序 = 本节写在档位块之前**（计划 Step 1 写的「档位块之后、reduced 块之前」**不可行**，两条独立
+   机制各自把它排除，T19 实测）：① `motion/responseSeams.test.ts` 的 I-3 要求档位块与 reduced 块之间
+   **零规则块**（本块含 `{` ⇒ 插在那里必红）；② `motion-coverage.test.ts` 的名单抽取是「从 reduced 块
+   切到文件末尾」⇒ 写在 reduced 块**之后**的类名会被当成名单里的**死条目**（同样必红）。
+   优先级本身不靠源序：reduced 块的每条声明都带 `!important`（R18.1 的承重机理）。
+
+   ⚠️ 本节**不进 reduced-motion 名单**（R48.1 的机制性缺口，T18 已实证）：名单只容纳「12 个基类 或
+   在 `primitives/*.css` 里有 `animation:` 声明的选择器」，而本节是**纯 `transition` 落点** ⇒ 塞进名单
+   会被判死条目；另起第二条 reduced 块会让 `style-seams.test.ts:201` 的「唯一一条」变成假话。
+   ⇒ 余量逐字登记（T19 报告 + 波 D 的「已知余量清单」），与 `ColumnResizer` 的行内余量同根因。 */
+
+/* ① 叠层容器：定位参照物。**自身不写高度** —— 高度交给当下**在流**的那一层。 */
+.shell-phase {
+  position: relative;
+  /* 与 `.ed-topbar` 的 `flex-shrink: 0` 同款：壳层是列向 flex 容器，chrome 不许被内容压扁 */
+  flex-shrink: 0;
+}
+
+/* ② 常态层（A′ 顶栏）：常态与复习态都**留在流里**（复习态只把 opacity 归零 ⇒ 56px 基准保留，
+   与页面既有的 `calc(100vh - var(--ed-nav-h))` 口径一致，相位切换时整页不跳）；采集态才浮起来让位。 */
+.shell-phase__idle {
+  transition: opacity var(--ed-dur-card, 220ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
+}
+
+/* ③ 采集层（58px LIVE 仪表）：默认浮在常态层之上且完全透明 ⇒「常态 → 采集」是淡入、「采集 → 常态」是
+   淡出，两态在同一格里交叉。`pointer-events: none` 保证不可见的层不吃点击（键盘/无障碍面由
+   `PhaseChrome` 的 `inert` 承担：那是 DOM 事实，jsdom 判得到；opacity 要等浏览器级联）。 */
+.shell-phase__live {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--ed-dur-card, 220ms) var(--ed-ease, cubic-bezier(0.2, 0, 0, 1));
+}
+
+/* ④ 采集态：LIVE 仪表**回到流里**（容器高度 = 它自己的 58px 契约），A′ 顶栏浮起并淡出。 */
+html[data-shell-phase="capture"] .shell-phase__idle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+html[data-shell-phase="capture"] .shell-phase__live {
+  position: static;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ⑤ 复习态：**零 chrome** —— A′ 顶栏（含域导航）淡出即可，**列结构一格不动**。
+   ⚠️ 规格内部两说：§6.2 写「采集态整列隐藏」，§6.3 的相变态表写「源列保留（采集配置面）」
+   ⇒ 本任务按 **§6.3** 实现（源列保留、不写任何列 / 栅格规则；矛盾已并入 §三十四 交 T35 加注）。 */
+html[data-shell-phase="review"] .shell-phase__idle {
+  opacity: 0;
+  pointer-events: none;
+}
+/* ▲▲▲ 相变态结束（T19）▲▲▲ */
+
 /* ★ 强度三档（规格 §8.5 / R3.1）—— 本块写在下面 reduced-motion 块**之前**（源序），但优先级**不**
    由源序给：reduced-motion 块的每条声明都带 `!important`（本文件唯一的 `!important` 落点）⇒ 无论两块
    谁先谁后，系统偏好都赢过用户选的档（§8.5 逐字「系统 `prefers-reduced-motion` 优先于档位」）。

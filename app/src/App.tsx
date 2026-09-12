@@ -73,8 +73,10 @@ import BrowserChrome from "./components/BrowserChrome";
 // 批 2b：采集控制单一状态源（每窗口单实例 provider + 消费 hook + reason 文案）
 import { CaptureStatusProvider, useCaptureControl } from "./hooks/useLiveCaptureControl";
 import { pauseReasonLabel } from "./hooks/liveCaptureState";
-// 批 6 T17：壳层相变态通道（规格 §6.3）—— 采集态取既有采集单一状态源，复习态由复习页自持（T19 接线）
-import { useShellPhase } from "./shell/shellPhase";
+// 批 6 T17/T19：壳层相变态（规格 §6.3）—— 本层仍是唯一写入方；复习页只**上抛事实**（相位判定与
+// `active` 门控都收在 `shell/phaseSource.ts`，T19）
+import { useShellPhaseState } from "./shell/phaseSource";
+import PhaseChrome from "./shell/PhaseChrome"; // T19：两态叠层（A′ 顶栏 / 58px LIVE 仪表交叉淡入；§8.4）
 import type { AiTaskState } from "./types";
 
 // 页面键 = 注册表键集（批 3 T6：从前是 9 个字面量的手写联合，现在从注册表派生）
@@ -288,9 +290,9 @@ function MainShell() {
   // 批 2b：capturing/recovering/paused 三份本地状态删除——采集控制单一状态源
   // （CaptureStatusProvider context；挂载拉取+事件+看门狗全在其内）
   const capture = useCaptureControl();
-  // 批 6 T17（规格 §6.3 / R4.4）：本层是壳层相变的**唯一写入方**——采集进行中 ⇒ "capture"（58px LIVE
-  // 仪表相位），否则 "idle"（常态）。不新增 state / effect：相位由既有 `capture.active` 派生。
-  useShellPhase(capture.active ? "capture" : "idle");
+  // 批 6 T17/T19（§6.3 / R4.4 / R42⑥）：本层是相变的**唯一写入方** —— 采集 ⇒ "capture"（58px 仪表），
+  // 复习页可见**且**会话在跑 ⇒ "review"（零 chrome），否则 "idle"；判定/门控/订阅都在 phaseSource。
+  const phase = useShellPhaseState(capture.active, page === "review");
   // v0.8.0 F2（2026-08-21）：AI 任务完成通知——全局监听 ai:task-update，
   // 跨页面可见（REQ-145"完成通知"落地；内联卡片之外的第二通道）
   const [aiToast, setAiToast] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
@@ -389,6 +391,7 @@ function MainShell() {
               T11 的命令面板里另给一条「对话面板」命令，那条是**增量**入口，不替代它）；
             · 采集徽标 —— ADR-007，切页/最小化后仍可见采集状态（规格 §6.1 明确列了「采集状态」）。
           AI toast **不在**这里：它是本文件下方 `MainShell` 最外层渲染的 fixed 覆盖层（裁决 A3）。 */}
+      <PhaseChrome phase={phase}>
       <TopBar
         page={page}
         onSelect={(key) => setPage(key)}
@@ -436,6 +439,7 @@ function MainShell() {
           </>
         }
       />
+      </PhaseChrome>
 
       {/* 页面区（TD-004：保留挂载 + display 切换——页面切换不重挂载，
           避免 ClassroomPage 每次进入重复窗口枚举 100-500ms 停顿；状态与事件监听保留） */}

@@ -22,6 +22,9 @@ import ReviewSessionPanel from "../components/review/ReviewSessionPanel";
 import DueScale from "../components/review/DueScale";
 import { dueGroupRows, scopeDueCount, scopeLabel } from "../utils/reviewStats";
 import { Loading, Skeleton, StatusLine, Text } from "../ui/primitives";
+// 批 6 T19：复习相位**只上抛事实**（有一轮会话在跑 + 本页可见）—— 写 `<html data-shell-phase>` 的
+// 唯一写入方仍是 `MainShell`；`visible &&` 这条 active 门控在 `usePublishReviewSession` 内（有判据）。
+import { usePublishReviewSession } from "../shell/phaseSource";
 
 interface Props {
   /** 页面是否可见（App 层 display 门控同步透传——切回时重载到期统计） */
@@ -51,6 +54,9 @@ export default function ReviewPage({ active, focusGroupId, onFocusGroupConsumed 
   // 过滤器范围（null=全部；只选不启——「开始复习」才进入会话）
   const [selGroupId, setSelGroupId] = useState<number | null>(null);
   const [session, setSession] = useState<SessionState | null>(null);
+  // 批 6 T19（规格 §6.3）：会话进行中 ∧ 本页可见 ⇒ 壳层进复习相位（零 chrome）。
+  // 🔴 不在这里写相位属性（计划 `:1527/:1542` 的写法是双写者 + 无 active 门控 ⇒ 保活挂载下切走会卡死）。
+  usePublishReviewSession(active, session !== null);
 
   // active 门控切回重载：首挂跳过（挂载 effect 已拉取）——仅 false→true 时递增
   const firstRender = useRef(true);
