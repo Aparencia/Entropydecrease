@@ -24,11 +24,10 @@ import { useDbRefresh } from "../hooks/useDbRefresh";
 // 整段删除，改用 `useTransientToast`（它自己也已把渲染交给 L1 的 `Toast` 原语）——
 // 14 个 `showToast` 调用点的签名与文案一字未改（见 T10 报告的逐处对拍）。
 import { useTransientToast } from "../hooks/useTransientToast";
-import type {
-  BatchNoteResult, BatchSessionDeleteResult, CourseGroup, SessionDetail, SessionListItem,
-} from "../types";
+import type { BatchNoteResult, BatchSessionDeleteResult, CourseGroup, SessionDetail, SessionListItem } from "../types";
 // 批 3 T8：列规格（宽/夹取/阈值 1100）改从 `shell/columnRegistry` 取——页面不再自建规格
 import { columnSpec } from "../shell/columnRegistry";
+import { viewsFor } from "../views/registry"; // 批 5 T10（C1①）：视图清单在本层注入（面板/宿主只收注入）
 import { Text } from "../ui/primitives";
 
 interface Props {
@@ -311,6 +310,7 @@ export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocu
         ) : (
           <SessionDetailPanel
             detail={detail}
+            views={viewsFor("session")}
             fusing={fusingId === detail.session.id}
             degradedBanner={degradedBanner}
             onToNote={toNote}

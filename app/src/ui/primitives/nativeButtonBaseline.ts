@@ -176,9 +176,7 @@ export const SPLIT_MOVES: readonly string[] = [
   // `<button>` 随 `✨ 发起任务` 菜单整段搬进 `components/chat/ChatLaunchMenu.tsx`。
   // 守恒：新家 3 + 源文件今日 2 == 基线 `pages/ChatPage.tsx` 的 5（原 5 = 这 3 + 转笔记 + 前往设置）。
   "components/chat/ChatLaunchMenu.tsx|pages/ChatPage.tsx",
-  // 批 5 T2（C9 拆件 A）：面板的「原料视图 / 笔记预览」两个原生 `<button>` 随切换器行整段搬进
-  // `components/session-detail/SessionViewHost.tsx`（DOM 顺序契约：与 `SessionRefineSection` 同行）。
-  // 守恒：新家 2 + 源文件今日 0 == 基线 `components/SessionDetailPanel.tsx` 的 2
-  // （原 3 = 这 2 + `SessionRefineSection` 迁走的 1；棘轮只数到源文件里剩的那 2）。
-  "components/session-detail/SessionViewHost.tsx|components/SessionDetailPanel.tsx",
+  // 批 5 T10：T2 登记的那条搬运**已终结** —— 两个原生 `<button>` 随切换器迁进 L1 原语
+  // `ui/primitives/ViewSwitcher`（原语层在扫描域外）⇒ 计数**真的减少**（1 → 0），不再是「搬运」。
+  // 故删除本条；总量 393 → 392（`FROZEN_NATIVE_BUTTON_TOTAL` 是**上界** ⇒ 判据仍绿）。
 ];

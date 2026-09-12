@@ -1,5 +1,5 @@
 /**
- * SessionDetailPanel — 会话详情面板（原料 / 笔记预览两视图；v0.11.5 产物视图下线）。
+ * SessionDetailPanel — 会话详情面板（注册表驱动的多视图；v0.11.5 产物视图下线）。
  *
  * @ai-context: v0.7.1 自 SessionsPage 拆出（豁免清单登记拆分计划）——质量报告、大纲、
  *              视图模式为面板内部状态（仅依赖 sessionId），与列表页解耦。
@@ -13,13 +13,24 @@
  *              分支 → `session-detail/SessionViewHost.tsx`（过渡形态，T10 改注册表驱动）；
  *              可信度总览卡 + 两裁决面板 + `refineMsg` 行 → `session-detail/SessionAuxBlocks.tsx`。
  *              行为等价由 `SessionDetailPanel.test.tsx` 的 P1–P4 在拆前拆后都绿证明。
- * @ai-context: 本件仍是**唯一数据面**（`useSessionDetailData`）与**唯一视图状态持有者**
- *              （`viewMode` / 深链快照写入——裁决 D1；C5 会在 T10 改判 `:64` 的复位 effect）。
+ * @ai-context: 批 5 T10（C5 · 本件是**视图记忆的唯一真身与唯一写入者**）：视图态从 `useState`
+ *              迁到 `useViewMemory("session", …)`，键 = `view:default:session`（**不含 `kind`**；
+ *              代价：web/photo/video 共享一份记忆 —— 已登记）。`objectType` 常量 `"session"` 与
+ *              该 hook 同住本件（不变量：hook 与它的键口径不能分居两处）。真正的视图宿主是
+ *              `SessionViewHost`，它收 `viewKey` / `onViewKeyChange` 两个受控 props（它自己的
+ *              头注写了「为什么 hook 上移到面板而不是下沉到宿主」的完整理由）。
+ * @ai-context: 本件仍是**唯一数据面**（`useSessionDetailData`）；`viewMode` 入参按 plan Step 2
+ *              的逐字口径映射：`viewKey === views[0].key ? "raw" : "preview"`。**等价性**：该 hook
+ *              只拿 `viewMode` 做「进入原料视图懒触发 `auto_refine_session`」一个判定
+ *              （`useSessionDetailData.ts:169` `if (viewMode !== "raw") return;`），即**只要「当前
+ *              是不是默认（原文）视图」这一个布尔**；默认视图的键由注册表 `views[0].key` 唯一决定，
+ *              故 `raw`/`preview` 两档字面量在这里**退化为「默认 / 非默认」**，与 T2 的等价语义一致。
  * @ai-context: DOM 顺序契约（逐字不变）：`SessionDetailHeader` → `SessionQualityCard` →
  *              `SpeakerSwitchCard` → 切换器行（含 `SessionRefineSection`）→ `refineMsg` 行
- *              → 视图区 → 两个裁决面板；全部为**同级兄弟**，无新增 wrapper。
+ *              → 视图区 → 两个裁决面板；全部为**同级兄弟**（视图区内的两个新包裹层见宿主头注）。
  */
 import { useEffect, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { useSessionDetailData } from "../hooks/useSessionDetailData";
 import SessionDetailHeader from "./session-detail/SessionDetailHeader";
 import SessionRawView from "./session-detail/SessionRawView";
@@ -27,6 +38,8 @@ import SessionViewHost from "./session-detail/SessionViewHost";
 import { SessionAuxPanels, SessionQualityCard } from "./session-detail/SessionAuxBlocks";
 import WebArticleView from "../components/WebArticleView";
 import SpeakerSwitchCard from "../components/SpeakerSwitchCard";
+import { useViewMemory } from "../views/useViewMemory";
+import type { SessionViewSlot, ViewSpec } from "../views/registry";
 import type { GlossaryTerm, SessionDetail } from "../types";
 
 /** 术语表 summary 的三种文案（null=加载中 / 0 条 / N 条）——原文案逐字，条件整串注入视图 */
@@ -39,6 +52,8 @@ const glossarySummaryOf = (glossary: GlossaryTerm[] | null): string =>
 
 interface Props {
   detail: SessionDetail;
+  /** 视图清单（C1①：由 `SessionsPage` 从 `views/registry` 取后注入；本件不 import `viewsFor`） */
+  views: readonly ViewSpec<SessionViewSlot>[];
   /** 本会话是否融合中（父层 fusingId === detail.session.id） */ fusing: boolean;
   /** 关键降级一次性横幅（null=无） */ degradedBanner: string | null;
   /** 转为笔记 / 删除会话 / 重新拉详情（三者都由父层负责反馈与刷新） */
@@ -51,16 +66,20 @@ interface Props {
   onRefineTaskStarted?: (sessionId: number, taskId: number) => void;
 }
 
-export default function SessionDetailPanel({ detail, fusing, degradedBanner, onToNote, onRemove, onRefreshDetail, autoRefineTaskId, onAutoTaskConsumed, onRefineTaskStarted }: Props) {
-  const [viewMode, setViewMode] = useState<"raw" | "preview">("raw"); // v0.5.0 M7 + v0.6.0 M6：两视图
+export default function SessionDetailPanel({ detail, views, fusing, degradedBanner, onToNote, onRemove, onRefreshDetail, autoRefineTaskId, onAutoTaskConsumed, onRefineTaskStarted }: Props) {
   const sessionId = detail.session.id;
-  // v0.5.0 M7：会话切换回到原料视图（裁决 D1：viewMode 状态留面板；数据面重置见 hook）
-  useEffect(() => { setViewMode("raw"); }, [sessionId]);
+  /** 默认视图键 = 注册表 `views[0].key`（A5①：`registry.ts` 的 `[0]` 就是「原文」） */
+  const defaultKey = views.length > 0 ? views[0].key : "";
+  // 批 5 C5：**显式改判**旧「裁决 D1」——视图态改由 `view:default:session` 记忆持有；**有记忆 ⇒ 用
+  // 记忆值**（切会话不再静默丢弃用户选择）。**旧的「裁决 D1」在视图记忆范围内作废**（其余部分不受
+  // 影响），见 v0.22「过程中纠正的计划错误」段。T2 转来的 `:64` 复位 effect **整条删除**（不是加
+  // 条件）：记忆 hook 的惰性初始化 + `validKeys` 校验已覆盖「无记忆 ⇒ 默认 `views[0].key`（原文）」。
+  const [viewKey, setViewKey] = useViewMemory("session", defaultKey, views.map((spec) => spec.key));
   // 数据面（质量/术语/baseUrl/屏→OCR 分组）+ 精修链路 + 屏卡瞬时态（hook 持有 ⇒ 跨视图切换不丢）
   const {
     quality, glossary, baseUrl, ocrBlocksByScreen, refining, refineMsg, deepTaskId, setDeepTaskId, startRefine,
     selectingScreen, setSelectingScreen, panelToast, showPanelToast, clearPanelToast,
-  } = useSessionDetailData({ detail, viewMode, onRefreshDetail });
+  } = useSessionDetailData({ detail, viewMode: viewKey === defaultKey ? "raw" : "preview", onRefreshDetail });
   // REQ-282（v0.19.6）：标题行内改名 —— 连同改名状态与提交逻辑拆至 session-detail/SessionDetailHeader.tsx
   // v0.20.2（REQ-268/270）：两个裁决面板的显隐 —— 「会话切换即关」的 effect 随面板搬至
   //   `SessionAuxPanels`（state 留本件：工具条三按钮在切换器行里，就近持有回调更少暴露面）。
@@ -68,14 +87,14 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
   const [showProofread, setShowProofread] = useState(false);
   // v0.16.1 工作台深链：autoTaskId 到达即切预览视图。深链快照由 hook 持有——App 侧 focus 清空
   // 早于本层 effect，直接透传 prop 会在卡片挂载前被置空（竞态）；快照 + 会话切换清除保证
-  // 「只消费一次、不跨会话遗留」。切换 effect 按裁决 D1 留面板。
+  // 「只消费一次、不跨会话遗留」。切换 effect 按裁决 D1 留面板（T10 起写入视图记忆）。
   useEffect(() => {
     if (autoRefineTaskId != null) {
       setDeepTaskId(autoRefineTaskId);
-      setViewMode("preview");
+      setViewKey("preview");
       onAutoTaskConsumed?.();
     }
-  }, [autoRefineTaskId, onAutoTaskConsumed, setDeepTaskId]);
+  }, [autoRefineTaskId, onAutoTaskConsumed, setDeepTaskId, setViewKey]);
 
   // v0.20.4（REQ-303）：web 会话专用详情（文章阅读 + 元数据回链 + 转笔记；
   // 无时间轴/屏卡/精修面——h2 标题即页标题，改名在会话列表进行）
@@ -93,6 +112,21 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
     );
   }
 
+  // 视图槽（C14②）：**数据面全在这里** ⇒ 非默认视图自身零取数、零 `invoke`；`imageUrl` 把
+  // `convertFileSrc` 收口在容器侧（T9 的 K6：视图自己 import Tauri 会破 `views/**` 的边界）。
+  const slot: SessionViewSlot = {
+    detail,
+    imageUrl: (imageRef) => (imageRef && baseUrl ? convertFileSrc(`${baseUrl}/${imageRef}`) : null),
+    ocrBlocksByScreen,
+    selectingScreen,
+    onSelectScreen: setSelectingScreen,
+    panelToast,
+    onShowToast: showPanelToast,
+    onClearToast: clearPanelToast,
+    autoRefineTaskId: deepTaskId,
+    onRefineTaskStarted,
+  };
+
   return (
     <>
       {/* 降级横幅 + 详情头（改名/状态行/融合中徽标/操作）—— 拆至 session-detail/SessionDetailHeader.tsx */}
@@ -105,33 +139,33 @@ export default function SessionDetailPanel({ detail, fusing, degradedBanner, onT
           v0.12.1：图文会话跳过（无音频，不再误报红色错误）） */}
       <SpeakerSwitchCard sessionId={sessionId} kind={detail.session.kind} />
 
-      {/* 切换器行 + 视图区 —— 拆至 SessionViewHost.tsx（过渡形态：手写 2 按钮切换组逐字
-          搬移，T10 再改注册表驱动的多视图宿主）；children = 原文视图节点 */}
+      {/* 注册表驱动的视图宿主（T10）：默认视图常驻 + 非默认惰性 + C11 错误槽位；
+          `resident` = 原文视图节点（默认视图**不经** `React.lazy`，同步渲染后常驻） */}
       <SessionViewHost
-        sessionId={sessionId}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-        autoRefineTaskId={deepTaskId}
-        onRefineTaskStarted={onRefineTaskStarted}
+        views={views}
+        viewKey={viewKey}
+        onViewKeyChange={setViewKey}
+        slot={slot}
+        resident={
+          <SessionRawView
+            detail={detail}
+            baseUrl={baseUrl}
+            ocrBlocksByScreen={ocrBlocksByScreen}
+            selectingScreen={selectingScreen}
+            onSelectScreen={setSelectingScreen}
+            panelToast={panelToast}
+            onShowToast={showPanelToast}
+            onClearToast={clearPanelToast}
+            glossarySummary={glossarySummaryOf(glossary)}
+            glossary={glossary}
+          />
+        }
         refining={refining}
         onStartRefine={startRefine}
         canSecondPass={detail.session.status === "finished" && detail.session.kind !== "photo"}
         onOpenPass2={() => setShowPass2(true)}
         onOpenProofread={() => setShowProofread(true)}
-      >
-        <SessionRawView
-          detail={detail}
-          baseUrl={baseUrl}
-          ocrBlocksByScreen={ocrBlocksByScreen}
-          selectingScreen={selectingScreen}
-          onSelectScreen={setSelectingScreen}
-          panelToast={panelToast}
-          onShowToast={showPanelToast}
-          onClearToast={clearPanelToast}
-          glossarySummary={glossarySummaryOf(glossary)}
-          glossary={glossary}
-        />
-      </SessionViewHost>
+      />
 
       {/* refineMsg 行 + 两个裁决面板 —— 拆至 SessionAuxBlocks.tsx 的 SessionAuxPanels */}
       <SessionAuxPanels

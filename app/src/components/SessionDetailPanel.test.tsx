@@ -23,7 +23,7 @@
  *              异步 setState 竞态**（resolve 型桩会在用例结束后才 setState ⇒ act 噪声）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { SessionDetail } from "../types";
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
@@ -51,6 +51,7 @@ vi.mock("./session-detail/SessionScreenCards", () => ({
   default: () => <div data-testid="screen-cards" />,
 }));
 
+import { viewsFor } from "../views/registry";
 import SessionDetailPanel from "./SessionDetailPanel";
 
 function detailOf(over: Partial<SessionDetail> = {}): SessionDetail {
@@ -79,6 +80,7 @@ const noop = () => {};
 function propsOf(detail: SessionDetail, over: Record<string, unknown> = {}) {
   return {
     detail,
+    views: viewsFor("session"),
     fusing: false,
     degradedBanner: null,
     onToNote: noop,
@@ -91,6 +93,20 @@ function propsOf(detail: SessionDetail, over: Record<string, unknown> = {}) {
 /** 段锚点集合：`seg-{sessionId}-{segId}` 形态的 id（屏卡锚点是 `ocr-…`，天然不混） */
 const segAnchors = (): string[] =>
   [...document.querySelectorAll("[id^='seg-']")].map((el) => el.id).sort();
+
+/** 语义可见性代理：祖先链上出现 `display:none` ⇒ 视为不可见（jsdom 不排版，取不到 offsetParent） */
+const visibleSegAnchors = (): string[] =>
+  [...document.querySelectorAll("[id^='seg-']")]
+    .filter((el) => {
+      let cur: Element | null = el;
+      while (cur) {
+        if (cur instanceof HTMLElement && cur.style.display === "none") return false;
+        cur = cur.parentElement;
+      }
+      return true;
+    })
+    .map((el) => el.id)
+    .sort();
 
 const findButton = (label: string): HTMLButtonElement => {
   const hit = [...document.querySelectorAll("button")].find((b) => b.textContent?.includes(label));
@@ -105,7 +121,7 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("SessionDetailPanel · 安全网（批 5 T2 Step 1；抽件前后逐字不变）", () => {
-  it("P1 默认视图是原文：不点任何按钮，每段都在 DOM 里；切到预览后换会话 ⇒ 复位回原文", () => {
+  it("P1 默认视图是原文：不点任何按钮，每段都在 DOM 里；切到预览后换会话 ⇒ 复位回原文", async () => {
     const detail = detailOf();
     const view = render(<SessionDetailPanel {...propsOf(detail)} />);
     expect(segAnchors()).toEqual(["seg-1042-7001", "seg-1042-7002", "seg-1042-7003"]);
@@ -117,7 +133,7 @@ describe("SessionDetailPanel · 安全网（批 5 T2 Step 1；抽件前后逐字
     // `:64` 的复位 effect（裁决 D1：viewMode 状态留面板）—— 没有它，用户切到预览后
     // 换会话会停在预览视图（原文不默认可见）。这条是「默认视图是原文」的另一半。
     fireEvent.click(findButton("笔记预览"));
-    expect(document.querySelector('[data-testid="note-preview-view"]')).not.toBeNull();
+    await screen.findByTestId("note-preview-view");
     const next = detailOf();
     next.session.id = 2043;
     next.segments = [{ id: 9001, session_id: 2043, start_ms: 0, end_ms: 1200, text: "新会话第一段", source: "asr", confidence: 0.5 }];
@@ -125,18 +141,22 @@ describe("SessionDetailPanel · 安全网（批 5 T2 Step 1；抽件前后逐字
     expect(segAnchors()).toEqual(["seg-2043-9001"]);
   });
 
-  it("P2 切换器存在且会切：点「笔记预览」⇒ NotePreviewView 渲染 且 原文区不再可见（本任务仍是互斥渲染）", () => {
+  it("P2 切换器存在且会切：点「笔记预览」⇒ NotePreviewView 渲染 且 原文区不再可见（T10：常驻语义）", async () => {
     render(<SessionDetailPanel {...propsOf(detailOf())} />);
     expect(document.querySelector('[data-testid="note-preview-view"]')).toBeNull();
     expect(document.querySelectorAll("[id^='seg-']").length).toBeGreaterThan(0);
 
     fireEvent.click(findButton("笔记预览"));
 
-    expect(document.querySelector('[data-testid="note-preview-view"]')).not.toBeNull();
-    expect(document.querySelectorAll("[id^='seg-']")).toHaveLength(0);
-    // 切回原文：锚点全回来（互斥渲染的两个方向都判）
-    fireEvent.click(findButton("原料视图"));
+    await screen.findByTestId("note-preview-view");
+    // §7.3①（T10 常驻语义）：原文**节点仍在 DOM**，只是被常驻层的 `display:none` 隐藏 ⇒
+    // 断言从「DOM 缺席」升级为「语义缺席」，强度不减（隐藏层没生效 ⇒ `visibleSegAnchors` 非空 ⇒ 红）。
+    expect(segAnchors(), "常驻语义下原文锚点应仍在 DOM").not.toHaveLength(0);
+    expect(visibleSegAnchors(), "切到预览后原文区仍可见（常驻层没藏住）").toHaveLength(0);
+    // 切回原文：锚点全回来（T10 起还判「重新可见」）
+    fireEvent.click(findButton("原文"));
     expect(segAnchors()).toEqual(["seg-1042-7001", "seg-1042-7002", "seg-1042-7003"]);
+    expect(visibleSegAnchors()).toEqual(["seg-1042-7001", "seg-1042-7002", "seg-1042-7003"]);
   });
 
   it("P3 web 会话早退：kind==='web' ⇒ 渲染 WebArticleView 且**切换器 0 个**（也没有段锚点）", () => {
@@ -149,11 +169,12 @@ describe("SessionDetailPanel · 安全网（批 5 T2 Step 1；抽件前后逐字
     expect(document.querySelectorAll("[id^='seg-']")).toHaveLength(0);
   });
 
-  it("P4 工作台深链：autoRefineTaskId 非空 ⇒ 切到 preview 且 onAutoTaskConsumed **恰 1 次**", () => {
+  it("P4 工作台深链：autoRefineTaskId 非空 ⇒ 切到 preview 且 onAutoTaskConsumed **恰 1 次**", async () => {
     const onAutoTaskConsumed = vi.fn();
     render(<SessionDetailPanel {...propsOf(detailOf(), { autoRefineTaskId: 88, onAutoTaskConsumed })} />);
-    expect(document.querySelector('[data-testid="note-preview-view"]')).not.toBeNull();
-    expect(document.querySelectorAll("[id^='seg-']")).toHaveLength(0);
+    await screen.findByTestId("note-preview-view");
+    expect(segAnchors()).not.toHaveLength(0);
+    expect(visibleSegAnchors(), "深链切走后原文区仍可见").toHaveLength(0);
     expect(onAutoTaskConsumed).toHaveBeenCalledTimes(1);
   });
 });
