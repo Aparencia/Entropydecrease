@@ -7,8 +7,10 @@
  *   （计划表格里的第 4 行）—— 编号照计划、次序照裁决，两者不冲突。
  *   T4 不 invoke 且不带 Tauri：① 注入 `invoke` spy 后把**三轨非空**与**整块空态**两条路径都渲染
  *      一遍 ⇒ `invoke` **零调用**（视图不取数的机器判据）；② 源码级：`views/**` 的**生产文件**
- *      `@tauri-apps` 出现 **0 次**（含 `import type`）—— 带阳性对照（已知有 `convertFileSrc` 的
- *      `components/session-detail/SessionScreenCards.tsx` 必命中）与阴性对照（无意义串必 0）。
+ *      `@tauri-apps` **import 边** = 0（含 `import type`）—— 带阳性对照（已知有 `convertFileSrc` 的
+ *      `components/session-detail/SessionScreenCards.tsx` 必命中）与两条阴性对照（注释提及 / 裸字符串
+ *      必 0）。**两个面各自收集问题、最后一次性断言**：见该用例内的 `problems` 注释（硬 `expect`
+ *      会在第一个面上中止 ⇒ 第二个面拿不到「有没有牙」的读数）。
  *   T1 条目数：三条轨各自的**直接子项数** == `segments` / `screens` / `ocr_blocks` 的长度；
  *      单轨为空时该轨**照常渲染**（列在、列内 0 条）—— 两套夹具，避免把长度写死。
  *   T2 纵向顺序：同一 ms（9000）三条目在 DOM 里的顺序 = 转写 → 画面 → OCR
@@ -101,13 +103,20 @@ function walk(dir: string, out: string[] = []): string[] {
 const relOf = (abs: string): string => abs.slice(VIEWS.length + 1).replace(/\\/g, "/");
 
 describe("T4 不 invoke 且不带 Tauri（C14② 的第一条判据）", () => {
-  it("T4① 三轨非空 + 整块空态两条路径都渲染 ⇒ `invoke` 零调用；T4② `views/**` 生产文件 0 个 `@tauri-apps`（含 import type）", () => {
+  it("T4① 三轨非空 + 整块空态两条路径都渲染 ⇒ `invoke` 零调用；T4② `views/**` 生产文件 0 个 `@tauri-apps` import 边（含 import type）", () => {
+    // ★ 两个面各自收集问题、最后一次性断言：本判据有两个**可独立变异**的面（行为面 = spy、
+    //   源码面 = import 边）。若写成两条连续的硬 `expect`，`it` 会在第一个面上中止 ⇒
+    //   第二个面「有没有牙」永远拿不到读数（C15 要求的正是「这条判据自己能红」）。
+    const problems: string[] = [];
+
     const nonEmpty = mount();
-    expect(nonEmpty.items("transcript")).toHaveLength(3);
+    const lanes = nonEmpty.items("transcript").length;
     cleanup();
-    mount(EMPTY);
+    mount(EMPTY); // 空态路径也要渲染一遍：两条路径都不许取数
     cleanup();
-    expect(invokeMock, "视图自己取数了（C14② 的「不 invoke」当场破）").not.toHaveBeenCalled();
+    if (lanes !== 3 || invokeMock.mock.calls.length > 0) {
+      problems.push(`① 不 invoke：渲染了 ${lanes} 条转写却调用了 invoke ${invokeMock.mock.calls.length} 次`);
+    }
 
     const prod = walk(VIEWS).filter((abs) => /\.tsx?$/.test(abs) && !/\.test\.tsx?$/.test(abs));
     // 域非空自证：扫描器要是把域走空了，「0 命中」就是空真
@@ -128,10 +137,10 @@ describe("T4 不 invoke 且不带 Tauri（C14② 的第一条判据）", () => {
             /\b(?:import|require)\s*\(\s*["']@tauri-apps/.test(line),
         );
     const hits = prod.filter((abs) => readers(readFileSync(abs, "utf8"))).map(relOf);
-    expect(hits, "views/** 里出现了 @tauri-apps 的 import 边（视图层不许碰 IPC）").toEqual([]);
-    // 双侧自证：同一支仪器在**已知存在该 import** 的样本上必须命中、在注释提及上必须 0、无意义串必须 0
-    const positive = join(VIEWS, "..", "components", "session-detail", "SessionScreenCards.tsx");
-    const positiveSrc = readFileSync(positive, "utf8");
+    if (hits.length > 0) problems.push(`② 不带 Tauri：views/** 出现 @tauri-apps import 边 -> ${hits.join(", ")}`);
+
+    // 仪器自证（这几条**不并入** `problems`：它们证明扫描器可信，不是被测对象的行为）
+    const positiveSrc = readFileSync(join(VIEWS, "..", "components", "session-detail", "SessionScreenCards.tsx"), "utf8");
     expect(readers(positiveSrc), "阳性对照没命中 ⇒ 扫描器不可信（0 命中不算数）").toBe(true);
     expect(
       readers('// import { invoke } from "@tauri-apps/api/core";\n/** 零 `@tauri-apps` import */'),
@@ -139,6 +148,8 @@ describe("T4 不 invoke 且不带 Tauri（C14② 的第一条判据）", () => {
     ).toBe(false);
     expect(readers('const s = "本层零 @tauri-apps 依赖";'), "裸字符串被当成了 import 边").toBe(false);
     expect(readers('import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";'), "`import type` 没被算成边（C14② 明文要求含它）").toBe(true);
+
+    expect(problems, "「不 invoke 且不带 Tauri」的两个面各自独立成立").toEqual([]);
   });
 });
 
