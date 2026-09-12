@@ -210,8 +210,10 @@
 > ⚠️ **来源标记：本节是人工维护的记录块，非机器生成** —— 数值写成 Markdown **引用行**（`> - ` 起首，形如 `> - 文件：**N**`），而 `parseTable()` 只认 4 列 `| path | N | … |` 表行（引用行一律忽略）；且本块位于 `## 已拆分` 标题**之后**，`parseHistory()` 对该节**逐字保留** ⇒ `--write` 永远既不重算也不删除它，数值过期后**没有任何门禁会报警**（2026-09-11 已发现 Loading / StatusLine 共 6 个值过期，实测更正）。
 > **刷新规则：本节与 `docs/adr/ADR-033-l1-primitives-and-view-layer-contract.md`、`docs/superpowers/specs/2026-09-11-frontend-redesign-design.md` 三处副本不一致时，一律在 HEAD 按 `countLines()` 口径（含空行）重新实测，并以实测值同步全部副本。机器锚点：三处副本的每处数值行后紧跟一行 HTML 注释 `<!-- line-count-src: files=… caliber=… authority=… -->`，供门禁按 `files=` 逐个在 HEAD 重测、与相邻数值行对拍 —— 锚点内**刻意不写数值**，否则等于又造一份手抄副本。**
 >
-> **新建目录 `app/src/ui/primitives/` 下 42 个文件**（实测行数口径 = `scripts/line-limits.mjs` 的 `countLines()`，即含空行的全部行数；**最大 299**）：
-> - `Text`：`Text.tsx` **119** · `Text.css` **58** · `Text.test.tsx` **171**
+> 🔴 **批 6 收口就地加注 · 刷新规则的两条补强（R42.3 / R63.2 / R33.3；2026-09-13，**上面原文一字未改**）**：① **登记口径 = 提交树 `countLines()` 实测** —— 本节数值**只许**取自「该值落库的那个提交树」上的实测（**不是**工作树口径、**不是**旁边某次跑工具的读数）。批 6 已发生 **3 次口径混用**（工具把 `import type` 与注释字面量算成命中 · T16 在**依赖文件仍在飞**时按工作树口径登记 ⇒ R33.2 已登记为**控制方的派发错误**）。② 🔴 **机器锚点 `<!-- line-count-src … -->` 全仓 0 个读者**：规格 `:835` 与本节所称「门禁按 `files=` 重测」**今日无实现** ⇒ 三副本同步**只能靠人工**（批 6 的二次刷新即一次人工同步；锚点保留待将来实现 —— 它刻意不写数值，故自身不会腐化）。③ **二次刷新的范围（R63.2）**：批 6 收口只余两条漂移 ⇒ **`motion.css` 271 → 335**（Δ64）与 **`Text.css` 58 → 66**（Δ8，T23/T28 的低置信墨度落点）；**其余 40 值逐条 ✅**（T16 已刷的 19 条 + 23 条不变）。
+>
+> **新建目录 `app/src/ui/primitives/` 下 42 个文件**（实测行数口径 = `scripts/line-limits.mjs` 的 `countLines()`，即含空行的全部行数；**最大 335**（= `motion.css`，**CSS 不在行数门禁的 `SOURCE_EXT` 视野内**；**源文件最大 299**））：
+> - `Text`：`Text.tsx` **119** · `Text.css` **66** · `Text.test.tsx` **171**
 > - `Surface`：`Surface.tsx` **98** · `Surface.css` **85** · `Surface.test.tsx` **175**
 > - `Button`：`Button.tsx` **132** · `Button.css` **100** · `Button.test.tsx` **286**
 > - `Modal`：`Modal.tsx` **260** · `Modal.css` **81** · `Modal.test.tsx` **296** · `Modal.exit.test.tsx` **91** · `useFocusTrap.ts` **122** · `useFocusTrap.test.tsx` **236** · `ime.ts` **18** · `ime.test.ts` **32**
@@ -221,7 +223,7 @@
 > - `Loading`/`Skeleton`/`Probe`：`Loading.tsx` **105** · `Loading.css` **79** · `Loading.test.tsx` **238**
 > - `StatusLine`：`StatusLine.tsx` **94** · `StatusLine.css` **42** · `StatusLine.test.tsx` **267**
 > - `usePresence`：`usePresence.ts` **200** · `usePresence.test.tsx` **282** · `usePresence.node.test.ts` **71**
-> - 接缝 / 导出面 / 守卫：`motion.css` **271** · `index.ts` **48** · `style-seams.test.ts` **299** · `style-contract.test.ts` **296** · `motion-coverage.test.ts` **186**
+> - 接缝 / 导出面 / 守卫：`motion.css` **335** · `index.ts` **48** · `style-seams.test.ts` **299** · `style-contract.test.ts` **296** · `motion-coverage.test.ts` **186**（🔻 **批 6 收口二次刷新（R63.2 / R33.2；2026-09-13，**本行原文的旧值保留于本节历史**）**：`motion.css` **271 → 335**（Δ64；T5/T6/T12/T13/T19/T29 六次追加）· `Text.css` **58 → 66**（Δ8；T23/T28 的低置信墨度落点）= **本批仅此两条漂移**；其余 40 值逐条 ✅。出处 = `.superpowers/sdd/2026-09-12-frontend-redesign-batch6-motion/task-34-report.md` §11/§13-②，口径 = **提交树 `countLines()` 实测**。）
 > <!-- line-count-src: files=app/src/ui/primitives/motion.css,app/src/ui/primitives/index.ts,app/src/ui/primitives/style-seams.test.ts,app/src/ui/primitives/style-contract.test.ts,app/src/ui/primitives/motion-coverage.test.ts caliber=countLines@scripts/line-limits.mjs authority=HEAD-remeasurement -->
 >
 > **★ 一次真实的口径事件（记在此以免被当成"新文件登记豁免"的先例）**：收尾实施者最初把 Task 14 的全部守卫**追加**进 `style-seams.test.ts` ⇒ 该文件涨到 **340 行 > 300**，`--full` **exit 1**（`(c) 超过 300 行但未登记`），**会拦下全仓所有人的提交**。处置**照批 0-D 裁决**：**不用 `--write` 登记豁免**（登记表/棘轮是给**存量**文件的历史债机制），而是**按语义拆** —— 「原语 CSS **文本**反例」（零颜色字面量 · `--ed-stamp` 不作底色）留在 `style-seams.test.ts`；「**跨文件**契约」（CSS 接线 · 联合契约锚 · 退场时长三方对拍）落 `style-contract.test.ts`；「**reduced-motion 覆盖**」（基类名单 · **动画落点含伪元素**）另立 `motion-coverage.test.ts`（T11 评审 Critical 修好后追加的那条守卫再次逼近 300 行红线，遂二次按语义拆）。三个文件 **299 / 296 / 186** 行、职责写进各自 `@ai-context` 文件头，T3/T4/T12 已追加的 describe **逐条保留**（追加式演进）。
