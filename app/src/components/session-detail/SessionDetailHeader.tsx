@@ -9,16 +9,31 @@
  * @ai-context: REQ-031（融合停止异步化）：fusing 时显示「⏳ 融合中」徽标；session:fused 到达后
  *              父层自动刷新 detail。REQ-080 降级分级：degradedBanner 为一次性横幅（null=不渲染）。
  * @ai-context: DOM 契约——`data-testid="session-title-input"` 与 `data-testid="session-rename-open"`
- *              是既有测试锚点，不得改名；本组件不含 position:sticky（粘性头未实现，勿顺手加）。
+ *              是既有测试锚点，不得改名；`data-testid="session-header"` 是批 5 T11 新增的**粘性锚点**。
+ * @ai-context: 批 5 C13：本组件**已是**粘性头（`position: sticky` + `top: var(--ed-space-4, 4px)`
+ *              + `zIndex("raised")`）；**祖先链必须无 `overflow: hidden`**（实测滚动容器 =
+ *              `SessionsPage.tsx:306` 的 `overflowY:auto`，中间只有 Fragment 一层、无溢出层 ⇒ 可粘）。
  * @ai-context: 样式口径——「删除」已走 `Button`（批 4 B4）；「转为笔记」仍是未迁的 spread 形态（余量登记批 5/7）。
  */
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { SessionDetail } from "../../types";
+import { zIndex } from "../../ui/zIndex";
 import { Button } from "../../ui/primitives";
 
 /** 通用小按钮基础样式（拆分前 SessionDetailPanel 的 `btn`——本文件「转为笔记/删除」复用） */
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
+
+/** 批 5 C13 粘性头（**只加样式、不加逻辑**）：`top` 走 token（`ui/tokens.css:--ed-space-4: 4px`）
+ *  —— 右栏滚动容器 `SessionsPage.tsx:306` 自带 `padding:16`，要贴住容器顶得留一点余量（不新增 token）；
+ *  `zIndex("raised")` 的档位注释逐字就是「吸顶头 / 粘性列头 / 粘性工具栏」；底色取 canvas 档，
+ *  防正文从粘性头下透出（无色值字面量）。 */
+const stickyHeader: React.CSSProperties = {
+  position: "sticky",
+  top: "var(--ed-space-4, 4px)",
+  zIndex: zIndex("raised"),
+  background: "var(--ed-bg-canvas)",
+};
 
 const STATUS_LABEL: Record<string, string> = {
   recording: "录制中",
@@ -94,7 +109,7 @@ export default function SessionDetailHeader({ detail, fusing, degradedBanner, on
         </div>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+      <div data-testid="session-header" style={{ ...stickyHeader, display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
         {renameMode ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 220 }}>
             <input
