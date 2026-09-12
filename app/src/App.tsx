@@ -17,29 +17,13 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-// 批 2 包体治理：课堂页（默认页）**保持静态 import**。
-// @ai-context: 它是首屏必渲染的页面 —— 改成 lazy 只是把同一批字节挪进动态 chunk，
-//   首屏仍要多一次 chunk 往返，且预算读数会失真（控制方 2026-09-12 裁决 2 末条认可该判断）。
-import ClassroomPage from "./pages/ClassroomPage";
-// 批 2 包体治理：其余 8 个页面从静态 import 改为按页动态 import。
-// @ai-context: 「保留挂载（TD-004）」的语义按页保留 —— **访问过的页常驻、永不卸载**；
-//              只是「从未访问过的页」不再进入首屏 module graph。
-// @ai-context: 不引入路由库（规格 §3 红线 2）：入口仍是 useState<Page> + NAV_ITEMS，
-//              只是每个页面成为一个独立 chunk。
-const NotesPage = lazy(() => import("./pages/NotesPage"));
-const SessionsPage = lazy(() => import("./pages/SessionsPage"));
-// v0.20.5：行动域页（做——行动中心独立成页，意图分层）
-const ActionPage = lazy(() => import("./pages/ActionPage"));
-// v0.20.10（批 5，用户问题 6）：复习域页（练——复习面独立顶层 Tab；spec §9 二期兑现）
-const ReviewPage = lazy(() => import("./pages/ReviewPage"));
-// v0.16.0：AI 对话页（纯聊天 + AI 任务对话视图——DSH 交互范式）
-const ChatPage = lazy(() => import("./pages/ChatPage"));
-// 2026-08-21 用户需求：设置页（课堂助手设置类面板迁出，单页滚动+分组）
-const SettingsPage = lazy(() => import("./pages/SettingsPage"));
-// v0.13.1：知识体系页（三时钟纪律——体系进周/季度视图，不入每日复习面）
-const KnowledgePage = lazy(() => import("./pages/KnowledgePage"));
-// v0.18.0：学习目标页（意图层——独立 Tab，零叙事元素）
-const GoalsPage = lazy(() => import("./pages/GoalsPage"));
+// 批 3 T6：9 个页面组件改由导航注册表提供（**单一真源**，规格 §10 批 3「9 页全走注册表」）。
+// @ai-context: 本文件从此**不 import 任何页面模块** —— 「课堂页静态 import + 其余 8 页按页
+//   lazy import」的包体纪律（批 2 包体治理）整段搬进 `shell/navRegistry.ts`；
+//   「从未访问过的页不进首屏 module graph」与「访问过的页常驻、永不卸载（TD-004）」两条语义
+//   都逐字保留（保活由下面的 PageSlot + mountedPages 实施，本任务未动它们一个字节）。
+// @ai-context: 仍不引入路由库（规格 §3 红线 2）：入口依旧是 useState<Page>。
+import { ALL_ENTRIES, navComponent, type PageKey } from "./shell/navRegistry";
 // REQ-274（v0.19.4）：全局 AI 对话面板（丙案——按需唤起 + 内容保活）
 // 批 2 包体治理：从静态 import 改为按需 import，并在它之前加一道「首开挂载」闸门。
 // @ai-context: 原语义（见文件末尾 dock 渲染处的注释）是「常驻挂载——开合仅切 display，
@@ -67,24 +51,24 @@ import { CaptureStatusProvider, useCaptureControl } from "./hooks/useLiveCapture
 import { pauseReasonLabel } from "./hooks/liveCaptureState";
 import type { AiTaskState } from "./types";
 
-type Page = "classroom" | "sessions" | "notes" | "action" | "review" | "chat" | "knowledge" | "goals" | "settings";
+// 页面键 = 注册表键集（批 3 T6：从前是 9 个字面量的手写联合，现在从注册表派生）
+type Page = PageKey;
 
-const NAV_ITEMS: { key: Page; label: string }[] = [
-  { key: "classroom", label: "📡 课堂助手" },
-  { key: "sessions", label: "🗂 会话" },
-  { key: "notes", label: "📝 笔记" },
-  // v0.20.5：行动域页（做——行动裁决/SOP/练习/问题；独立 Tab 唯一入口）
-  { key: "action", label: "✅ 行动" },
-  // v0.20.10（批 5）：复习域页（练——到期感知唯一入口，无被动提醒；
-  // 顶层 Tab=9 触发 spec §9 导航收纳观察项，收纳设计另行立项）
-  { key: "review", label: "🔄 复习" },
-  // v0.16.0：AI 对话页（纯聊天 + AI 任务对话视图）
-  { key: "chat", label: "💬 AI 对话" },
-  { key: "knowledge", label: "🧠 体系" },
-  // v0.18.0：学习目标（意图层——目标=组的容器，N:M 绑定）
-  { key: "goals", label: "🎯 目标" },
-  { key: "settings", label: "⚙ 设置" },
-];
+// 9 个页面组件取自注册表：`navComponent` 保留各自**精确的 props 类型**，故下面 9 段
+// <PageSlot> JSX 与本任务之前逐字相同，只换了标识符的来源（注册表不得包 wrapper：
+// 组件标识必须稳定，否则每次渲染都会重挂载、保活失效）。
+const ClassroomPage = navComponent("classroom");
+const SessionsPage = navComponent("sessions");
+const NotesPage = navComponent("notes");
+const ActionPage = navComponent("action");
+const ReviewPage = navComponent("review");
+const ChatPage = navComponent("chat");
+const KnowledgePage = navComponent("knowledge");
+const GoalsPage = navComponent("goals");
+const SettingsPage = navComponent("settings");
+
+// 顶栏项 = 注册表 map 出来（label 暂用 legacyLabel：T6 零观感变化，T7 切到 e.label 并删该列）
+const NAV_ITEMS: { key: Page; label: string }[] = ALL_ENTRIES.map((e) => ({ key: e.key, label: e.legacyLabel }));
 
 function App() {
   // URL per-window 标志早返回（不渲染主导航壳）。批 2b 采集控制单一状态源：

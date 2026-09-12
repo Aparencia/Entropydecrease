@@ -33,10 +33,10 @@
 | app/src-tauri/src/commands.rs | 523 | 命令装配域（AppState + 通用命令 + 导入管线编排）；登记值 466 过期快照——2026-09-09 实测纠偏（含批 7 delete_note 结果契约 +12；600 硬限内压线） | 若再增长：导入管线命令拆至 commands_import.rs（既有登记计划） |
 | app/src-tauri/src/video_profile_tests.rs | 522 | 档案测试域（12 档案断言矩阵 + 检测投票 + JSON 校准 + v0.13.6 领域记忆独立通道/旧 JSON 零迁移用例 + 审查回归（烘焙迁移/单字种子守卫））单模块 #[path] 挂载 | 若再增长：档案矩阵拆至 video_profile_data_tests.rs |
 | app/src-tauri/src/engine.rs | 521 | 引擎池句柄与同步 API（双 worker 编排 + ADR-009 设备状态 + M7 心跳/失败/缓存计数 + 有界等待变体）；三维复审 #5 超时排空机制（drain_asr/ocr_backlog）与 #3 ASR_FILE_TIMEOUT 文件级超时常量接入后，worker 主循环与请求协议按登记计划拆至 engine_worker.rs（见文末"已拆分"注记）回归本值 | 若再增长：排空机制与同步 API 变体拆至 engine_request.rs |
-| app/src/App.tsx | 519 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 | app/src/components/GroupSidebar.tsx | 519 | v0.20.12 批 7（REQ-316）拖拽归组/ⓘ 弹层移组清理留痕透传（509→519；登记值过期纠偏） | 若再增长：体系引用拉取与徽标聚合拆至 useGroupSystemLinks.ts hook |
 | app/src/components/LiveActivityPanel.tsx | 517 | 实时活动面板：会话状态/转录流/OCR 预览/控制区多状态面板内聚（前端审查登记） | 若再增长：转录流与 OCR 预览拆至 LiveTranscriptStream.tsx / LiveOcrPreview.tsx |
 | app/src-tauri/src/ai_client.rs | 505 | v0.11.6 M1（AiClient::from_provider / from_settings_with_store / is_fallbackable / fallback_provider_ids）+ 2026-09-11 DeepSeek V4.1 适配（chat_plain 探活路径 / build_plain_payload / json 前置条件兜底接线 / thinking 策略落点 / 4xx 错误体透出——纯策略与提取逻辑已拆至 ai_request_policy.rs）——Provider 解析与错误分类内聚于 AiClient 域，构造入口与降级链纯函数同文件便于单测。**旧登记 322 为过期快照，本次按实测纠偏** | 若再增长：fallback_provider_ids 拆至 ai_fallback.rs；payload 构造族拆至 ai_payload.rs |
+| app/src/App.tsx | 503 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 | app/src/components/GroupSidebar.test.tsx | 497 | 覆盖串组场景——切换 ⓘ 弹层目标组时表单态必须重置（key=group.id修复）：组 A 改了判类（未确认）→ 点组 B ⓘ → 弹层显示 B 且判类下拉回到 B.kind（防把 A 的选择误用到 B——路径: 改判误操作）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/db_sop.rs | 490 | v0.20.3（REQ-296/297）SOP 三表数据域（模板/run/步骤/保鲜/聚合）+ 审查加固（保链更新/幂等守卫/步数计数）内聚 | 若再增长：run 执行族拆至 db_sop_run.rs |
 | app/src-tauri/src/live_session_persist.rs | 488 | 定稿落库域（persist_final/digest_merged/handle_final_event）+ P2 flush_tail_and_persist（停止/暂停共用尾句落库）内聚 | 若再增长：flush_tail_and_persist 与 digest_merged 拆至 live_session_persist_tail.rs |
