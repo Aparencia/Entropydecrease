@@ -68,6 +68,7 @@ fn contract_keys_and_order() {
     assert_wire!("CanvasNodePosition", CanvasNodePosition { node_id: 1, x: 0.5, y: 0.5 }, r#"{"nodeId":1,"x":0.5,"y":0.5}"#);
     assert_wire!("CanvasViewport", CanvasViewport { viewport_x: 0.5, viewport_y: 0.5, zoom: 0.5 }, r#"{"viewportX":0.5,"viewportY":0.5,"zoom":0.5}"#);
     assert_wire!("CanvasPrefs", CanvasPrefs { edge_style: "smoothstep".into(), edge_arrows: true, layout_algorithm: "radial".into() }, r#"{"edgeStyle":"smoothstep","edgeArrows":true,"layoutAlgorithm":"radial"}"#);
+    assert_wire!("SessionAudioRef", crate::commands_audio::SessionAudioRef { path: "p".into(), aligned: false, duration_ms: Some(1000) }, r#"{"path":"p","aligned":false,"durationMs":1000}"#);
 }
 
 #[test]

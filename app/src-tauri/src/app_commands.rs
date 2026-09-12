@@ -334,6 +334,7 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         // 会话音频落盘（REQ-068，v0.6.0 M4：状态/清理——M6 清理 UI 消费）
         crate::commands_audio::session_audio_status,
         crate::commands_audio::session_audio_cleanup,
+        crate::commands_audio::session_audio_path,
         // 音频预处理链（REQ-101，v0.7.0 M1：CER 微基准定默认后的用户开关）
         crate::commands_audio::audio_preproc_status,
         crate::commands_audio::audio_preproc_set,
