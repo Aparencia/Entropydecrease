@@ -14,9 +14,16 @@
  *   ③ **扫描域自检**：四个文件都读得到且够长（防路径写错 ⇒ 0 命中 ⇒ 假绿），
  *      剥注释器与三个旧字面量正则各带正/负样本自检（不能失败的判据不算判据）。
  *
+ * 2026-09-12（T9 评审 I-1 · 控制方裁决 e）：① 与 ④ 按「列状态**整体**注入（`col`）+
+ *   手柄在 `ChatSidebar` 内渲染」改写——旧断言逐字绑在散 prop 形态上，与裁决后的实现
+ *   不相容（`ChatPage` 只有 1 行余量，散 prop 与对象不能并存）。改写**同强度不降**：
+ *   新增 `onResize={col.resizeBy}`（手柄真接线）与「散 prop 不得复辟」「页面不得重复
+ *   渲染手柄」三条判据，`it` 数 6 → 6 不变。
+ *
  * ⚠️ 仪器局限（诚实边界）：本文件**只看源码文本**——看不到「列实际渲染了多宽」。
- *   `ChatSidebar` / `GoalsPage` / `SettingsPage` / `ChatPage` 今日**都没有组件测试**，
- *   故宽度与折叠的真实行为在本批**没有自动化覆盖**：像素证据归 T14 的探针，
+ *   `ChatPage` 今日**没有组件测试**（页面级接线只有本文件的文本判据），故宽度与折叠的
+ *   真实行为在本批仍无自动化覆盖：像素证据归 T14 的探针；`ChatSidebar` 的行为层现在
+ *   由 `components/ChatSidebar.test.tsx`（jsdom，⑤⑥⑦ = 手柄/拖拽改宽/折叠态手柄）承担。
  *   本文件跑在 vitest 全局 `node` 环境（纯文本判定，刻意不加 jsdom 头）。
  */
 import { readFileSync } from "node:fs";
@@ -48,15 +55,20 @@ const LEGACY: readonly (readonly [string, RegExp])[] = [
 ] as const;
 
 describe("T9 · 未接入三处的列接线（规格 §6.2）", () => {
-  it("① ChatSidebar 不再写死列宽，且接受 width/folded/onExpand", () => {
+  it("① ChatSidebar 不再写死列宽；列状态整体注入 + 手柄在组件内（I-1 修正）", () => {
     const c = code("components/ChatSidebar.tsx");
     expect(/width:\s*240\b/.test(c), "ChatSidebar 代码里仍硬编码 240").toBe(false);
     expect(c.includes("export interface ChatSidebarProps")).toBe(true);
-    expect(c.includes("width?: number")).toBe(true);
-    expect(c.includes("folded?: boolean")).toBe(true);
+    // 2026-09-12 T9 评审 I-1（控制方裁决 e）：三个散 prop 收敛为**整对象** col
+    expect(c.includes("col?: ColumnLayout"), "列状态未收敛为一个对象").toBe(true);
+    expect(c.includes("col.folded"), "折叠态未取自列状态").toBe(true);
     expect(c.includes('columnSpec("chat-sidebar")'), "宽度缺省值未取注册表").toBe(true);
-    // 折叠态必须整列换成窄条（与其它列同款），且是「早返回」而非藏在某分支里
-    expect(/if\s*\(folded\)\s*return\s*<ColumnBar/.test(c), "折叠态未渲染 ColumnBar 窄条").toBe(true);
+    // 「假可调」的机器判据：注册表承诺 200..320 ⇒ 必须真有一个手柄，且它**接到列状态上**
+    // （只判「文件里出现 ColumnResizer」会被「渲染了但没接 onResize」的形态骗过）
+    expect(c.includes("<ColumnResizer"), "侧栏没有拖拽手柄 ⇒ 注册表承诺的区间不可达").toBe(true);
+    expect(c.includes("onResize={col.resizeBy}"), "手柄未接 resizeBy（拖了不改宽）").toBe(true);
+    // 折叠态必须整列换成窄条（与其它列同款）
+    expect(c.includes("<ColumnBar"), "折叠态未渲染 ColumnBar 窄条").toBe(true);
   });
 
   it("② GoalsPage 不再写死 380，且可拖拽 + 可折叠", () => {
@@ -82,9 +94,14 @@ describe("T9 · 未接入三处的列接线（规格 §6.2）", () => {
     const c = code("pages/ChatPage.tsx");
     expect(c.includes('useColumnLayout("chat-sidebar", columnSpec("chat-sidebar"))'), "页面未从注册表取规格").toBe(true);
     const usage = c.slice(c.indexOf("<ChatSidebar"));
-    expect(usage.includes("width={chatCol.width}"), "未把列宽注入 ChatSidebar").toBe(true);
-    expect(usage.includes("folded={chatCol.folded}"), "未把折叠态注入 ChatSidebar").toBe(true);
-    expect(usage.includes("onExpand={chatCol.expand}"), "未注入 expand（窄条点不开）").toBe(true);
+    // 2026-09-12 T9 评审 I-1（控制方裁决 e）：改为**一次对象传递**。散传 width/folded/
+    // onExpand 时 resizeBy 到不了 UI（=§6.2 的「假可调」），故加**反向判据**防复辟。
+    expect(usage.includes("col={chatCol}"), "未把列状态整体注入 ChatSidebar").toBe(true);
+    for (const scattered of ["width={chatCol.width}", "folded={chatCol.folded}", "onExpand={chatCol.expand}"]) {
+      expect(usage.includes(scattered), `散 prop ${scattered} 复辟（手柄拿不到 resizeBy）`).toBe(false);
+    }
+    // 手柄只有一处渲染（在 ChatSidebar 内）——页面不得再渲染第二个
+    expect(c.includes("<ColumnResizer"), "手柄应由 ChatSidebar 渲染，页面不得重复渲染").toBe(false);
   });
 
   it("⑤ 第二仪器（原始文本 · 刻意更严）：旧字面量连注释里都不许残留", () => {

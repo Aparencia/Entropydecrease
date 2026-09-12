@@ -4,15 +4,22 @@
  * @ai-context: 两段式："💬 对话"（自由聊天会话 CRUD）+ "🤖 AI 任务"
  *              （refine/enrich 任务对话入口——只读轨迹视图数据源）。
  *              全部数据由 ChatPage 加载后透传（本组件纯展示 + 事件回调）。
+ * @ai-context: 批 3 · T9 评审 I-1：列状态**整体**注入（`col`）且拖拽手柄由本组件
+ *              渲染。此前页面只散传宽度/折叠态/展开回调 ⇒ `resizeBy`/`resetWidth`
+ *              在 UI 上不可达，注册表承诺的 200..320 成了规格 §6.2 逐字点名的
+ *              「假可调」。形态与 `notes/NotesGroupsColumn` 同款：顶层 fragment、
+ *              手柄在**折叠三元之外**（折叠态也渲染），且是页面根 flex 的直接子元素。
  */
 import type { AiTaskRecord, ChatSession } from "../types";
 // 2026-09-09 批 1：任务标题统一按类别解析（taskRefLabel——会话级/笔记级
 // 精修 ref_id 语义不同；enrich 恒笔记级），侧栏与对话页/dock 同口径
 import { taskRefLabel } from "../utils/entityLabel";
-// 批 3（规格 §6.2「AI 对话侧栏：接入列基础设施」）：列宽不再写死 240——
+// 批 3（规格 §6.2「AI 对话侧栏：接入列基础设施」）：列宽不再写死——
 // 规格住在 shell/columnRegistry，运行时由页面里的 useColumnLayout 执行
 import { columnSpec } from "../shell/columnRegistry";
+import { useColumnLayout, type ColumnLayout } from "../hooks/useColumnLayout";
 import ColumnBar from "./ColumnBar";
+import ColumnResizer from "./ColumnResizer";
 
 /** 任务类型标签（refine/enrich → 中文 + 图标；模块内消费——审查修复：原
  *  export 无外部消费方，收窄为非导出） */
@@ -22,18 +29,15 @@ const OP_LABEL: Record<string, string> = {
 };
 
 /**
- * 批 3（规格 §6.2）：本列已接入列基础设施。两个新 prop 均为可选 ⇒ 组件在
- * 没有页面注入时行为自足（宽度回落到注册表默认值），但**折叠态必须注入
- * onExpand**——否则 26px 窄条点了不展开（正是 J1-3 那类交互死局的形态）。
+ * 批 3（规格 §6.2）：本列已接入列基础设施；**T9 评审 I-1 修正**——列状态由页面
+ * **整体**注入（`col`），三个散 prop（生效宽度 / 折叠态 / 展开回调）已收敛掉：
+ * 散传时 `resizeBy` / `resetWidth` 到不了 UI ⇒ 注册表承诺的 200..320 不可达。
  */
 export interface ChatSidebarProps {
-  /** 生效列宽（`useColumnLayout("chat-sidebar", …).width`，已按 200..320 夹取）；
-   *  缺省 = 注册表默认 260（接线前本组件写死 240，见 columnRegistry 的 M3 注） */
-  width?: number;
-  /** 生效折叠态（自动折叠或手动折叠任一成立）——为真时整列收成 26px 窄条 */
-  folded?: boolean;
-  /** 点窄条展开（`useColumnLayout.expand`：同时清自动/手动折叠态） */
-  onExpand?: () => void;
+  /** 页面注入的列状态（`useColumnLayout("chat-sidebar", columnSpec("chat-sidebar"))`，
+   *  宽度已按 200..320 夹取）。缺省 ⇒ 本组件按**同一注册表规格**自持一份（页面
+   *  零注入时行为自足，缺省宽度仍是注册表默认值，不是接线前的写死值）。 */
+  col?: ColumnLayout;
   sessions: ChatSession[];
   tasks: AiTaskRecord[];
   /** 当前选中（chat 段会话 id / task 段任务 id） */
@@ -59,16 +63,15 @@ function fmtTime(unix: number): string {
 
 export default function ChatSidebar(props: ChatSidebarProps) {
   const {
-    width = columnSpec("chat-sidebar").default,
-    folded = false,
-    onExpand,
+    col: injectedCol,
     sessions, tasks, activeChatId, activeTaskId,
     onSelectChat, onSelectTask, onNewChat, onNewKbChat, onRenameChat, onDeleteChat,
     sessionTitles, noteTitles,
   } = props;
-  // 批 3：折叠态与其它列同款——整列换成 ColumnBar 窄条（26px，点击走 expand()）。
-  // 顶层仍是**恰好一个**元素（不是 Fragment）：根 flex 的子元素数不变 ⇒ 不改 flex 分配。
-  if (folded) return <ColumnBar icon="💬" title="对话" onClick={() => onExpand?.()} />;
+  // 单行写法是刻意的：`columnRegistry.test.ts` ⑤ 逐行捕获
+  // `useColumnLayout("键", columnSpec("键"))`，换行写法会让那条判据静默空转。
+  const ownCol = useColumnLayout("chat-sidebar", columnSpec("chat-sidebar"));
+  const col = injectedCol ?? ownCol;
   const itemBase: React.CSSProperties = {
     padding: "6px 8px",
     borderRadius: 6,
@@ -83,8 +86,9 @@ export default function ChatSidebar(props: ChatSidebarProps) {
     textAlign: "left",
     color: "#374151",
   };
-  return (
-    <div style={{ width, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minHeight: 0 }}>
+  // 批 3：折叠态与其它列同款——整列换成 ColumnBar 窄条（26px，点击走 expand()）
+  const panel = (
+    <div style={{ width: col.width, flexShrink: 0, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minHeight: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 8px 4px" }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: "#6b7280" }}>💬 对话</span>
         <div style={{ display: "flex", gap: 2 }}>
@@ -179,5 +183,14 @@ export default function ChatSidebar(props: ChatSidebarProps) {
         })}
       </div>
     </div>
+  );
+  // T9 评审 I-1：手柄由本组件渲染，且在**折叠三元之外**（折叠态也在）——与
+  // `notes/NotesGroupsColumn` 同款。顶层 fragment 的两个子元素都是页面根 flex 的
+  // 直接子元素（多包一层会改变宽度分配；`ColumnResizer` 恒 5px / flexShrink 0）。
+  return (
+    <>
+      {col.folded ? <ColumnBar icon="💬" title="对话" onClick={col.expand} /> : panel}
+      <ColumnResizer onResize={col.resizeBy} onReset={col.resetWidth} />
+    </>
   );
 }

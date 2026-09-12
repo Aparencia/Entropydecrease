@@ -407,7 +407,7 @@ export default function ChatPage(props: Props) {
   return (
     <div style={{ height: "100%", display: "flex", minHeight: 0 }}>
       <ChatSidebar
-        width={chatCol.width} folded={chatCol.folded} onExpand={chatCol.expand}
+        col={chatCol}
         sessions={sessions}
         tasks={tasks}
         activeChatId={activeChatId}
