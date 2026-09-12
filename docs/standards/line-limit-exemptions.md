@@ -37,11 +37,11 @@
 | app/src/components/LiveActivityPanel.tsx | 517 | 实时活动面板：会话状态/转录流/OCR 预览/控制区多状态面板内聚（前端审查登记） | 若再增长：转录流与 OCR 预览拆至 LiveTranscriptStream.tsx / LiveOcrPreview.tsx |
 | app/src-tauri/src/ai_client.rs | 505 | v0.11.6 M1（AiClient::from_provider / from_settings_with_store / is_fallbackable / fallback_provider_ids）+ 2026-09-11 DeepSeek V4.1 适配（chat_plain 探活路径 / build_plain_payload / json 前置条件兜底接线 / thinking 策略落点 / 4xx 错误体透出——纯策略与提取逻辑已拆至 ai_request_policy.rs）——Provider 解析与错误分类内聚于 AiClient 域，构造入口与降级链纯函数同文件便于单测。**旧登记 322 为过期快照，本次按实测纠偏** | 若再增长：fallback_provider_ids 拆至 ai_fallback.rs；payload 构造族拆至 ai_payload.rs |
 | app/src/components/GroupSidebar.test.tsx | 497 | 覆盖串组场景——切换 ⓘ 弹层目标组时表单态必须重置（key=group.id修复）：组 A 改了判类（未确认）→ 点组 B ⓘ → 弹层显示 B 且判类下拉回到 B.kind（防把 A 的选择误用到 B——路径: 改判误操作）。（自动摘取，待细化） | 若再增长：按职责拆分 |
+| app/src/App.tsx | 494 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 | app/src-tauri/src/db_sop.rs | 490 | v0.20.3（REQ-296/297）SOP 三表数据域（模板/run/步骤/保鲜/聚合）+ 审查加固（保链更新/幂等守卫/步数计数）内聚 | 若再增长：run 执行族拆至 db_sop_run.rs |
 | app/src-tauri/src/live_session_persist.rs | 488 | 定稿落库域（persist_final/digest_merged/handle_final_event）+ P2 flush_tail_and_persist（停止/暂停共用尾句落库）内聚 | 若再增长：flush_tail_and_persist 与 digest_merged 拆至 live_session_persist_tail.rs |
 | app/src-tauri/src/db_sessions.rs | 482 | 会话仓储；批 4 delete_sessions_batch + 审查修复轮 3（transaction() 改造）——2026-09-09 实测纠偏（登记值 394 过期） | 若再增长：recent_ocr_texts 等建议查询拆至 db_sessions_queries.rs |
 | app/src-tauri/src/commands_ai_enrich.rs | 479 | v0.8.0 M3（REQ-142）+ F1/F2/F3：知识补充命令域（九子项校验/预估/异步任务/采纳/撤销 + 配额去重门控 + 成本硬拦截 + 任务落库）——与精修共用任务注册表上下文，命令域内聚；2026-09 修复（章节目录注入/逐块审查回执）微增 | 若再增长：门控/拦截拆至 commands_ai_enrich_gate.rs |
-| app/src/App.tsx | 479 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 | app/src-tauri/src/app_commands.rs | 478 | 宏约束下的**唯一**注册点：**312 条** `generate_handler!` 条目是**数据不是逻辑**（批 1 删除批收口实测：334 → 312，−22；此数由本行人工维护，`--write` 只刷新数字列） —— `Invoke` 按值语义使分域组合不可行（见文件头），拆成多份只会在域间新增「命令名 → 域」路由漂移面；一致性由 `scripts/check-command-registry.mjs` 机器门禁守 | 不拆（数据文件）；新增命令时同步条目，由门禁强制 |
 | app/src-tauri/src/region_tracker.rs | 478 | v0.4.0 M2（REQ-037）起：ROI 跟踪状态机（播放区域检测/锁定聚簇/重扫/前台切换冻结）+ 纯函数单测内联；与 RoiTracker 状态强耦合 | 若再增长：lock_roi/prior_roi 纯函数拆至 region_lock.rs |
 | app/src-tauri/src/layout_analyzer.rs | 475 | v0.5.0 M3（REQ-047）：规则版版面分析（行/列投影 + 表格线检测 + 区域分类启发式）内聚于同一分类管线；审查加固（公式启发 + 低信息纯色方差滤除） | 若再增长：区域分类启发式拆至 layout_classify.rs |

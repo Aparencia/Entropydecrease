@@ -43,8 +43,14 @@ const GoalsPage = lazy(() => import("./pages/GoalsPage"));
 // REQ-274（v0.19.4）：全局 AI 对话面板（丙案——按需唤起 + 内容保活）
 import AiConversationDock from "./components/AiConversationDock";
 import AppErrorBoundary from "./components/AppErrorBoundary";
-import CaptureFloatPanel from "./components/CaptureFloatPanel";
-import CaptureOverlayPanel from "./components/CaptureOverlayPanel";
+// 批 2 包体治理：两个窗口变体面板从静态 import 改为按需 import（各自独立 chunk）。
+// @ai-context: 这两个面板只在**自己的窗口**里渲染（App() 顶部的 ?float=1 / ?overlay=1 早返回），
+//   主窗永远用不到；静态 import 会让采集浮窗（alwaysOnTop 常驻）与覆盖层窗每次启动都拉完整主壳
+//   —— 实测两窗首屏与主窗逐字节相同，且各自还白带另一个变体的面板代码。
+// @ai-context: 唯一的行为差异是**首访挂载时序**（控制方 2026-09-12 裁决 2 允许的范围）：chunk 到达前
+//   该窗渲染 Suspense fallback(null)；挂载后本窗无导航，不存在卸载路径，保活语义不变。
+const CaptureFloatPanel = lazy(() => import("./components/CaptureFloatPanel"));
+const CaptureOverlayPanel = lazy(() => import("./components/CaptureOverlayPanel"));
 // v0.16.1：浏览器痕迹去除（原生右键菜单抑制 + 文本输入应用内右键小菜单）
 import BrowserChrome from "./components/BrowserChrome";
 // 批 2b：采集控制单一状态源（每窗口单实例 provider + 消费 hook + reason 文案）
@@ -78,14 +84,23 @@ function App() {
   const query = new URLSearchParams(window.location.search);
   // v0.12.0 M3：系统级覆盖层截图窗口入口（全屏透明 1:1 框选；无采集控制需求）
   if (query.get("overlay") === "1") {
-    return <CaptureOverlayPanel />;
+    return (
+      // 批 2：面板是 lazy chunk —— 首次拉取期间渲染 fallback(null)，加载完即常驻（本窗无导航）
+      <Suspense fallback={null}>
+        <CaptureOverlayPanel />
+      </Suspense>
+    );
   }
   // v0.12.0 M6：采集浮窗入口（独立窗口 alwaysOnTop，加载 index.html?float=1）；
   // float 标志 per-window 恒定（URL 不变）——早返回安全
   if (query.get("float") === "1") {
     return (
+      // 批 2：CaptureStatusProvider 必须留在 Suspense **外层**——它是本窗「每窗恰一个实例」的
+      // 采集状态源（见文件头 @ai-context），塞进 Suspense 会改变它自己的挂载时机
       <CaptureStatusProvider>
-        <CaptureFloatPanel />
+        <Suspense fallback={null}>
+          <CaptureFloatPanel />
+        </Suspense>
       </CaptureStatusProvider>
     );
   }
