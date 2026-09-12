@@ -34,6 +34,26 @@
 export const FROZEN_LOADING_TEXT_TOTAL = 8;
 
 /**
+ * ★ **迁移面只许增 / 残留面只许减**的锚（收口评审 I-3 的结清；照 `statusLineRatchet` ① 的下界范式）。
+ *
+ * Why 需要这两条：③ 的「整表钉死」（`expected = MIGRATED(0) ∪ RESIDUAL(1)` + `TOTAL == RESIDUAL.length`）
+ *   只堵住了**单点篡改** —— 把某文件从迁移面**挪进**残留面时 `expected` 会跟着变，
+ *   判据照样绿（实测变异体 `m2b`：常数 8→9 + 挪 1 个文件 + 真加一处 `加载中…` ⇒ **全绿 8/8**）。
+ *   等于给了「写新手写加载文案 + 声明为 `backlog`」一条自助豁免通道。
+ *
+ * 语义（**只许朝一个方向动**，与棘轮同向）：
+ *   · `FROZEN_MIGRATED_FILES_COUNT` = 迁移面**下界** —— 实测 `MIGRATED_FILES.length` 必须 **≥** 它。
+ *     真迁走一个文件时**只增不减**；想「挪出去放行新文案」必红。
+ *   · `FROZEN_LOADING_RESIDUAL_COUNT` = 残留面**上界** —— 实测 `RESIDUAL.length` 必须 **≤** 它。
+ *     真收敛（把残留迁干净）时把它**手工收紧**；想多登一条豁免必红。
+ *   ⇒ 两者与 ③ 的「表自洽」互为独立抓手：一个管**面的大小**，一个管**表的形状**。
+ */
+export const FROZEN_MIGRATED_FILES_COUNT = 10;
+
+/** 残留面**上界**（只许减；见上条说明）。 */
+export const FROZEN_LOADING_RESIDUAL_COUNT = 8;
+
+/**
  * 相对 `app/src` 的路径 → 允许残留的可见加载文案**行数上限**（只许降、不许升；键不许删）。
  *
  * 语义：`0` = 已由原语承载（`Loading` / `Skeleton`）；`1` = 仍有一处手写文案，见 `RESIDUAL` 的理由。

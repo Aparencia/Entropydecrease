@@ -10,166 +10,31 @@
  * ★ 牙齿（评审 M-1 的结清）：③ 用「迁移面(0) ∪ 残留面(1)」钉死冻结表每一格 + `TOTAL == RESIDUAL.length`
  *   独立校验和 ⇒「总数 + 某一残留格同时抬高」不再自洽。
  *
- * ★ 扫描口径（与 `tmp/scan-callsites.mjs` / T1 的 loading 类**同源**）
- *   ① 域 = `app/src/**` 的 `.ts`/`.tsx` 减 `*.test.ts(x)` 减 `ui/primitives/**` 减 `ui/icons/**`；
- *   ② 先剥注释（抹等长空白保行号）；字符串/模板只跳过不抹内容 —— 判据读的正是可见文案；
- *   ③ 行口径 `/加载[^"'`\n]{0,8}(中|…)/`，同行多次命中算 1 行（与 T1 的 18 行读数可比）；
- *      **唯一例外**：文案由原语的 `label` 承载时**不计**（`label="…"` / `label={…}` —— 那是迁移的
- *      终点形态，不是手写占位）。冻结时域内 `label=` 载体 0 处 ⇒ 与 T1 读数逐字可比；跨行 label 会
- *      被误计，实测本仓 0 例（迁移面 5 处 label 全在同行），已由 ① 的仪器对照钉住。
+ * ★ 仪器已析出成 `./loadingScan`（收口评审 I-3：本文件贴 300 行硬限，加锚必须先析出）——
+ *   域 / 剥注释 / 行口径 / 五事实一律在那里，本文件只留**断言**。
  *
- * 副作用：只读磁盘（递归遍历 `app/src`），不修改任何文件。边界：只管可见加载文案（不含布尔门控本身、
- *   不含 `busy` 状态机、不含已声明的 4 处例外）；基线随迁移**只降不升**，余量去向见 `loadingBaseline.ts`。
+ * 副作用：只读磁盘（`loadingScan` 模块加载时递归遍历 `app/src` 一次），不修改任何文件。边界：只管可见
+ *   加载文案（不含布尔门控本身、不含 `busy` 状态机、不含已声明的 4 处例外）；基线随迁移**只降不升**。
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  FROZEN_LOADING_RESIDUAL_COUNT,
   FROZEN_LOADING_TEXT_BY_FILE,
   FROZEN_LOADING_TEXT_TOTAL,
+  FROZEN_MIGRATED_FILES_COUNT,
   MIGRATED_FILES,
   RESIDUAL,
   type ResidualKind,
 } from "./loadingBaseline";
+import { HITTING, RE_LOADING_TEXT, SCAN, TOTAL, isHandwritten, isIcons, isPrim, isTest, stripComments } from "./loadingScan";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** `app/src` —— 基线的键就是相对这个目录的正斜杠路径。 */
 const SRC = join(HERE, "..", "..");
-
-/** 可见加载文案（与 T1 的 loading 类同源；`g` 只用于统计，逐行判断用 `test`）。 */
-const RE_LOADING_TEXT = /加载[^"'`\n]{0,8}(中|…)/;
-/** 原语 `label` 载体：`label="…"` / `label={'…'}` / `label={…}`（该行不计入手写占位）。 */
-const RE_PRIMITIVE_LABEL = /\blabel\s*=(?:\{|["'`])/;
-/** 原语用法：`<Loading …` / `<Skeleton …`（`</Loading>` 不算、深导入不算 —— 只认标签）。 */
-const RE_PRIMITIVE_USE = /<(?:Loading|Skeleton)[\s/>]/;
-const RE_SKELETON_USE = /<Skeleton[\s/>]/;
-const RE_LOADING_USE = /<Loading[\s/>]/;
-/** `busy` 承载：`busy={loading}` / `busy` 简写。 */
-const RE_BUSY = /\bbusy(?:=\{|[>\s])/;
 const KINDS: readonly ResidualKind[] = ["exception", "button-busy", "backlog"];
-
-/**
- * 剥注释：**与 `tmp/scan-callsites.mjs` 的 `stripComments()` 同一状态机**（重写一份而非 import ——
- * 那个文件在 gitignored 的 `tmp/` 下，测试不能依赖它存在）。抹等长空白保行号，字面量只跳过不抹内容。
- */
-function stripComments(src: string): string {
-  const out = src.split("");
-  const blank = (a: number, b: number): void => {
-    for (let i = a; i < b; i++) if (out[i] !== "\n") out[i] = " ";
-  };
-  const isRegexStart = (k: number): boolean => {
-    let j = k - 1;
-    while (j >= 0 && /\s/.test(src.charAt(j))) j--;
-    return j < 0 || "(,=:[!&|?{};+-*%~^<>".includes(src.charAt(j));
-  };
-  const n = src.length;
-  let i = 0;
-  while (i < n) {
-    const c = src.charAt(i);
-    if (c === "/" && src.charAt(i + 1) === "/") {
-      const end = src.indexOf("\n", i);
-      blank(i, end < 0 ? n : end);
-      i = end < 0 ? n : end;
-      continue;
-    }
-    if (c === "/" && src.charAt(i + 1) === "*") {
-      const end = src.indexOf("*/", i + 2);
-      blank(i, end < 0 ? n : end + 2);
-      i = end < 0 ? n : end + 2;
-      continue;
-    }
-    if (c === '"' || c === "'") {
-      let j = i + 1;
-      while (j < n && src.charAt(j) !== c) {
-        if (src.charAt(j) === "\\") j++;
-        if (src.charAt(j) === "\n") break;
-        j++;
-      }
-      i = j + 1;
-      continue;
-    }
-    if (c === "`") {
-      let j = i + 1;
-      while (j < n && src.charAt(j) !== "`") {
-        if (src.charAt(j) === "\\") j++;
-        j++;
-      }
-      i = j + 1;
-      continue;
-    }
-    if (c === "/" && isRegexStart(i)) {
-      let j = i + 1;
-      let cls = false;
-      let ok = false;
-      while (j < n) {
-        const d = src.charAt(j);
-        if (d === "\\") { j += 2; continue; }
-        if (d === "\n") break;
-        if (d === "[") cls = true;
-        else if (d === "]") cls = false;
-        else if (d === "/" && !cls) { ok = true; break; }
-        j++;
-      }
-      if (ok) { blank(i + 1, j); i = j + 1; continue; }
-    }
-    i++;
-  }
-  return out.join("");
-}
-
-function walk(dir: string, out: string[] = []): string[] {
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) walk(p, out);
-    else if (/\.(ts|tsx)$/.test(name)) out.push(p);
-  }
-  return out;
-}
-
-const isTest = (f: string): boolean => /\.test\.(ts|tsx)$/.test(f);
-const isPrim = (f: string): boolean => f.includes(`${sep}ui${sep}primitives${sep}`);
-const isIcons = (f: string): boolean => f.includes(`${sep}ui${sep}icons${sep}`);
-
-interface FileFacts {
-  /** 剥注释后文本里可见加载文案的**行数** */
-  hits: number;
-  hasPrimitive: boolean;
-  hasSkeleton: boolean;
-  hasLoading: boolean;
-  hasBusy: boolean;
-}
-
-/** 单行的"手写占位"判定（仪器自证与扫描共用同一实现，防"两套口径"） */
-function isHandwritten(line: string): boolean {
-  return RE_LOADING_TEXT.test(line) && !RE_PRIMITIVE_LABEL.test(line);
-}
-
-/** 扫单个文件的五个事实（供扫描与仪器自证共用） */
-function factsOf(abs: string): FileFacts {
-  const stripped = stripComments(readFileSync(abs, "utf8"));
-  const lines = stripped.split("\n");
-  return {
-    hits: lines.filter(isHandwritten).length,
-    hasPrimitive: RE_PRIMITIVE_USE.test(stripped),
-    hasSkeleton: RE_SKELETON_USE.test(stripped),
-    hasLoading: RE_LOADING_USE.test(stripped),
-    hasBusy: RE_BUSY.test(stripped),
-  };
-}
-
-function scan(): Map<string, FileFacts> {
-  const map = new Map<string, FileFacts>();
-  for (const f of walk(SRC)) {
-    if (isTest(f) || isPrim(f) || isIcons(f)) continue;
-    map.set(relative(SRC, f).split(sep).join("/"), factsOf(f));
-  }
-  return map;
-}
-
-const SCAN = scan();
-const HITTING = [...SCAN.entries()].filter(([, v]) => v.hits > 0);
-const TOTAL = HITTING.reduce((n, [, v]) => n + v.hits, 0);
 const DECLARED = new Set(RESIDUAL.map((r) => r.file));
 const FROZEN_HOT = new Set(Object.entries(FROZEN_LOADING_TEXT_BY_FILE).filter(([, n]) => n > 0).map(([k]) => k));
 
@@ -181,6 +46,9 @@ describe("加载态棘轮（B11）：基线随迁移只降不升（冻结 18 →
     // 阴性①：文案由**原语的 label** 承载 ⇒ 不算手写占位（迁移的终点形态）
     expect(isHandwritten('const a = <Loading label="加载中…" />;'), "原语 label 被误算成手写占位").toBe(false);
     expect(isHandwritten('const a = <Loading label={status || "加载预览中…"} />;'), "表达式 label 被误算").toBe(false);
+    // 阴性①b（**判定收紧的夹具**，收口评审 I-2）：`aria-label=` 不是原语的 `label` ⇒ 仍算手写占位
+    // （`\b` 在 `-` 后成立，原写法会把它当载体 ⇒ 一条 `aria-label` 就能让棘轮对手写文案失明）
+    expect(isHandwritten('const a = <div aria-label="加载中…">加载中…</div>;'), "`aria-label=` 被误当成原语 label").toBe(true);
     // 阴性②：不是加载态的"加载"不算（错误文案 / 加载完成 / 超窗）
     expect(isHandwritten("setErr(`加载失败: ${e}`)"), "错误文案被误算成加载态").toBe(false);
     expect(isHandwritten("const done = 已加载;")).toBe(false);
@@ -188,6 +56,11 @@ describe("加载态棘轮（B11）：基线随迁移只降不升（冻结 18 →
     // 剥注释：注释里的加载文案不算命中（仓内多处注释含"加载中"）
     expect(isHandwritten(stripComments("// 加载中…\n")), "行注释里的文案被当成了代码").toBe(false);
     expect(isHandwritten(stripComments("/* 加载中… */\n")), "块注释里的文案被当成了代码").toBe(false);
+    // ★ 剥注释器**判定收紧**的回归夹具（收口评审 I-A1）：闭合标签 `</span>` 的 `/` 曾被 `regexStart`
+    // 判成正则起点 ⇒ 夹在两个闭合标签之间的内容被抹掉（本文件原来逐字重写的那份状态机同样中招）。
+    // 正侧：闭合标签**之后**的加载文案必须还在；反侧：正则体**含**该文案时必须被抹掉（只剩第二行）。
+    expect(RE_LOADING_TEXT.test(stripComments('<span>a</span>加载中…<i /></span>\n')), "闭合标签后面的加载文案被剥注释器抹掉了").toBe(true);
+    expect(RE_LOADING_TEXT.test(stripComments('const r = x < /加载中…/.test(y);\nconst s = "ok";\n')), "真正的正则体没有跳过（`<` 后带空白）").toBe(false);
     // 域过滤双侧自证：包含域样本（**余量文件** —— 不在任何并行单元的切片里，读数稳定）+
     // 排除域样本（原语/测试文件确实不在扫描面里，且该样本文件真实存在 ⇒ 自证不空转）
     expect(HITTING.length, "扫描面里一个命中都没有 ⇒ 下面所有计数判据都会空真").toBeGreaterThan(0);
@@ -229,6 +102,15 @@ describe("加载态棘轮（B11）：基线随迁移只降不升（冻结 18 →
     for (const r of RESIDUAL) expected[r.file] = 1;
     expect(FROZEN_LOADING_TEXT_BY_FILE, "冻结表 ≠ 迁移面(0) ∪ 残留面(1)：多余键 / 漏键 / 某格上限被手改").toEqual(expected);
     expect(FROZEN_LOADING_TEXT_TOTAL, "冻结总数 ≠ 残留条目数（残留面每条恰 1 处 ⇒ 两者必须相等）").toBe(RESIDUAL.length);
+    // ★ **迁移面只许增 / 残留面只许减**（收口评审 I-3）：上面那条「整表钉死」只挡单点篡改 ——
+    // 把文件从迁移面**挪进**残留面时 `expected` 会跟着变（实测 `m2b` 全绿）⇒ 要靠这两条独立锚。
+    expect(MIGRATED_FILES.length, "迁移面被缩小（有人把文件挪进残留面来放行新写的加载文案）")
+      .toBeGreaterThanOrEqual(FROZEN_MIGRATED_FILES_COUNT);
+    expect(RESIDUAL.length, "残留条目变多（自助豁免：新写文案 + 自登记一条 backlog 即可通过）")
+      .toBeLessThanOrEqual(FROZEN_LOADING_RESIDUAL_COUNT);
+    // 锚不许是僵尸：两条锚各自与实测贴住的方向自证（迁移面非空 ∧ 残留面非空 ⇒ 上面两条不空真）
+    expect(FROZEN_MIGRATED_FILES_COUNT, "迁移面锚 ≤ 0 ⇒ 上一条空真").toBeGreaterThan(0);
+    expect(FROZEN_LOADING_RESIDUAL_COUNT, "残留面锚 ≤ 0 ⇒ 残留面被清空（或锚失效）").toBeGreaterThan(0);
   });
 
   it("④ 残留声明自洽：每条带合法分类与非空理由，且声明键集 == 冻结表里值 > 0 的键集", () => {
