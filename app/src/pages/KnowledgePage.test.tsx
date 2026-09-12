@@ -63,12 +63,16 @@ function withSystemMock() {
   });
 }
 
+// jsdom 的 innerWidth 是 window **自有访问器**（get/set，configurable）——保存原描述符，
+// afterEach 精确还原；只写回数值会把访问器换成**只读数据属性**（后续用例赋值即 TypeError）。
+const originalInnerWidth = Object.getOwnPropertyDescriptor(window, "innerWidth");
+
 beforeEach(() => {
   // 批 3 T5：体系列阈值 860→1100（规格 §6.2）——本仓 jsdom 默认视口恰为 1024，
   // 落到阈值之下会**自动折叠左列**，system-global 便不再渲染。本文件测的是
   // 「未折叠」三栏形态 ⇒ 显式声明默认窗宽 1280（规格 §1 决策 17）。
   // 先例：SelectionActionMenu.test.tsx 同样显式声明 innerWidth。
-  window.innerWidth = 1280;
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1280 });
   invokeMock.mockReset();
   invokeMock.mockImplementation(async (cmd: string) => {
     switch (cmd) {
@@ -82,7 +86,12 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  // 视口必须复原（先例 SelectionActionMenu.test.tsx 在 afterEach 还原视口）：不复原则
+  // 同环境下后续用例跑在 1280——「窄窗自动折叠」那条路径被静默掩盖（假绿风险）。
+  if (originalInnerWidth) Object.defineProperty(window, "innerWidth", originalInnerWidth);
+});
 
 describe("KnowledgePage 空态", () => {
   it("空态显示示例体系入口", async () => {
