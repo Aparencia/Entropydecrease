@@ -7,9 +7,13 @@
  *              原料视图始终显示原文，本面板即裁决与复核面）。
  * @ai-context: 运行态为内存注册表（崩溃后 pending 草稿可重跑清理）——面板以
  *              session:refine2:* 事件驱动刷新（progress/done/failed/aborted）。
+ * @ai-context: 批 4 T7 迁移：自建遮罩/居中几何（原 720 px 面板 = `Modal` 的 `l` 档逐字同宽）
+ *              交给 `Modal`（barrel 导入，B5）——遮罩、ESC、焦点陷阱、层级、body 滚动锁
+ *              都是它的独占职责（ADR-033 §7）。开合态仍由父层持有（`SessionDetailPanel`
+ *              的 `showPass2` 条件挂载）⇒ `open` 恒为 `true`。
  */
 import { useCallback, useEffect, useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -46,25 +50,6 @@ interface Props {
   onClose: () => void;
 }
 
-const overlayStyle: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,.45)",
-  zIndex: zIndex("modal"),
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-const cardStyle: React.CSSProperties = {
-  background: "#fff",
-  borderRadius: 12,
-  width: 720,
-  maxWidth: "92vw",
-  maxHeight: "82vh",
-  overflow: "auto",
-  padding: 16,
-  fontSize: 13,
-};
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12, borderRadius: 6 };
 const okBtn: React.CSSProperties = { ...btn, background: "#0d9488", color: "#fff", border: "none" };
 const ghostBtn: React.CSSProperties = { ...btn, background: "#fff", border: "1px solid #e5e7eb", color: "#374151" };
@@ -186,119 +171,113 @@ export default function SecondPassPanel({ sessionId, onChanged, onClose }: Props
   const adopted = view?.adopted ?? 0;
 
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={cardStyle} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
-          <h3 style={{ margin: 0, fontSize: 15 }}>⚡ 离线精修（全量第二遍）</h3>
-          <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>
-            S4 音频全窗 SenseVoice → 段级 diff → 采纳/回退（原料永不变）
-          </span>
-          <button style={{ ...ghostBtn, marginLeft: "auto" }} onClick={onClose}>
-            关闭
-          </button>
-        </div>
-
-        {runningMsg && (
-          <div style={{ fontSize: 12, color: "#b45309", background: "#fffbeb", border: "1px solid #f59e0b", borderRadius: 6, padding: "6px 10px", marginBottom: 8 }}>
-            ⏳ {runningMsg}
-          </div>
-        )}
-        {err && (
-          <div style={{ fontSize: 12, color: "#dc2626", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 6, padding: "6px 10px", marginBottom: 8 }}>
-            {err}
-          </div>
-        )}
-
-        <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10 }}>
-          {!view?.running ? (
-            <>
-              <button style={okBtn} onClick={() => void start()} disabled={busy}>
-                ▶ 开始第二遍
-              </button>
-              <button style={ghostBtn} onClick={() => void adoptAllPending()} disabled={pending === 0 || busy}>
-                全部采纳（{pending}）
-              </button>
-              <button style={ghostBtn} onClick={() => void rejectAllAdopted()} disabled={adopted === 0 || busy}>
-                全部回退（{adopted}）
-              </button>
-            </>
-          ) : (
-            <button style={{ ...ghostBtn, color: "#b45309" }} onClick={() => void cancel()} disabled={busy}>
-              ⏹ 取消
-            </button>
-          )}
-          <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: "auto" }}>
-            待裁决 {pending} · 已采纳 {adopted} · 已回退 {view?.rejected ?? 0}
-          </span>
-        </div>
-
-        {view === null ? (
-          <p style={{ color: "#9ca3af", fontSize: 12 }}>加载中…</p>
-        ) : view.total === 0 ? (
-          <p style={{ color: "#9ca3af", fontSize: 12 }}>
-            {view.running ? "任务已启动，等待首个窗口…" : "暂无精修草稿——点击「开始第二遍」用 S4 音频全窗重跑 SenseVoice，有实质差异的窗口会生成本页草稿。"}
-          </p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {view.items.map((d) => {
-              const unchanged = d.base_text === d.refined_text;
-              return (
-                <div
-                  key={d.id}
-                  style={{
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 8,
-                    padding: "8px 10px",
-                    background: d.status === "adopted" ? "#ecfdf5" : d.status === "rejected" ? "#f9fafb" : "#fff",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                    <span style={{ fontSize: 11, color: "#9ca3af" }}>
-                      {fmtClock(d.start_ms)} – {fmtClock(d.end_ms)}
-                    </span>
-                    {d.similarity != null && (
-                      <span style={{ fontSize: 11, color: "#6b7280" }}>相似度 {(d.similarity * 100).toFixed(0)}%</span>
-                    )}
-                    <span
-                      style={{
-                        fontSize: 11,
-                        marginLeft: "auto",
-                        color: d.status === "adopted" ? "#047857" : d.status === "rejected" ? "#9ca3af" : "#b45309",
-                      }}
-                    >
-                      {d.status === "adopted" ? "已采纳 ✓" : d.status === "rejected" ? "已回退" : unchanged ? "" : "待裁决"}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 12.5, color: "#6b7280", marginBottom: 3, textDecoration: "line-through", opacity: 0.75 }}>
-                    {d.base_text || "（原链路无内容）"}
-                  </div>
-                  <div style={{ fontSize: 12.5, color: "#111827" }}>{d.refined_text}</div>
-                  {d.status === "pending" && (
-                    <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                      <button style={{ ...okBtn, fontSize: 11 }} onClick={() => void decide(d.id, true)}>
-                        ✓ 采纳
-                      </button>
-                      <button style={{ ...ghostBtn, fontSize: 11 }} onClick={() => void decide(d.id, false)}>
-                        回退
-                      </button>
-                    </div>
-                  )}
-                  {d.status === "adopted" && (
-                    <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                      <button style={{ ...ghostBtn, fontSize: 11 }} onClick={() => void decide(d.id, false)}>
-                        ↩ 撤销采纳（恢复原文）
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
-          说明：采纳的替换在「笔记预览 / 转为笔记」时生效（服务端合成）；原料视图恒显示原始转写便于复核。批量采纳为逐条裁决，失败即停。
-        </p>
+    <Modal open onClose={onClose} title="离线精修（全量第二遍）" size="l" testId="second-pass-panel">
+      {/* 自绘头部（标题 + 说明 + 关闭钮）已删：标题文本交给 `Modal` 的 head（关闭钮由
+          `Modal` 的 `${testId}-close` 契约提供）；说明行原样保留为正文首行 */}
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 10 }}>
+        S4 音频全窗 SenseVoice → 段级 diff → 采纳/回退（原料永不变）
       </div>
-    </div>
+
+      {runningMsg && (
+        <div style={{ fontSize: 12, color: "#b45309", background: "#fffbeb", border: "1px solid #f59e0b", borderRadius: 6, padding: "6px 10px", marginBottom: 8 }}>
+          ⏳ {runningMsg}
+        </div>
+      )}
+      {err && (
+        <div style={{ fontSize: 12, color: "#dc2626", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 6, padding: "6px 10px", marginBottom: 8 }}>
+          {err}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10 }}>
+        {!view?.running ? (
+          <>
+            <button style={okBtn} onClick={() => void start()} disabled={busy}>
+              ▶ 开始第二遍
+            </button>
+            <button style={ghostBtn} onClick={() => void adoptAllPending()} disabled={pending === 0 || busy}>
+              全部采纳（{pending}）
+            </button>
+            <button style={ghostBtn} onClick={() => void rejectAllAdopted()} disabled={adopted === 0 || busy}>
+              全部回退（{adopted}）
+            </button>
+          </>
+        ) : (
+          <button style={{ ...ghostBtn, color: "#b45309" }} onClick={() => void cancel()} disabled={busy}>
+            ⏹ 取消
+          </button>
+        )}
+        <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: "auto" }}>
+          待裁决 {pending} · 已采纳 {adopted} · 已回退 {view?.rejected ?? 0}
+        </span>
+      </div>
+
+      {view === null ? (
+        <p style={{ color: "#9ca3af", fontSize: 12 }}>加载中…</p>
+      ) : view.total === 0 ? (
+        <p style={{ color: "#9ca3af", fontSize: 12 }}>
+          {view.running ? "任务已启动，等待首个窗口…" : "暂无精修草稿——点击「开始第二遍」用 S4 音频全窗重跑 SenseVoice，有实质差异的窗口会生成本页草稿。"}
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {view.items.map((d) => {
+            const unchanged = d.base_text === d.refined_text;
+            return (
+              <div
+                key={d.id}
+                style={{
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  background: d.status === "adopted" ? "#ecfdf5" : d.status === "rejected" ? "#f9fafb" : "#fff",
+                }}
+              >
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontSize: 11, color: "#9ca3af" }}>
+                    {fmtClock(d.start_ms)} – {fmtClock(d.end_ms)}
+                  </span>
+                  {d.similarity != null && (
+                    <span style={{ fontSize: 11, color: "#6b7280" }}>相似度 {(d.similarity * 100).toFixed(0)}%</span>
+                  )}
+                  <span
+                    style={{
+                      fontSize: 11,
+                      marginLeft: "auto",
+                      color: d.status === "adopted" ? "#047857" : d.status === "rejected" ? "#9ca3af" : "#b45309",
+                    }}
+                  >
+                    {d.status === "adopted" ? "已采纳 ✓" : d.status === "rejected" ? "已回退" : unchanged ? "" : "待裁决"}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12.5, color: "#6b7280", marginBottom: 3, textDecoration: "line-through", opacity: 0.75 }}>
+                  {d.base_text || "（原链路无内容）"}
+                </div>
+                <div style={{ fontSize: 12.5, color: "#111827" }}>{d.refined_text}</div>
+                {d.status === "pending" && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                    <button style={{ ...okBtn, fontSize: 11 }} onClick={() => void decide(d.id, true)}>
+                      ✓ 采纳
+                    </button>
+                    <button style={{ ...ghostBtn, fontSize: 11 }} onClick={() => void decide(d.id, false)}>
+                      回退
+                    </button>
+                  </div>
+                )}
+                {d.status === "adopted" && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                    <button style={{ ...ghostBtn, fontSize: 11 }} onClick={() => void decide(d.id, false)}>
+                      ↩ 撤销采纳（恢复原文）
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
+        说明：采纳的替换在「笔记预览 / 转为笔记」时生效（服务端合成）；原料视图恒显示原始转写便于复核。批量采纳为逐条裁决，失败即停。
+      </p>
+    </Modal>
   );
 }

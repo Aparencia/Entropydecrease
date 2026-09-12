@@ -9,9 +9,16 @@
  * @ai-context: 最后落库顺序——先 create_knowledge_system(global)，再逐条
  *              add_knowledge_node(domain_entry)，最后第一条输出 add_knowledge_node
  *              (scenario)。三条 invoke 顺序在测试中有断言，勿改顺序。
+ * @ai-context: 批 4 T7 迁移：自建遮罩/面板几何（原 560 px 面板 → `Modal` 的 `l` 档 720，
+ *              +160）交给 `Modal`（barrel 导入，B5；规格 §5.2「L = 向导/工作台」）——
+ *              遮罩、ESC、焦点陷阱、层级、body 滚动锁都是它的独占职责（ADR-033 §7）。
+ *              开合态仍由父层持有（`KnowledgePage` 的 `wizardOpen` 条件挂载）⇒ `open` 恒为 `true`。
+ *              **关闭语义一行未改**：`Modal` 的三条关闭通道（ESC / 点遮罩 / 关闭钮）全部
+ *              走同一个 `onClose` = `doClose`（含 `saving` 挡板与「未创建内容」确认），
+ *              底栏「取消」仍直连 `onClose`（原行为：取消不确认）。
  */
 import { useMemo, useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { KnowledgeSystem, KnowledgeNodeType } from "../types/knowledge";
@@ -140,139 +147,125 @@ export default function KnowledgeSystemWizard({ onClose, onCreated }: Props) {
 
   const stepTitle = (i: number) => `第 ${i} 步 · ${STEP_TITLES[i - 1]}`;
 
+  /** 底部行动区：原自绘底栏三枚按钮**逐字**搬进 `Modal` 的 `footer` 槽。
+   *  `flex: 1` 间隔器保留 —— `Modal` 的 footer 是 `justify-content: flex-end`，
+   *  没有它「上一步」会被挤到右侧（原布局是「上一步」左置）。 */
+  const footer = (
+    <>
+      {step > 1 && (
+        <button data-testid="wizard-back" onClick={back} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" }}>
+          ← 上一步
+        </button>
+      )}
+      <span style={{ flex: 1 }} />
+      <button onClick={onClose} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" }}>
+        取消
+      </button>
+      {step < 3 ? (
+        <button data-testid="wizard-next" onClick={next} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e" }}>
+          下一步 →
+        </button>
+      ) : (
+        <button data-testid="wizard-finish" onClick={() => void runCreate()} disabled={saving} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e" }}>
+          {saving ? "创建中…" : "✓ 完成，创建体系"}
+        </button>
+      )}
+    </>
+  );
+
   return (
-    <div
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
-        display: "flex", alignItems: "center", justifyContent: "center", zIndex: zIndex("modal"),
-      }}
-      onClick={doClose}
-    >
-      <div
-        data-testid="knowledge-wizard"
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: 560, maxWidth: "92vw", background: "#fff", borderRadius: 10, border: "1px solid #e5e7eb", boxShadow: "0 10px 40px rgba(0,0,0,0.15)", overflow: "hidden" }}
-      >
-        {/* 头部：标题 + 关闭 */}
-        <div style={{ display: "flex", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid #e5e7eb" }}>
-          <span style={{ fontWeight: 700, fontSize: 15, color: "#0f766e" }}>🧠 创建全局体系</span>
-          <button data-testid="wizard-close" onClick={() => void doClose()} style={{ marginLeft: "auto", border: "none", background: "none", cursor: "pointer", fontSize: 14, color: "#9ca3af" }} title="关闭">
-            ✕
-          </button>
-        </div>
-
-        {/* 步骤指示器（三段） */}
-        <div style={{ display: "flex", padding: "10px 18px", gap: 6, borderBottom: "1px solid #f3f4f6" }}>
-          {STEP_TITLES.map((t, i) => {
-            const n = i + 1;
-            const active = step === n;
-            const done = step > n;
-            return (
-              <span key={t} data-testid={`wizard-step-${n}`} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 8, background: active ? "#f0fdfa" : done ? "#ecfdf5" : "#f9fafb", color: active ? "#0f766e" : done ? "#047857" : "#9ca3af", border: active ? "1px solid #14b8a6" : "1px solid #e5e7eb" }}>
-                {done ? "✓" : n}. {t}
-              </span>
-            );
-          })}
-        </div>
-
-        <div style={{ padding: "16px 18px" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{stepTitle(step)}</div>
-          <p style={{ fontSize: 12, color: "#6b7280", margin: "0 0 12px", lineHeight: 1.6 }}>{GUIDE[`step${step}`]}</p>
-          <p data-testid={`wizard-example-${step}`} style={{ fontSize: 11, color: "#0f766e", background: "#f0fdfa", border: "1px dashed #99f6e4", borderRadius: 6, padding: "6px 10px", margin: "0 0 12px" }}>
-            {EXAMPLES[step]}
-          </p>
-
-          {step === 1 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>体系名称（可选）</label>
-                <input
-                  data-testid="wizard-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="默认：全局体系"
-                  style={{ width: "100%", fontSize: 13, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box" }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>核心问题 *</label>
-                <textarea
-                  data-testid="wizard-core-question"
-                  value={coreQuestion}
-                  onChange={(e) => setCoreQuestion(e.target.value)}
-                  placeholder="一句话写下真正卡住你的那个问题"
-                  rows={3}
-                  style={{ width: "100%", fontSize: 13, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 6, resize: "vertical", boxSizing: "border-box" }}
-                />
-              </div>
-            </div>
-          )}
-
-          {step === 2 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>每个入口一行；可全部跳过（空行自动忽略）。</div>
-              {domainEntries.map((val, i) => (
-                <input
-                  key={i}
-                  data-testid={`wizard-domain-${i}`}
-                  value={val}
-                  onChange={(e) => setDomainEntry(i, e.target.value)}
-                  placeholder={`领域入口 ${i + 1}（可空）`}
-                  style={{ width: "100%", fontSize: 13, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box" }}
-                />
-              ))}
-              <button
-                data-testid="wizard-add-domain"
-                onClick={() => setDomainEntries((prev) => prev.length >= 5 ? prev : [...prev, ""])}
-                disabled={domainEntries.length >= 5}
-                style={{ alignSelf: "flex-start", fontSize: 12, cursor: "pointer", padding: "3px 10px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff", color: domainEntries.length >= 5 ? "#9ca3af" : "#374151" }}
-              >
-                ＋ 加一行
-              </button>
-            </div>
-          )}
-
-          {step === 3 && (
-            <textarea
-              data-testid="wizard-first-output"
-              value={firstOutput}
-              onChange={(e) => setFirstOutput(e.target.value)}
-              placeholder="可选：本周要产出的第一个可验证输出"
-              rows={3}
-              style={{ width: "100%", fontSize: 13, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 6, resize: "vertical", boxSizing: "border-box" }}
-            />
-          )}
-
-          {/* 逐行红色错误提示 */}
-          {error && (
-            <div data-testid="wizard-error" style={{ fontSize: 12, color: "#dc2626", marginTop: 10, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "6px 10px", lineHeight: 1.5 }}>
-              {error}
-            </div>
-          )}
-        </div>
-
-        {/* 底部：上一步 / 下一步 / 完成 */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 18px", borderTop: "1px solid #e5e7eb", background: "#fafafa" }}>
-          {step > 1 && (
-            <button data-testid="wizard-back" onClick={back} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" }}>
-              ← 上一步
-            </button>
-          )}
-          <span style={{ flex: 1 }} />
-          <button onClick={onClose} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" }}>
-            取消
-          </button>
-          {step < 3 ? (
-            <button data-testid="wizard-next" onClick={next} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e" }}>
-              下一步 →
-            </button>
-          ) : (
-            <button data-testid="wizard-finish" onClick={() => void runCreate()} disabled={saving} style={{ fontSize: 13, cursor: "pointer", padding: "6px 14px", borderRadius: 6, border: "1px solid #0f766e", background: "#f0fdfa", color: "#0f766e" }}>
-              {saving ? "创建中…" : "✓ 完成，创建体系"}
-            </button>
-          )}
-        </div>
+    <Modal open onClose={doClose} title="创建全局体系" size="l" testId="knowledge-wizard" footer={footer}>
+      {/* 自绘头部（标题 + 关闭钮）与原面板几何已删：标题文本交给 `Modal` 的 head，
+          关闭钮由 `${testId}-close` 契约提供；步骤指示器以下内容原样搬入 */}
+      {/* 步骤指示器（三段） */}
+      <div style={{ display: "flex", padding: "10px 18px", gap: 6, borderBottom: "1px solid #f3f4f6" }}>
+        {STEP_TITLES.map((t, i) => {
+          const n = i + 1;
+          const active = step === n;
+          const done = step > n;
+          return (
+            <span key={t} data-testid={`wizard-step-${n}`} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 8, background: active ? "#f0fdfa" : done ? "#ecfdf5" : "#f9fafb", color: active ? "#0f766e" : done ? "#047857" : "#9ca3af", border: active ? "1px solid #14b8a6" : "1px solid #e5e7eb" }}>
+              {done ? "✓" : n}. {t}
+            </span>
+          );
+        })}
       </div>
-    </div>
+
+      <div style={{ padding: "16px 18px" }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{stepTitle(step)}</div>
+        <p style={{ fontSize: 12, color: "#6b7280", margin: "0 0 12px", lineHeight: 1.6 }}>{GUIDE[`step${step}`]}</p>
+        <p data-testid={`wizard-example-${step}`} style={{ fontSize: 11, color: "#0f766e", background: "#f0fdfa", border: "1px dashed #99f6e4", borderRadius: 6, padding: "6px 10px", margin: "0 0 12px" }}>
+          {EXAMPLES[step]}
+        </p>
+
+        {step === 1 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>体系名称（可选）</label>
+              <input
+                data-testid="wizard-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="默认：全局体系"
+                style={{ width: "100%", fontSize: 13, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box" }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>核心问题 *</label>
+              <textarea
+                data-testid="wizard-core-question"
+                value={coreQuestion}
+                onChange={(e) => setCoreQuestion(e.target.value)}
+                placeholder="一句话写下真正卡住你的那个问题"
+                rows={3}
+                style={{ width: "100%", fontSize: 13, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 6, resize: "vertical", boxSizing: "border-box" }}
+              />
+            </div>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>每个入口一行；可全部跳过（空行自动忽略）。</div>
+            {domainEntries.map((val, i) => (
+              <input
+                key={i}
+                data-testid={`wizard-domain-${i}`}
+                value={val}
+                onChange={(e) => setDomainEntry(i, e.target.value)}
+                placeholder={`领域入口 ${i + 1}（可空）`}
+                style={{ width: "100%", fontSize: 13, padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 6, boxSizing: "border-box" }}
+              />
+            ))}
+            <button
+              data-testid="wizard-add-domain"
+              onClick={() => setDomainEntries((prev) => prev.length >= 5 ? prev : [...prev, ""])}
+              disabled={domainEntries.length >= 5}
+              style={{ alignSelf: "flex-start", fontSize: 12, cursor: "pointer", padding: "3px 10px", borderRadius: 4, border: "1px solid #d1d5db", background: "#fff", color: domainEntries.length >= 5 ? "#9ca3af" : "#374151" }}
+            >
+              ＋ 加一行
+            </button>
+          </div>
+        )}
+
+        {step === 3 && (
+          <textarea
+            data-testid="wizard-first-output"
+            value={firstOutput}
+            onChange={(e) => setFirstOutput(e.target.value)}
+            placeholder="可选：本周要产出的第一个可验证输出"
+            rows={3}
+            style={{ width: "100%", fontSize: 13, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 6, resize: "vertical", boxSizing: "border-box" }}
+          />
+        )}
+
+        {/* 逐行红色错误提示 */}
+        {error && (
+          <div data-testid="wizard-error" style={{ fontSize: 12, color: "#dc2626", marginTop: 10, background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "6px 10px", lineHeight: 1.5 }}>
+            {error}
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }

@@ -11,9 +11,15 @@
  *              只读（VersionPanel）→ ruleMd/refinedMd 透传。
  * @ai-context: 只读模式（VersionPanel 对比）：ruleMd/refinedMd 透传，底部无操作。
  *              普通模式（AiRefineCard）：taskResult 可选——传入则采纳按钮可用。
+ * @ai-context: 批 4 T7 迁移（计划 Task 7 / R3 裁决 B12 走 (a)）：自建遮罩与面板几何
+ *              （原 `width: 90vw; maxWidth: 1200`、`height: 85vh`）交给 `Modal` 的 `l` 档
+ *              （720，规格 §5.2）——**这是有意的可见观感变化**：并排两栏各约 344 px
+ *              （旧 1137 px 面板下各约 568），密度接近单栏；「差异」单栏模式仍可用
+ *              （顶部 toggle，未改）。遮罩/ESC/焦点/层级/body 滚动锁归 `Modal`（ADR-033 §7），
+ *              两栏的**独立滚动 + 同步滚动**保留（见 `PANE_MAX_H` 的 Why）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { zIndex } from "../ui/zIndex";
+import { Modal } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiRefineResult, DiffOp, MarkdownDiffOps, RefineStrategyInfo, RefineStrategyMeta, WorkbenchData } from "../types";
 import { escapeHtml } from "../utils/html";
@@ -43,19 +49,19 @@ function strategyDimsChips(info: RefineStrategyInfo, meta: RefineStrategyMeta | 
   return out;
 }
 
-const overlay: React.CSSProperties = {
-  position: "fixed", inset: 0, zIndex: zIndex("modal"),
-  background: "rgba(0,0,0,0.4)",
-  display: "flex", alignItems: "center", justifyContent: "center",
-};
-const modal: React.CSSProperties = {
-  background: "#fff", borderRadius: 12, width: "90vw", maxWidth: 1200,
-  height: "85vh", display: "flex", flexDirection: "column", overflow: "hidden",
-  boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
-};
 const headerBtn: React.CSSProperties = {
   padding: "4px 10px", cursor: "pointer", fontSize: 11, borderRadius: 6,
 };
+
+/**
+ * 双栏/单栏滚动区的高度上限（T7 迁移新增的唯一一处几何）。
+ *
+ * Why 必须有上限：`Modal` 的 body 是「内容多高就多高 + `overflow: auto`」，两栏若跟着自然
+ *   高度长，`scrollHeight === clientHeight` ⇒ 栏内不滚、`onScroll` 的**同步滚动永不触发**
+ *   （功能静默失效）。取值 = 面板上限 `85vh` − 面板头/脚、正文留白与统计条约 200 px，
+ *   与旧实现「面板 85vh、栏内滚」同量级；再大就会连 body 也出滚动条（双滚动条）。
+ */
+const PANE_MAX_H = "calc(85vh - 200px)";
 
 /**
  * md-lite 行级渲染与三态 HTML 生成已移入 utils/refineDiff.ts（批 3：行级
@@ -264,22 +270,19 @@ export default function RefineWorkbench({
 
   if (status === "loading") {
     return (
-      <div style={overlay} onClick={onClose}>
-        <div style={{ ...modal, alignItems: "center", justifyContent: "center" }} onClick={(e) => e.stopPropagation()}>
+      <Modal open onClose={onClose} title="精修工作台" size="l" testId="refine-workbench">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 160 }}>
           <p style={{ fontSize: 13, color: "#6b7280" }}>⏳ 加载工作台数据…</p>
         </div>
-      </div>
+      </Modal>
     );
   }
 
   if (status === "error") {
     return (
-      <div style={overlay} onClick={onClose}>
-        <div style={{ ...modal, alignItems: "center", justifyContent: "center", padding: 20 }} onClick={(e) => e.stopPropagation()}>
-          <p style={{ color: "#dc2626", fontSize: 13 }}>{errMsg}</p>
-          <button style={{ ...headerBtn, marginTop: 10 }} onClick={onClose}>关闭</button>
-        </div>
-      </div>
+      <Modal open onClose={onClose} title="精修工作台" size="l" testId="refine-workbench">
+        <p style={{ color: "#dc2626", fontSize: 13 }}>{errMsg}</p>
+      </Modal>
     );
   }
 
@@ -309,164 +312,159 @@ export default function RefineWorkbench({
   // 差异视图仅在两版可比时展示（精修版缺失时保持并排占位——单侧无 diff 语义）
   const showDiff = view === "diff" && hasRefined;
 
+  /** 底栏行动区（只读模式无操作）——原自绘底栏**逐字**搬进 `Modal` 的 `footer` 槽 */
+  const footer = (
+    <>
+      <button
+        style={{ ...headerBtn, background: "#e0e7ff", color: "#3730a3", border: "1px solid #a5b4fc" }}
+        onClick={() => void regenerate()}
+      >
+        ⟳ 重新生成
+      </button>
+      {taskResult != null && (
+        <button
+          style={{ ...headerBtn, background: "#0d9488", color: "#fff", border: "none" }}
+          onClick={() => void apply()}
+        >
+          ✅ 采纳落库
+        </button>
+      )}
+      <button style={{ ...headerBtn, border: "1px solid #d1d5db" }} onClick={onClose}>
+        放弃
+      </button>
+      {msg && <span style={{ fontSize: 11, color: msg.startsWith("✅") ? "#0d9488" : "#dc2626" }}>{msg}</span>}
+    </>
+  );
+
   return (
-    <div style={overlay} onClick={onClose}>
-      <div style={modal} onClick={(e) => e.stopPropagation()}>
-        {/* 顶栏 */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: 12,
-          padding: "10px 16px", borderBottom: "1px solid #e5e7eb",
-          background: "#f9fafb", flexShrink: 0,
-        }}>
-          <span style={{ fontWeight: 600, fontSize: 13 }}>🔧 精修工作台</span>
-          <span style={{ fontSize: 11, color: "#047857" }}>新增 {stats.added} 行</span>
-          <span style={{ fontSize: 11, color: "#b91c1c" }}>删除 {stats.removed} 行</span>
-          <span style={{ fontSize: 11, color: "#6b7280" }}>章节 {sections.length}</span>
-          {wb.meta?.model && <span style={{ fontSize: 10, color: "#9ca3af" }}>{wb.meta.model}</span>}
-          {wb.meta?.costYuan != null && (
-            <span style={{ fontSize: 10, color: "#b45309" }}>¥{wb.meta.costYuan.toFixed(4)}</span>
-          )}
-          {/* 批 3（问题11）：视图切换（并排/差异——纯前端 toggle；差异=两版行
-              并置一列有序展示：灰=共有/删除线红=原版独有/绿=精修新增） */}
-          {hasRefined && (
-            <div style={{ display: "flex", border: "1px solid #d1d5db", borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
-              {(["side", "diff"] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setView(m)}
-                  style={{
-                    ...headerBtn, border: "none", borderRadius: 0,
-                    background: view === m ? "#0d9488" : "transparent",
-                    color: view === m ? "#fff" : "#6b7280",
-                    fontWeight: 600,
-                  }}
-                >
-                  {m === "side" ? "并排" : "差异"}
-                </button>
-              ))}
-            </div>
-          )}
-          <span style={{ flex: 1 }} />
-          <button style={{ ...headerBtn, border: "none", background: "transparent", fontWeight: 600, color: "#6b7280" }} onClick={onClose}>✕</button>
-        </div>
-
-        {/* v0.17.0：策略溯源条（档位+旋钮 chips——「按什么规则变的」可溯源） */}
-        {!readonly && taskResult?.strategy && (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
-            padding: "6px 16px", background: "#f5f3ff", borderBottom: "1px solid #e0e7ff",
-            fontSize: 11, color: "#4c1d95",
-          }}>
-            <span style={{ fontWeight: 600 }}>本次档位：</span>
-            <span>{strategyName(taskResult.strategy.presetId, strategyMeta)}</span>
-            {strategyDimsChips(taskResult.strategy, strategyMeta).map((c) => (
-              <span key={c} style={{ background: "#ede9fe", borderRadius: 999, padding: "1px 8px", color: "#5b21b6" }}>{c}</span>
+    <Modal
+      open
+      onClose={onClose}
+      title="精修工作台"
+      size="l"
+      testId="refine-workbench"
+      footer={readonly ? undefined : footer}
+    >
+      {/* 自绘顶栏（标题 + `✕`）已删：标题交给 `Modal` 的 head、关闭钮由 `${testId}-close`
+          契约提供；统计与视图切换保留为正文首行（原 `borderBottom`/底色随面板几何一并去掉） */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+        <span style={{ fontSize: 11, color: "#047857" }}>新增 {stats.added} 行</span>
+        <span style={{ fontSize: 11, color: "#b91c1c" }}>删除 {stats.removed} 行</span>
+        <span style={{ fontSize: 11, color: "#6b7280" }}>章节 {sections.length}</span>
+        {wb.meta?.model && <span style={{ fontSize: 10, color: "#9ca3af" }}>{wb.meta.model}</span>}
+        {wb.meta?.costYuan != null && (
+          <span style={{ fontSize: 10, color: "#b45309" }}>¥{wb.meta.costYuan.toFixed(4)}</span>
+        )}
+        {/* 批 3（问题11）：视图切换（并排/差异——纯前端 toggle；差异=两版行
+            并置一列有序展示：灰=共有/删除线红=原版独有/绿=精修新增） */}
+        {hasRefined && (
+          <div style={{ display: "flex", border: "1px solid #d1d5db", borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+            {(["side", "diff"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setView(m)}
+                style={{
+                  ...headerBtn, border: "none", borderRadius: 0,
+                  background: view === m ? "#0d9488" : "transparent",
+                  color: view === m ? "#fff" : "#6b7280",
+                  fontWeight: 600,
+                }}
+              >
+                {m === "side" ? "并排" : "差异"}
+              </button>
             ))}
-            {/* REQ-279：自定义档自由文本随溯源展示（可追溯「按什么要求变的」） */}
-            {taskResult.strategy.customText?.trim() && (
-              <span style={{
-                background: "#e0e7ff", borderRadius: 999, padding: "1px 8px", color: "#3730a3",
-                maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              }} title={taskResult.strategy.customText}>
-                要求：{taskResult.strategy.customText}
-              </span>
-            )}
-            {taskId != null && (
-              <button
-                style={{ ...headerBtn, border: "1px solid #c7d2fe", background: "#fff", color: "#4c1d95", marginLeft: 4 }}
-                onClick={() => {/* 完整提示词在 AI 对话页任务卡（轨迹）可查看 */}}
-                title="完整提示词在 AI 对话页「AI 任务」卡可查看（轨迹存档）"
-              >
-                💬 查看提示词
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* 双栏 / 差异单列（行级染色数据源同 diff_markdown_ops——并排与差异
-            两模式共用一行数据，见 load 内统一取数 Why） */}
-        {showDiff ? (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-            <div style={{ fontSize: 11, color: "#6b7280", padding: "6px 12px", background: "#f3f4f6", borderBottom: "1px solid #e5e7eb", borderRight: "1px solid #e5e7eb" }}>
-              <span style={{ color: "#b91c1c" }}>− 原版独有</span>
-              <span style={{ margin: "0 8px" }}>/</span>
-              <span style={{ color: "#047857" }}>+ 精修新增</span>
-              <span style={{ margin: "0 8px" }}>/</span>
-              <span>灰 = 两版共有</span>
-            </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
-              <div
-                style={{ border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff", padding: 6, fontSize: 11, fontFamily: "monospace", lineHeight: 1.7 }}
-                dangerouslySetInnerHTML={{ __html: diffHtml }}
-              />
-            </div>
-          </div>
-        ) : (
-        <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", borderRight: "1px solid #e5e7eb" }}>
-            <div style={{
-              fontSize: 11, fontWeight: 600, color: "#374151",
-              padding: "6px 12px", background: "#f3f4f6", borderBottom: "1px solid #e5e7eb",
-            }}>📄 规则版</div>
-            <div
-              ref={leftRef}
-              onScroll={() => onScroll("left")}
-              style={{ flex: 1, overflowY: "auto", padding: 12, fontSize: 12, lineHeight: 1.6 }}
-              dangerouslySetInnerHTML={{ __html: leftHtml }}
-            />
-          </div>
-          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-            <div style={{
-              fontSize: 11, fontWeight: 600, color: "#047857",
-              padding: "6px 12px", background: "#f0fdfa", borderBottom: "1px solid #e5e7eb",
-            }}>✨ 精修版</div>
-            {hasRefined ? (
-              <div
-                ref={rightRef}
-                onScroll={() => onScroll("right")}
-                style={{ flex: 1, overflowY: "auto", padding: 12, fontSize: 12, lineHeight: 1.6 }}
-                dangerouslySetInnerHTML={{ __html: rightHtml }}
-              />
-            ) : (
-              <div style={{
-                flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-                color: "#9ca3af", fontSize: 13,
-              }}>
-                ⚡ 尚未精修，请先启动 AI 精修
-              </div>
-            )}
-          </div>
-        </div>
-        )}
-
-        {/* 底栏 */}
-        {!readonly && (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8,
-            padding: "8px 16px", borderTop: "1px solid #e5e7eb",
-            background: "#fafafa", flexShrink: 0,
-          }}>
-            <button
-              style={{ ...headerBtn, background: "#e0e7ff", color: "#3730a3", border: "1px solid #a5b4fc" }}
-              onClick={() => void regenerate()}
-            >
-              ⟳ 重新生成
-            </button>
-            {taskResult != null && (
-              <button
-                style={{ ...headerBtn, background: "#0d9488", color: "#fff", border: "none" }}
-                onClick={() => void apply()}
-              >
-                ✅ 采纳落库
-              </button>
-            )}
-            <button style={{ ...headerBtn, border: "1px solid #d1d5db" }} onClick={onClose}>
-              放弃
-            </button>
-            {msg && <span style={{ fontSize: 11, color: msg.startsWith("✅") ? "#0d9488" : "#dc2626" }}>{msg}</span>}
           </div>
         )}
       </div>
-    </div>
+
+      {/* v0.17.0：策略溯源条（档位+旋钮 chips——「按什么规则变的」可溯源） */}
+      {!readonly && taskResult?.strategy && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
+          padding: "6px 16px", background: "#f5f3ff", borderBottom: "1px solid #e0e7ff",
+          fontSize: 11, color: "#4c1d95",
+        }}>
+          <span style={{ fontWeight: 600 }}>本次档位：</span>
+          <span>{strategyName(taskResult.strategy.presetId, strategyMeta)}</span>
+          {strategyDimsChips(taskResult.strategy, strategyMeta).map((c) => (
+            <span key={c} style={{ background: "#ede9fe", borderRadius: 999, padding: "1px 8px", color: "#5b21b6" }}>{c}</span>
+          ))}
+          {/* REQ-279：自定义档自由文本随溯源展示（可追溯「按什么要求变的」） */}
+          {taskResult.strategy.customText?.trim() && (
+            <span style={{
+              background: "#e0e7ff", borderRadius: 999, padding: "1px 8px", color: "#3730a3",
+              maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }} title={taskResult.strategy.customText}>
+              要求：{taskResult.strategy.customText}
+            </span>
+          )}
+          {taskId != null && (
+            <button
+              style={{ ...headerBtn, border: "1px solid #c7d2fe", background: "#fff", color: "#4c1d95", marginLeft: 4 }}
+              onClick={() => {/* 完整提示词在 AI 对话页任务卡（轨迹）可查看 */}}
+              title="完整提示词在 AI 对话页「AI 任务」卡可查看（轨迹存档）"
+            >
+              💬 查看提示词
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 双栏 / 差异单列（行级染色数据源同 diff_markdown_ops——并排与差异
+          两模式共用一行数据，见 load 内统一取数 Why） */}
+      {showDiff ? (
+        <div style={{ display: "flex", flexDirection: "column", minHeight: 0, maxHeight: PANE_MAX_H }}>
+          <div style={{ fontSize: 11, color: "#6b7280", padding: "6px 12px", background: "#f3f4f6", borderBottom: "1px solid #e5e7eb", borderRight: "1px solid #e5e7eb" }}>
+            <span style={{ color: "#b91c1c" }}>− 原版独有</span>
+            <span style={{ margin: "0 8px" }}>/</span>
+            <span style={{ color: "#047857" }}>+ 精修新增</span>
+            <span style={{ margin: "0 8px" }}>/</span>
+            <span>灰 = 两版共有</span>
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+            <div
+              style={{ border: "1px solid #e5e7eb", borderRadius: 6, background: "#fff", padding: 6, fontSize: 11, fontFamily: "monospace", lineHeight: 1.7 }}
+              dangerouslySetInnerHTML={{ __html: diffHtml }}
+            />
+          </div>
+        </div>
+      ) : (
+      <div style={{ display: "flex", minHeight: 0, maxHeight: PANE_MAX_H }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", borderRight: "1px solid #e5e7eb" }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600, color: "#374151",
+            padding: "6px 12px", background: "#f3f4f6", borderBottom: "1px solid #e5e7eb",
+          }}>📄 规则版</div>
+          <div
+            ref={leftRef}
+            onScroll={() => onScroll("left")}
+            style={{ flex: 1, overflowY: "auto", padding: 12, fontSize: 12, lineHeight: 1.6 }}
+            dangerouslySetInnerHTML={{ __html: leftHtml }}
+          />
+        </div>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600, color: "#047857",
+            padding: "6px 12px", background: "#f0fdfa", borderBottom: "1px solid #e5e7eb",
+          }}>✨ 精修版</div>
+          {hasRefined ? (
+            <div
+              ref={rightRef}
+              onScroll={() => onScroll("right")}
+              style={{ flex: 1, overflowY: "auto", padding: 12, fontSize: 12, lineHeight: 1.6 }}
+              dangerouslySetInnerHTML={{ __html: rightHtml }}
+            />
+          ) : (
+            <div style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#9ca3af", fontSize: 13,
+            }}>
+              ⚡ 尚未精修，请先启动 AI 精修
+            </div>
+          )}
+        </div>
+      </div>
+      )}
+    </Modal>
   );
 }
