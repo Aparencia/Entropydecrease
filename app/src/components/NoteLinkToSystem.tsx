@@ -13,6 +13,7 @@
  *              积）、REQ-276 右缘钳制浮层均保持既有语义。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   KnowledgeConcept, KnowledgeLink, KnowledgeModel, KnowledgeNode, KnowledgeSystem,
@@ -241,12 +242,12 @@ export default function NoteLinkToSystem({ noteId, onChanged, onGotoKnowledgeSys
           {/* REQ-276：透明背板（与 NoteMoveToGroupMenu 同范式）——点击外部收起 */}
           <div
             onClick={() => setOpen(false)}
-            style={{ position: "fixed", inset: 0, zIndex: 30, background: "transparent" }}
+            style={{ position: "fixed", inset: 0, zIndex: zIndex("popover"), background: "transparent" }}
           />
           <div
             data-testid="note-link-panel"
             style={{
-              position: "absolute", zIndex: 31, top: "calc(100% + 6px)", right: 0,
+              position: "absolute", zIndex: zIndex("popover"), top: "calc(100% + 6px)", right: 0,
               padding: 10, background: "#fff", border: "1px solid #e5e7eb",
               borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
               display: "flex", flexDirection: "column", gap: 6, width: 280,

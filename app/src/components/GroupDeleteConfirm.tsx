@@ -8,6 +8,7 @@
  *              （数据不可恢复后果透明可见）。
  */
 import { useCallback, useEffect, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import type { NoteGroup } from "../types";
 
@@ -79,7 +80,7 @@ export default function GroupDeleteConfirm({ group, onClose, onDeleted }: Props)
   return (
     <div
       data-testid="group-delete-confirm-backdrop"
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: zIndex("modal"), display: "flex", alignItems: "center", justifyContent: "center" }}
       onClick={onClose}
     >
       <div

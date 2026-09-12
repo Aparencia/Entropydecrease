@@ -12,6 +12,7 @@
  *              菜单（用户口径：会话无批处理右键需求，批量走底部批量栏）。
  */
 import { useEffect, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import type { SessionListItem } from "../types";
 
 interface Props {
@@ -76,7 +77,7 @@ export default function SessionRowContextMenu({
       <div
         onClick={onClose}
         onContextMenu={(e) => { e.preventDefault(); onClose(); }}
-        style={{ position: "fixed", inset: 0, zIndex: 60, background: "transparent" }}
+        style={{ position: "fixed", inset: 0, zIndex: zIndex("popover"), background: "transparent" }}
       />
       <div
         role="menu"
@@ -88,7 +89,7 @@ export default function SessionRowContextMenu({
           position: "fixed",
           left: px,
           top: py,
-          zIndex: 61,
+          zIndex: zIndex("popover"),
           width: 216,
           background: "#fff",
           border: "1px solid #e5e7eb",

@@ -9,6 +9,7 @@
  *              不经 window.devicePixelRatio（显示缩放已含在 letterbox scale）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { normToPixels } from "../utils/photoCrop";
 
 interface Props {
@@ -192,7 +193,7 @@ export default function ScreenSelectOverlay({ src, imageWidth, imageHeight, savi
       {confirm && (
         <div
           onClick={(e) => e.stopPropagation()}
-          style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.96)", zIndex: 20, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}
+          style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.96)", zIndex: zIndex("raised"), display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}
         >
           <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>确认截取此区域？</div>
           <div style={zoomStyle} />

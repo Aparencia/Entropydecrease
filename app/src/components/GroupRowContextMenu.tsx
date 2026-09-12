@@ -12,6 +12,7 @@
  *              与笔记置顶语义一致；边界/置顶可用性由父层按分区可见序计算。
  */
 import { useEffect } from "react";
+import { zIndex } from "../ui/zIndex";
 
 interface Props {
   /** 组名（菜单头） */
@@ -75,7 +76,7 @@ export default function GroupRowContextMenu({
       <div
         onClick={onClose}
         onContextMenu={(e) => { e.preventDefault(); onClose(); }}
-        style={{ position: "fixed", inset: 0, zIndex: 60, background: "transparent" }}
+        style={{ position: "fixed", inset: 0, zIndex: zIndex("popover"), background: "transparent" }}
       />
       <div
         role="menu"
@@ -87,7 +88,7 @@ export default function GroupRowContextMenu({
           position: "fixed",
           left: px,
           top: py,
-          zIndex: 61,
+          zIndex: zIndex("popover"),
           width: 216,
           background: "#fff",
           border: "1px solid #e5e7eb",

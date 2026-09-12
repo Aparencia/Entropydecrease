@@ -14,6 +14,7 @@
  *              （不弹错；Ctrl+C/V 主路径不受影响）。
  */
 import { useEffect, useRef, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 
 interface MenuState {
   x: number;
@@ -137,7 +138,7 @@ export default function BrowserChrome() {
         position: "fixed",
         left: px,
         top: py,
-        zIndex: 1000,
+        zIndex: zIndex("popover"),
         minWidth: 128,
         background: "#fff",
         border: "1px solid #e5e7eb",

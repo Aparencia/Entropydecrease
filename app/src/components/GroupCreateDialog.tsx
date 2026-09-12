@@ -12,6 +12,7 @@
  *              （弹窗随即关闭，内部 setStatus 一帧即卸载——死代码）。
  */
 import { useEffect, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import { DOMAIN_OPTIONS } from "../utils/domainOptions";
 import NoteColorPicker from "./NoteColorPicker";
@@ -79,7 +80,7 @@ export default function GroupCreateDialog({ onClose, onCreated }: Props) {
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: zIndex("modal"), display: "flex", alignItems: "center", justifyContent: "center" }}
       onClick={onClose}
     >
       <div

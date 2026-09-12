@@ -11,6 +11,7 @@
  *              (scenario)。三条 invoke 顺序在测试中有断言，勿改顺序。
  */
 import { useMemo, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { KnowledgeSystem, KnowledgeNodeType } from "../types/knowledge";
@@ -143,7 +144,7 @@ export default function KnowledgeSystemWizard({ onClose, onCreated }: Props) {
     <div
       style={{
         position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
-        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50,
+        display: "flex", alignItems: "center", justifyContent: "center", zIndex: zIndex("modal"),
       }}
       onClick={doClose}
     >

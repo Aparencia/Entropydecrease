@@ -8,6 +8,7 @@
  * @ai-context: 不预填内容（预填＝假燃料）——所有输入从空字符串开始。
  */
 import { useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 
 interface Props {
@@ -63,7 +64,7 @@ export default function KnowledgeModelDialog({ systemId, onCreated, onClose }: P
       onClick={doClose}
       style={{
         position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
-        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50,
+        display: "flex", alignItems: "center", justifyContent: "center", zIndex: zIndex("modal"),
       }}
     >
       <div

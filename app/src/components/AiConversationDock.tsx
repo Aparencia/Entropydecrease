@@ -15,6 +15,7 @@
  *              （挂载不拉，首次 open 才装载）＋静态数据 10s 时效。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AiTaskRecord, AiTaskState, AiTurn, ChatMessage, ChatSession } from "../types";
@@ -239,7 +240,7 @@ export default function AiConversationDock({
     <div
       data-testid="ai-dock"
       style={{
-        position: "fixed", top: "var(--ed-nav-h)", right: 0, bottom: 0, width: PANEL_W, zIndex: 900,
+        position: "fixed", top: "var(--ed-nav-h)", right: 0, bottom: 0, width: PANEL_W, zIndex: zIndex("panel"),
         background: "#fff", borderLeft: "1px solid #e5e7eb", boxShadow: "-8px 0 24px rgba(0,0,0,0.08)",
         display: open ? "flex" : "none", flexDirection: "column", overflow: "hidden",
         fontSize: 12.5, color: "#1f2937",

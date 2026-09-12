@@ -7,6 +7,7 @@
  * @ai-context: 条目同时展示窗口标题与进程名（进程选择能力），点击外部自动关闭浮层。
  */
 import { useEffect, useRef, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import type { WindowInfo } from "../types";
 
 interface Props {
@@ -166,7 +167,7 @@ export function WindowSelectCard({ windows, selected, onSelect, onRefresh, loadi
             right: 0,
             top: "100%",
             marginTop: 4,
-            zIndex: 20,
+            zIndex: zIndex("popover"),
             borderRadius: 8,
             border: "1px solid #e5e7eb",
             background: "#fff",

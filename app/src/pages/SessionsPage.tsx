@@ -11,6 +11,7 @@
  *              刷新列表 + 详情）；REQ-080 降级横幅透传详情面板。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -336,7 +337,7 @@ export default function SessionsPage({ focusSessionId, focusRefineTaskId, onFocu
             position: "fixed",
             top: 64,
             right: 16,
-            zIndex: 100,
+            zIndex: zIndex("panel"),
             maxWidth: 420,
             fontSize: 12,
             padding: "8px 14px",

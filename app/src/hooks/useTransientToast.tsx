@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactElement } from "react";
+import { zIndex } from "../ui/zIndex";
 
 export interface TransientToast {
   msg: string;
@@ -58,7 +59,7 @@ export function useTransientToast(durationMs = 3000): {
           position: "fixed",
           right: 18,
           bottom: 18,
-          zIndex: 200,
+          zIndex: zIndex("popover"),
           maxWidth: 420,
           padding: "8px 14px",
           borderRadius: 8,

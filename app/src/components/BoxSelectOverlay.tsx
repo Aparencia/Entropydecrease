@@ -7,6 +7,7 @@
  *              无图屏不进入（调用方禁用按钮）。
  */
 import { useRef, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 
 interface Props {
@@ -153,7 +154,7 @@ export default function BoxSelectOverlay({ src, sessionId, firstSeenMs, onDone, 
         position: "absolute",
         inset: 0,
         cursor: "crosshair",
-        zIndex: 10,
+        zIndex: zIndex("raised"),
         border: "2px dashed #0d9488",
         background: "rgba(13,148,136,0.06)",
       }}
@@ -179,7 +180,7 @@ export default function BoxSelectOverlay({ src, sessionId, firstSeenMs, onDone, 
             position: "absolute",
             inset: 0,
             background: "rgba(255,255,255,0.96)",
-            zIndex: 20,
+            zIndex: zIndex("raised"),
             display: "flex",
             flexDirection: "column",
             alignItems: "center",

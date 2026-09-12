@@ -8,6 +8,7 @@
  *              （onOpenNote 已由 ChatPage 透传）+ 关闭；失败红字不关窗（改后再试）。
  */
 import { useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note, NoteGroup } from "../types";
 
@@ -66,12 +67,12 @@ export default function ChatSaveNoteDialog({ initialTitle, content, groups, onOp
       <div
         onClick={onClose}
         data-testid="chat-note-backdrop"
-        style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.18)" }}
+        style={{ position: "fixed", inset: 0, zIndex: zIndex("modal"), background: "rgba(0,0,0,0.18)" }}
       />
       <div
         data-testid="chat-note-dialog"
         style={{
-          position: "fixed", zIndex: 51, top: "50%", left: "50%",
+          position: "fixed", zIndex: zIndex("modal"), top: "50%", left: "50%",
           transform: "translate(-50%, -50%)",
           width: 380, background: "#fff", borderRadius: 10,
           border: "1px solid #e5e7eb", boxShadow: "0 12px 32px rgba(0,0,0,0.18)",

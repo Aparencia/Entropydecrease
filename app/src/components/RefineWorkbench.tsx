@@ -13,6 +13,7 @@
  *              普通模式（AiRefineCard）：taskResult 可选——传入则采纳按钮可用。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiRefineResult, DiffOp, MarkdownDiffOps, RefineStrategyInfo, RefineStrategyMeta, WorkbenchData } from "../types";
 import { escapeHtml } from "../utils/html";
@@ -43,7 +44,7 @@ function strategyDimsChips(info: RefineStrategyInfo, meta: RefineStrategyMeta | 
 }
 
 const overlay: React.CSSProperties = {
-  position: "fixed", inset: 0, zIndex: 999,
+  position: "fixed", inset: 0, zIndex: zIndex("modal"),
   background: "rgba(0,0,0,0.4)",
   display: "flex", alignItems: "center", justifyContent: "center",
 };

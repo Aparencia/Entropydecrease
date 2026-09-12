@@ -16,6 +16,7 @@
  *              排序）本就不显示移动项）；边界项禁用由父层按可见序计算传入。
  */
 import { useEffect, useMemo, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note, NoteGroup } from "../types";
 // REQ-316（批 7）：移组返回契约（源空组清理留痕数据源）
@@ -117,7 +118,7 @@ export default function NoteRowContextMenu({
       <div
         onClick={onClose}
         onContextMenu={(e) => { e.preventDefault(); onClose(); }}
-        style={{ position: "fixed", inset: 0, zIndex: 60, background: "transparent" }}
+        style={{ position: "fixed", inset: 0, zIndex: zIndex("popover"), background: "transparent" }}
       />
       <div
         role="menu"
@@ -129,7 +130,7 @@ export default function NoteRowContextMenu({
           position: "fixed",
           left: px,
           top: py,
-          zIndex: 61,
+          zIndex: zIndex("popover"),
           width: 216,
           background: "#fff",
           border: "1px solid #e5e7eb",

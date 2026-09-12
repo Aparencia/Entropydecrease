@@ -11,6 +11,7 @@
  *              重生成同档位，不回退全局默认）。
  */
 import { useCallback, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import { useAiTaskPolling } from "../hooks/useAiTaskPolling";
 import type { AiRefineResult, AiTaskState } from "../types";
@@ -117,7 +118,7 @@ export default function NoteAiDialog({
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,.45)", zIndex: 1000,
+      style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,.45)", zIndex: zIndex("modal"),
         display: "flex", alignItems: "center", justifyContent: "center" }}
       onClick={() => { if (kind === "menu") handleClose(); }}
     >

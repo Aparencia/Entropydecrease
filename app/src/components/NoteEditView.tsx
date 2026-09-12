@@ -6,6 +6,7 @@
  *              工具栏按钮插入 Markdown 语法片段。
  */
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { Note } from "../types";
@@ -344,10 +345,10 @@ const NoteEditView = forwardRef<NoteEditHandle, Props>(function NoteEditView({ n
           <button style={TOOLBAR_BTN} data-testid="highlight-open" onClick={() => setHighlightOpen((v) => !v)} title="荧光笔：==文本==（默认黄）；==[色]文本==">🖍 荧光</button>
           {highlightOpen && (
             <>
-              <div onClick={() => setHighlightOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30, background: "transparent" }} />
+              <div onClick={() => setHighlightOpen(false)} style={{ position: "fixed", inset: 0, zIndex: zIndex("popover"), background: "transparent" }} />
               <div
                 data-testid="highlight-pop"
-                style={{ position: "absolute", top: "100%", left: 0, zIndex: 31, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)", maxWidth: 200 }}
+                style={{ position: "absolute", top: "100%", left: 0, zIndex: zIndex("popover"), background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)", maxWidth: 200 }}
               >
                 <button
                   data-testid="highlight-default"

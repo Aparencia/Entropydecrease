@@ -10,6 +10,7 @@
  *              裁决保留在笔记上下文（不属行动/复习域）。
  */
 import { useMemo, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note, NoteGroup } from "../types";
 import { paletteHex, parseNoteProperties } from "../utils/colorPalette";
@@ -60,7 +61,7 @@ export default function NoteHeaderActions({
         {colorPickerOpen && (
           <div
             data-testid="note-color-picker-pop"
-            style={{ position: "absolute", top: "100%", right: 0, zIndex: 30, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}
+            style={{ position: "absolute", top: "100%", right: 0, zIndex: zIndex("popover"), background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}
           >
             <NoteColorPicker
               value={parseNoteProperties(note).color ?? null}

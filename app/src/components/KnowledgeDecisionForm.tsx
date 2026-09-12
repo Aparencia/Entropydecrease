@@ -13,6 +13,7 @@
  *              application 且 conceptId 提供时默认带上 conceptIds=[conceptId]（挂概念）。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   KnowledgeConcept, KnowledgeDecision, KnowledgeModel, KnowledgeNode,
@@ -156,7 +157,7 @@ export default function KnowledgeDecisionForm({ mode, systemId, conceptId, onSav
   const meta = MODE_BADGE[mode];
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: zIndex("modal") }} onClick={onClose}>
       <div data-testid="decision-form" onClick={(e) => e.stopPropagation()} style={{ width: 520, maxWidth: "94vw", background: "#fff", borderRadius: 10, border: "1px solid #e5e7eb", boxShadow: "0 10px 40px rgba(0,0,0,0.15)", overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #e5e7eb" }}>
           <span style={{ fontWeight: 700, fontSize: 15, color: "#0f766e" }}>{meta.badge} {meta.title}</span>

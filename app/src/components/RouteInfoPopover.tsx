@@ -13,6 +13,7 @@
  *              按非归档体系逐个查询聚合。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import type { Flashcard, NoteGroup } from "../types";
 import type { KnowledgeConcept, KnowledgeLink, KnowledgeSystem } from "../types/knowledge";
@@ -210,14 +211,14 @@ export default function RouteInfoPopover({
       {/* 透明背板：点击关闭（弹层外的任意点击都收起） */}
       <div
         onClick={onClose}
-        style={{ position: "fixed", inset: 0, zIndex: 30, background: "transparent" }}
+        style={{ position: "fixed", inset: 0, zIndex: zIndex("popover"), background: "transparent" }}
         data-testid="route-popover-backdrop"
       />
       <div
         data-testid="route-popover"
         style={{
           // 锚定组行下方（视口坐标；右缘越界时左移——贴边不溢屏）
-          position: "fixed", zIndex: 31, width: 300, maxHeight: "70vh",
+          position: "fixed", zIndex: zIndex("popover"), width: 300, maxHeight: "70vh",
           top: anchor.y + 4,
           left: Math.max(4, Math.min(anchor.x, window.innerWidth - 304)),
           overflowY: "auto", background: "#fff", borderRadius: 8,

@@ -9,6 +9,7 @@
  *              图片三入口落盘的完整上传流登记后置）。
  */
 import { useEffect, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 
 /** 响应结构（SopTemplate/SopRunStep/SopRun/SopRunDetail 均 serde camelCase——字段须 camel 读取） */
@@ -59,7 +60,7 @@ const overlayStyle: React.CSSProperties = {
   position: "fixed",
   inset: 0,
   background: "rgba(0,0,0,.45)",
-  zIndex: 1100,
+  zIndex: zIndex("modal"),
   display: "flex",
   alignItems: "center",
   justifyContent: "center",

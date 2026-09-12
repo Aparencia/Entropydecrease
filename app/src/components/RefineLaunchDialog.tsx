@@ -10,6 +10,7 @@
  *              （onStarted 回传 taskId）。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiSettingsView, BalanceView, RefineEstimateView, RefineStrategyMeta } from "../types";
 import {
@@ -158,7 +159,7 @@ export default function RefineLaunchDialog({
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,.45)", zIndex: 1000,
+      style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,.45)", zIndex: zIndex("modal"),
         display: "flex", alignItems: "center", justifyContent: "center" }}
       onClick={onClose}
     >

@@ -7,6 +7,7 @@
  *              前翻看与复盘）。
  */
 import { useCallback, useEffect, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 
 /** 响应结构（PracticeItem/QuestionItem 均 serde camelCase——字段须 camel 读取） */
@@ -35,7 +36,7 @@ const overlayStyle: React.CSSProperties = {
   position: "fixed",
   inset: 0,
   background: "rgba(0,0,0,.45)",
-  zIndex: 1150,
+  zIndex: zIndex("modal"),
   display: "flex",
   alignItems: "center",
   justifyContent: "center",

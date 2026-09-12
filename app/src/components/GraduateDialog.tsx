@@ -7,6 +7,7 @@
  * @ai-context: 未达标时按钮不可达（GoalDetail 禁用）；本对话框只管确认流。
  */
 import { useCallback, useEffect, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import type { GraduationReport, GoalDetailView, GoalProgressView } from "../types/goals";
 
@@ -53,7 +54,7 @@ export default function GraduateDialog({ goalId, onClose, onGraduated }: Props) 
 
   const p = progress?.progress;
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60 }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: zIndex("modal") }}>
       <div data-testid="graduate-dialog" style={{ width: 520, maxHeight: "86vh", overflow: "auto", background: "#fff", borderRadius: 10, padding: 18, boxSizing: "border-box" }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
           <span style={{ fontWeight: 700, fontSize: 15 }}>🎓 毕业仪式</span>

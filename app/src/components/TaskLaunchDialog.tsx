@@ -9,6 +9,7 @@
  *              勾选需求在笔记页 EnrichPanel 完整呈现）。
  */
 import { useEffect, useMemo, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { AiSettingsView, AiTaskState, RefineEstimateView } from "../types";
@@ -95,11 +96,11 @@ export default function TaskLaunchDialog({ kind, sessions, notes, initialTargetI
 
   return (
     <>
-      <div onClick={onClose} data-testid="task-launch-backdrop" style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.18)" }} />
+      <div onClick={onClose} data-testid="task-launch-backdrop" style={{ position: "fixed", inset: 0, zIndex: zIndex("modal"), background: "rgba(0,0,0,0.18)" }} />
       <div
         data-testid="task-launch-dialog"
         style={{
-          position: "fixed", zIndex: 51, top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+          position: "fixed", zIndex: zIndex("modal"), top: "50%", left: "50%", transform: "translate(-50%, -50%)",
           width: 360, background: "#fff", borderRadius: 10, border: "1px solid #e5e7eb",
           boxShadow: "0 12px 32px rgba(0,0,0,0.18)", padding: 14, fontSize: 12.5,
         }}

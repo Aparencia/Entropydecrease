@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 // L11 去重：HealthSnapshot 单一定义源在 types/system.ts（Rust HealthSnapshot，snake_case 契约）
 import type { HealthSnapshot } from "../types";
@@ -81,7 +82,7 @@ export function SystemStatusBadge() {
             position: "absolute",
             right: 0,
             top: 22,
-            zIndex: 20,
+            zIndex: zIndex("popover"),
             background: "#fff",
             border: "1px solid #e5e7eb",
             borderRadius: 8,

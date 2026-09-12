@@ -8,6 +8,7 @@
  *              清理登记（丢弃项）诚实展示，绝不静默。
  */
 import { useMemo, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import type { GoalPlanView } from "../types/goals";
 
 interface Props {
@@ -75,7 +76,7 @@ export default function GoalPlanApprovalDialog({ view, onConfirm, onClose, onUse
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60 }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: zIndex("modal") }}>
       <div data-testid="plan-approval" style={{ width: 560, maxHeight: "86vh", overflow: "auto", background: "#fff", borderRadius: 10, padding: 18, boxSizing: "border-box" }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
           <span style={{ fontWeight: 700, fontSize: 15 }}>✨ AI 规划建议（草案——确认后落库）</span>

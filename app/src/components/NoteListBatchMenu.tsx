@@ -19,6 +19,7 @@
  */
 import type { NoteGroup } from "../types";
 import { ghostBtn } from "./NoteListToolbar";
+import { zIndex } from "../ui/zIndex";
 
 interface BatchBarProps {
   /** 选集大小（「已选 N 个」） */
@@ -76,8 +77,8 @@ export function NoteListBatchContextMenu({
 }: BatchMenuProps) {
   return (
     <>
-      <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={onClose} />
-      <div data-testid="batch-context-menu" style={{ position: "fixed", zIndex: 41, left: x || 12, top: y || 12, minWidth: 180, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.12)", padding: 6, fontSize: 12 }}>
+      <div style={{ position: "fixed", inset: 0, zIndex: zIndex("popover") }} onClick={onClose} />
+      <div data-testid="batch-context-menu" style={{ position: "fixed", zIndex: zIndex("popover"), left: x || 12, top: y || 12, minWidth: 180, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.12)", padding: 6, fontSize: 12 }}>
         <div style={{ padding: "2px 6px", color: "#9ca3af", fontSize: 11 }}>已选 {ids.length} 个</div>
         {!moveOpen ? (
           <>

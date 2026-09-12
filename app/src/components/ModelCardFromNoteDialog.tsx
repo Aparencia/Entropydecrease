@@ -7,6 +7,7 @@
  *              → 后端引导先归组（组=唯一容器）。
  */
 import { useEffect, useRef, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 
 interface Props {
@@ -23,7 +24,7 @@ const overlayStyle: React.CSSProperties = {
   position: "fixed",
   inset: 0,
   background: "rgba(0,0,0,.45)",
-  zIndex: 1000,
+  zIndex: zIndex("modal"),
   display: "flex",
   alignItems: "center",
   justifyContent: "center",

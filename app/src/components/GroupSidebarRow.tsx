@@ -9,6 +9,7 @@
  *              所有事件 stopPropagation（不与行点击过滤/色点/ⓘ/拖拽冲突）。
  */
 import { useMemo, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import type { NoteGroup } from "../types";
 import type { KnowledgeSystem } from "../types/knowledge";
 import { parseRouteReason, routeLineState } from "../utils/routeReason";
@@ -171,7 +172,7 @@ export default function GroupSidebarRow({
       {colorPickerOpen && (
         <div
           data-testid={`group-color-picker-${group.id}`}
-          style={{ position: "absolute", top: "100%", left: 8, zIndex: 20, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}
+          style={{ position: "absolute", top: "100%", left: 8, zIndex: zIndex("popover"), background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}
         >
           <NoteColorPicker
             value={group.color ?? null}

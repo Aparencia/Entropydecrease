@@ -9,6 +9,7 @@
  *              右栏（选中笔记 get_note 回填 group_id）。
  */
 import { useMemo, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import type { Note, NoteGroup } from "../types";
 // REQ-316（批 7）：移组返回契约（源空组清理留痕数据源）
@@ -108,7 +109,7 @@ export default function NoteMoveToGroupMenu({ note, groups, onChanged, onCleanNo
           {/* 透明背板：点击外部收起 */}
           <div
             onClick={() => setOpen(false)}
-            style={{ position: "fixed", inset: 0, zIndex: 30, background: "transparent" }}
+            style={{ position: "fixed", inset: 0, zIndex: zIndex("popover"), background: "transparent" }}
           />
           <div
             data-testid="move-to-group-pop"
@@ -116,7 +117,7 @@ export default function NoteMoveToGroupMenu({ note, groups, onChanged, onCleanNo
               position: "absolute",
               top: "100%",
               right: 0,
-              zIndex: 31,
+              zIndex: zIndex("popover"),
               minWidth: 220,
               maxHeight: 320,
               overflowY: "auto",

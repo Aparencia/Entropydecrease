@@ -9,6 +9,7 @@
  *              session:refine2:* 事件驱动刷新（progress/done/failed/aborted）。
  */
 import { useCallback, useEffect, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -49,7 +50,7 @@ const overlayStyle: React.CSSProperties = {
   position: "fixed",
   inset: 0,
   background: "rgba(0,0,0,.45)",
-  zIndex: 1000,
+  zIndex: zIndex("modal"),
   display: "flex",
   alignItems: "center",
   justifyContent: "center",

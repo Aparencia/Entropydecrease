@@ -7,6 +7,7 @@
  *              双闸门（proofread_enabled + content_gate）未开时给出明确引导文案。
  */
 import { useCallback, useEffect, useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import type { RefineDraftView, SecondPassView } from "./SecondPassPanel";
 
@@ -37,7 +38,7 @@ const overlayStyle: React.CSSProperties = {
   position: "fixed",
   inset: 0,
   background: "rgba(0,0,0,.45)",
-  zIndex: 1000,
+  zIndex: zIndex("modal"),
   display: "flex",
   alignItems: "center",
   justifyContent: "center",

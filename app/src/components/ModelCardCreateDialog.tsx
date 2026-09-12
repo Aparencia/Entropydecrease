@@ -9,6 +9,7 @@
  *              全部可空；card 背面由后端按卡面契约 compose（§三），前端只提交字段。
  */
 import { useState } from "react";
+import { zIndex } from "../ui/zIndex";
 import { invoke } from "@tauri-apps/api/core";
 import type { Flashcard } from "../types";
 
@@ -55,7 +56,7 @@ export default function ModelCardCreateDialog({ groupId, groupName, onClose, onC
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: zIndex("modal"), display: "flex", alignItems: "center", justifyContent: "center" }}
       onClick={onClose}
     >
       <div

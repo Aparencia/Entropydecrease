@@ -16,6 +16,7 @@
  *              滚动/失焦/缩放收起。背板与面板 z 60/61 同既有行菜单。
  */
 import { useEffect, useRef, useState } from "react";
+import { zIndex } from "../../ui/zIndex";
 import {
   buildSelectionMenuItems,
   clampMenuXY,
@@ -119,7 +120,7 @@ export default function SelectionActionMenu({ x, y, mode, text, onClose, onActio
       <div
         onClick={onClose}
         onContextMenu={(e) => { e.preventDefault(); onClose(); }}
-        style={{ position: "fixed", inset: 0, zIndex: 60, background: "transparent" }}
+        style={{ position: "fixed", inset: 0, zIndex: zIndex("popover"), background: "transparent" }}
       />
       <div
         ref={menuRef}
@@ -134,7 +135,7 @@ export default function SelectionActionMenu({ x, y, mode, text, onClose, onActio
           position: "fixed",
           left: pos.x,
           top: pos.y,
-          zIndex: 61,
+          zIndex: zIndex("popover"),
           width: MENU_W,
           background: "#fff",
           border: "1px solid #e5e7eb",
