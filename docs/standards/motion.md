@@ -65,7 +65,7 @@
 - 规格 §8.4（:518）的时长 / 缓动**只有一个真源** = `app/scripts/gen-tokens.mjs` ⇒ 产物 `app/src/ui/tokens.css` + `app/src/ui/tokens.gen.ts`；`motion.css` **不得**再出现 `:root{}` 的 `--ed-dur-*` / `--ed-ease` 定义（单一真源、绝不双写）。生成物**永不手改**：改 `gen-tokens.mjs` 后**必须**重生成，并**同提交**带上两个产物。
 - 既有 10 个变量：`--ed-dur-micro` 120ms · `--ed-dur-overlay-in` / `-out` 200 / 160ms · `--ed-dur-toast-in` / `-out` 180 / 140ms · `--ed-dur-skeleton` 1200ms · `--ed-dur-card` 220ms · `--ed-dur-reveal` 500ms · `--ed-dur-page` 150ms · `--ed-ease` `cubic-bezier(0.2, 0, 0, 1)`（**出场比进场快**）。
 - **位移上限 8px**（规格 §8.4（:518）末句）：任何动效位移（CSS `translate*()` 实参、GSAP tween 的位移参数）**≤ 8px**；GSAP 侧的位移参数经 `app/src/motion/` 层的**唯一出口**集中定义 —— 编排层的「远」靠**时长与错开**表达，不靠位移。
-- 位移**不做成 CSS 变量**：没有消费者 = 死变量（还会给人「已被强制」的错觉）。强制手段是机器判据 —— 扫 `primitives/*.css` 的 `translate*()` 数值实参与 `motion/` 层的位移常量，> 8px 即红。
+- 位移**不做成 CSS 变量**：没有消费者 = 死变量（还会给人「已被强制」的错觉）。强制手段是机器判据 —— 扫**全仓** `app/src/**` 的**生产文件**（`.css` / `.ts` / `.tsx`；**测试文件不在域内** —— 那里的 >8px 位移是 R8.1 的**测量样本**，实测 `motion/engine.test.ts` 的 `translate3d(50px, 0px, 0px)`）的 `translate*()` 数值实参，以及 `motion/` 层的位移常量，> 8px 即红（**判据域以裁决 R11.4 为准**：`margin` / `left` / `top` 这类**布局量不判** —— 实测那一类确有 >8px，但**全是布局量**，判它们会造假阳性；「动画不得动布局属性」由 `## 判据纪律` 的**属性集合审计**单独覆盖）。
 - **相变 chrome 用绝对定位交叉淡入，不 animate height**；**列折叠内容先淡出 120ms 后宽度瞬跳**（宽度本身不做 transition，除非走 Flip）。
 
 **`@keyframes` 桶边界（硬）**：循环环境动效**只留三处** —— `Loading` / `Skeleton` / `Probe`。`StatusLine` 归 **transition（无循环动画）**：状态行是**信息**不是「呼吸物」，循环动效会让它在长列表里变成噪音（「闲置时也有生命感」由 `Probe` 承担）。新循环动效**只能写进 `motion.css`** —— `Loading.css` / `Button.css` / `StatusLine.css` 三处均被既有守卫禁止新增 keyframes。
@@ -109,6 +109,7 @@
 ## 判据纪律（可测与不可测）
 
 > 本节是**机械输入**：下列字符串被测试底座与守卫**逐字复用**，改写即判据失配。
+> 🔴 **限度**：本规范的**纪律串判据是机械的**：只证「字符串在不在」，**不证**实现是否真的遵守。
 > 依据：规格 §11-10（:766）「6 个签名动效各自**可中断、可反向**，reduced-motion 下正确降级」。
 
 ### 可用判据（四类，优先级即此序）

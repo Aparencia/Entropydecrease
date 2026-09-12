@@ -24,6 +24,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { SCALE_TOKENS } from "../tokens";
+import { SHIFT_MAX_PX as SHIFT_MAX_PX_SOURCE } from "../../motion/shift";
 import { DURATION_TOKENS, EASING_TOKENS, renderAll } from "../../../scripts/gen-tokens.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -189,6 +190,7 @@ describe("动效 token 真源契约（批 6 起临时接缝已迁走 ⇒ 钉唯�
   });
 
   it("规格 §8.4：原语 CSS 的位移一律 ≤ 8px（8px 是注释不变量，本条是它的机器判据）", () => {
+    expect(SHIFT_MAX_PX, "本文件的常量与唯一出口 motion/shift.ts 已分叉（两边各写一个 8）").toBe(SHIFT_MAX_PX_SOURCE);
     const files = readdirSync(HERE).filter((f) => f.endsWith(".css"));
     // 防空目录把守卫静默关掉（同 zIndex.guard.test.ts 的「名单非空」思路）
     expect(files.length, "primitives/ 下应有 Text.css 与 motion.css").toBeGreaterThanOrEqual(2);
