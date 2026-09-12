@@ -55,3 +55,55 @@ export interface NoteViewSlot {
   readonly onOpenSession?: (sessionId: number) => void;
   readonly onImageOpen: (src: string, title?: string) => void;
 }
+
+/**
+ * ── 视图清单（本文件的下半部）─────────────────────────────────────────────────────────────
+ * @ai-context 会话 spec 顺序（`[0]` = 默认）：`raw` → `tritrack` → `proof` → `cardflow` → `preview`。
+ *   既有第二视图 `preview` 今天是被页 chunk **静态** import 的 `NotePreviewView`；进注册表后
+ *   **必须惰性**（R-1：否则「非默认视图模块级惰性」这条硬约束当场破功）。
+ * @ai-context `preview` 的 `load` 指向 **`./session/SessionNotePreview`（会话槽适配器）**，不是
+ *   `NotePreviewView` 本体：`NotePreviewView` 的 props 是 `{sessionId, autoTaskId, onTaskStarted}`
+ *   （容器形态、自带取数），而注册表的 `P` 是 `SessionViewSlot`（纯注入槽）—— 两者不同形，
+ *   直接指向它得到 `TS2322`。适配器把槽映射成 props（**不是**第二套取数），详见该文件头部。
+ * @ai-context 笔记 spec 顺序：`raw` → `cardflow`。「带证据三轨」是 T13 的**条件项** —— T1 的探针
+ *   判定「不存在逐段级『笔记 ↔ 证据』读取路径」⇒ **不进表**（C2：不许空壳视图）。
+ * @ai-context `FROZEN_VIEW_KEYS` 是**独立于实现的**冻结声明：`keysFor` 由 `viewsFor` 派生，冻结表
+ *   逐字写死 ⇒ 二者对拍（G1）能同时抓住「实现偷偷增删视图」与「冻结表被手工改宽」。
+ */
+const SESSION_VIEWS: readonly ViewSpec<SessionViewSlot>[] = [
+  // 默认视图：**无 `load`** —— 容器同步渲染、常驻（§7.3①）；图标 = 堆叠的行（逐行原文）
+  { key: "raw", label: "原文", icon: "sessions", appliesTo: "session" },
+  { key: "tritrack", label: "三轨对齐", icon: "clock", appliesTo: "session", load: () => import("./session/SessionTriTrackView") },
+  { key: "proof", label: "印样", icon: "image", appliesTo: "session", load: () => import("./session/SessionProofView") },
+  { key: "cardflow", label: "卡片流", icon: "classroom", appliesTo: "session", load: () => import("./session/SessionCardFlowView") },
+  { key: "preview", label: "笔记预览", icon: "notes", appliesTo: "session", load: () => import("./session/SessionNotePreview") },
+];
+
+const NOTE_VIEWS: readonly ViewSpec<NoteViewSlot>[] = [
+  // 默认视图：**无 `load`**（同上）；图标 = 文档 + 文字行
+  { key: "raw", label: "原文", icon: "notes", appliesTo: "note" },
+  { key: "cardflow", label: "卡片流", icon: "action", appliesTo: "note", load: () => import("./note/NoteCardFlowView") },
+];
+
+/** 可用视图清单（按对象类型；`viewsFor(t)[0]` 恒为默认视图）。未知 `objectType` ⇒ `[]`（G5）。 */
+export function viewsFor(objectType: "session"): readonly ViewSpec<SessionViewSlot>[];
+export function viewsFor(objectType: "note"): readonly ViewSpec<NoteViewSlot>[];
+export function viewsFor(objectType: ObjectType): readonly (ViewSpec<SessionViewSlot> | ViewSpec<NoteViewSlot>)[];
+export function viewsFor(objectType: ObjectType): readonly (ViewSpec<SessionViewSlot> | ViewSpec<NoteViewSlot>)[] {
+  if (objectType === "session") return SESSION_VIEWS;
+  if (objectType === "note") return NOTE_VIEWS;
+  // 未知类型：**返回空表**，不是抛错、也不是「默认全集」（G5）—— 调用点拿不到视图就渲染空态，
+  // 而不是把会话视图塞进笔记面板。
+  return [];
+}
+
+/** 可用视图键。**由 `viewsFor` 派生**（视图清单只有一处），与 `FROZEN_VIEW_KEYS` 由 G1 对拍。 */
+export function keysFor(objectType: ObjectType): readonly string[] {
+  return viewsFor(objectType).map((spec) => spec.key);
+}
+
+/** 冻结的视图键清单（顺序 = spec 顺序，`[0]` = 默认视图）。增删视图必须**同时**改此处与 `viewsFor`。 */
+export const FROZEN_VIEW_KEYS: Readonly<Record<ObjectType, readonly string[]>> = {
+  session: ["raw", "tritrack", "proof", "cardflow", "preview"],
+  note: ["raw", "cardflow"],
+};
