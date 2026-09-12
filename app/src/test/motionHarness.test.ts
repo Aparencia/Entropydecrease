@@ -36,7 +36,10 @@ function mkDiv(): HTMLDivElement {
 }
 
 afterEach(() => {
-  // 局部桩纪律（R3.2）：谁装谁 `restore()`；这里再兜一次，防某条用例中途失败留下全局残留
+  // 局部桩纪律（R3.2）：🔴 本模块**不做自动清理** —— 每条用例必须自己 `restore()`（写进 `try/finally`）。
+  // 下一行**兜不住**本桩（T13b 按合并评审 M-3 逐字更正旧注释「这里再兜一次」）：`installMatchMediaStub`
+  // 是**直接赋值** `window.matchMedia`，没有 vi 的登记项可复原（实测见 V2e）；它只对将来用
+  // `vi.stubGlobal` 装的全局量有效。泄漏的 canary = V2a 首行 + V2d 收尾两条 `undefined` 断言。
   vi.unstubAllGlobals();
   for (const el of [...document.body.children]) {
     gsap.killTweensOf(el);
@@ -129,6 +132,25 @@ describe("V2 `matchMedia` 桩必须走 legacy 分支（R3.2 · 尖刺 S2.8③）
     }
     expect(typeof window.matchMedia).toBe("undefined");
     expect("matchMedia" in window, "restore 必须 delete 掉自建属性，而不是留一个 `undefined`").toBe(false);
+  });
+
+  /* T13b 追加（合并评审 M-3）：旧 `afterEach` 注释自称 `vi.unstubAllGlobals()`「这里再兜一次」，
+   * 实测**为假** —— 桩是**直接赋值** `window.matchMedia`，vi 没有登记项可复原。本条把那一次实测
+   * 常驻化：装桩 → 就地调 afterEach 里那句 → 泄漏**原样留存**；只有 `restore()` 能 `delete` 掉它。
+   * ⚠️ 它**故意钉住**「直接赋值」这个形态（R28 ③ 已裁定沿用、波 B/C 复用同一支桩）：若将来把桩迁到
+   * `vi.stubGlobal`，本条会红 —— 那是**有意的**，迁移时必须连同 afterEach 的语义一起改，
+   * 否则这句「只能靠逐条 restore()」会静默变成假话。 */
+  it("V2e 泄漏**可见**（不是「兜一次」）：`unstubAllGlobals()` 复原不了直接赋值形态 ⇒ 只能逐条 `restore()`", () => {
+    const leaked = installMatchMediaStub({ reduce: true });
+    try {
+      vi.unstubAllGlobals(); // ← afterEach 里那一句，就地复现
+      expect(typeof window.matchMedia, "直接赋值没进 vi 的登记表 ⇒ unstubAllGlobals 无从复原，泄漏留存").toBe("function");
+      expect("matchMedia" in window, "自建属性仍在 window 上 ⇒ 下一条用例会读到它").toBe(true);
+    } finally {
+      leaked.restore(); // 唯一复原手段
+    }
+    expect(typeof window.matchMedia, "`restore()` 必须把自建属性 delete 回 undefined").toBe("undefined");
+    expect("matchMedia" in window, "`restore()` 后不得留 `undefined` 残值").toBe(false);
   });
 });
 
