@@ -73,6 +73,8 @@ import BrowserChrome from "./components/BrowserChrome";
 // 批 2b：采集控制单一状态源（每窗口单实例 provider + 消费 hook + reason 文案）
 import { CaptureStatusProvider, useCaptureControl } from "./hooks/useLiveCaptureControl";
 import { pauseReasonLabel } from "./hooks/liveCaptureState";
+// 批 6 T17：壳层相变态通道（规格 §6.3）—— 采集态取既有采集单一状态源，复习态由复习页自持（T19 接线）
+import { useShellPhase } from "./shell/shellPhase";
 import type { AiTaskState } from "./types";
 
 // 页面键 = 注册表键集（批 3 T6：从前是 9 个字面量的手写联合，现在从注册表派生）
@@ -286,6 +288,9 @@ function MainShell() {
   // 批 2b：capturing/recovering/paused 三份本地状态删除——采集控制单一状态源
   // （CaptureStatusProvider context；挂载拉取+事件+看门狗全在其内）
   const capture = useCaptureControl();
+  // 批 6 T17（规格 §6.3 / R4.4）：本层是壳层相变的**唯一写入方**——采集进行中 ⇒ "capture"（58px LIVE
+  // 仪表相位），否则 "idle"（常态）。不新增 state / effect：相位由既有 `capture.active` 派生。
+  useShellPhase(capture.active ? "capture" : "idle");
   // v0.8.0 F2（2026-08-21）：AI 任务完成通知——全局监听 ai:task-update，
   // 跨页面可见（REQ-145"完成通知"落地；内联卡片之外的第二通道）
   const [aiToast, setAiToast] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
