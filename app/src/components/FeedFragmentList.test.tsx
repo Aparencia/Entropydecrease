@@ -56,6 +56,10 @@ beforeEach(() => {
       case "delete_fragment":
         dbFragments = dbFragments.filter((f) => f.id !== args.fragmentId);
         return { deleted: true, autoCleanedGroups: [] };
+      // 批 7 C11：碎片归组（桩把 groupId 真的挪过去 —— 重载后行内状态才对得上）
+      case "update_fragment_group":
+        dbFragments = dbFragments.map((f) => (f.id === args.fragmentId ? { ...f, groupId: args.groupId as number | null } : f));
+        return { moved: true, autoCleanedGroups: [] };
       case "resolve_fragment_image":
         return null;
       default:
@@ -199,5 +203,95 @@ describe("FeedFragmentList 收件箱状态机", () => {
     release({ deleted: true, autoCleanedGroups: [] });
     await waitFor(() => expect(trigger().hasAttribute("disabled")).toBe(false));
     expect(count()).toBe(1);
+  });
+});
+
+/**
+ * 批 7 C11（规格 §9 第 46 条 `update_fragment_group`）：片段行的归组入口。
+ *
+ * @ai-context 与 T20-D 的分工：`batch7UiWiring.test.tsx` 第 ⑦ 条管「生产侧恰有调用点」，
+ *   本组管「点得到 + 载荷逐字 + 正/负控 + 失败不静默」。载荷键名按 Rust 真身走 camelCase
+ *   （`fragment_id` ⇒ `fragmentId`；计划 C11 那格写的 `id` 是勘误）。
+ */
+describe("批 7 C11 · 片段归组入口（update_fragment_group）", () => {
+  it("入口是常规点击可达的真按钮；选中组 ⇒ 载荷逐字（负控：展开不发 · 另一行的 id 不出现）", async () => {
+    const onChanged = vi.fn();
+    render(<FeedFragmentList onChanged={onChanged} onPromoted={vi.fn()} />);
+    await screen.findByTestId("fragment-card-2");
+
+    // 正控①：入口是 Button 原语（真 <button> ⇒ 鼠标与键盘都到得了）
+    const entry = screen.getByTestId("fragment-move-group-2");
+    expect(entry.tagName, "归组入口必须是可点击的真按钮").toBe("BUTTON");
+    fireEvent.click(entry);
+    const option = await screen.findByTestId("fragment-move-group-2-9");
+    // 负控①：只展开清单不发命令
+    expect(invokeMock.mock.calls.map((c) => c[0]), "展开清单本身不得发命令").not.toContain("update_fragment_group");
+
+    // 正控②：选中组 9 ⇒ 载荷逐字（fragmentId = Rust 侧 fragment_id 的 camelCase）
+    fireEvent.click(option);
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_fragment_group", { fragmentId: 2, groupId: 9 }));
+    // 负控②：载荷里的 fragmentId 只能是点的那一行
+    expect(invokeMock).not.toHaveBeenCalledWith("update_fragment_group", { fragmentId: 1, groupId: 9 });
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it("移出组：已归组的行有该出口且传 groupId: null；未归组的行**没有**该出口", async () => {
+    render(<FeedFragmentList onChanged={vi.fn()} onPromoted={vi.fn()} />);
+    await screen.findByTestId("fragment-card-1");
+    fireEvent.click(screen.getByTestId("fragment-move-group-1"));
+    const none = await screen.findByTestId("fragment-move-group-1-none");
+
+    // 负控：未归组的行（fragment 2）不出现「移出组」
+    fireEvent.click(screen.getByTestId("fragment-move-group-2"));
+    await screen.findByTestId("fragment-move-group-2-9");
+    expect(screen.queryByTestId("fragment-move-group-2-none"), "未归组的行不该有「移出组」").toBeNull();
+
+    // 正控：移出组 ⇒ groupId: null（Rust Option<i64> 的 None 语义）
+    fireEvent.click(none);
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_fragment_group", { fragmentId: 1, groupId: null }));
+  });
+
+  it("失败路径不静默：命令 reject ⇒ 收件箱错误行可见，且带后端原因（父层既有 setErr 形态）", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "list_fragments") return dbFragments;
+      if (cmd === "list_note_groups") return [containerGroup];
+      if (cmd === "resolve_fragment_image") return null;
+      if (cmd === "update_fragment_group") throw new Error("feed 开关未开启");
+      throw new Error(`unexpected command: ${cmd}`);
+    });
+    render(<FeedFragmentList onChanged={vi.fn()} onPromoted={vi.fn()} />);
+    await screen.findByTestId("fragment-card-2");
+    fireEvent.click(screen.getByTestId("fragment-move-group-2"));
+    fireEvent.click(await screen.findByTestId("fragment-move-group-2-9"));
+    await waitFor(() => expect(screen.getByTestId("inbox-error").textContent).toContain("移动到组失败"));
+    expect(screen.getByTestId("inbox-error").textContent, "后端原因必须落到可见行").toContain("feed 开关未开启");
+  });
+
+  it("REQ-316：源组被自动清理 ⇒ 上抛组标题；无清理（空数组）⇒ 不打扰", async () => {
+    const stub = (cleaned: string[]) => async (cmd: string): Promise<unknown> => {
+      if (cmd === "list_fragments") return dbFragments;
+      if (cmd === "list_note_groups") return [containerGroup];
+      if (cmd === "resolve_fragment_image") return null;
+      if (cmd === "update_fragment_group") return { moved: true, autoCleanedGroups: cleaned };
+      throw new Error(`unexpected command: ${cmd}`);
+    };
+    const onCleanNotice = vi.fn();
+    invokeMock.mockImplementation(stub(["旧主题组"]));
+    const { unmount } = render(<FeedFragmentList onChanged={vi.fn()} onPromoted={vi.fn()} onCleanNotice={onCleanNotice} />);
+    await screen.findByTestId("fragment-card-2");
+    fireEvent.click(screen.getByTestId("fragment-move-group-2"));
+    fireEvent.click(await screen.findByTestId("fragment-move-group-2-9"));
+    await waitFor(() => expect(onCleanNotice).toHaveBeenCalledWith(["旧主题组"]));
+    unmount();
+
+    // 负控：结果为空 ⇒ 零变化，不上抛（与 runPromote / runDelete 同向）
+    const quiet = vi.fn();
+    invokeMock.mockImplementation(stub([]));
+    render(<FeedFragmentList onChanged={vi.fn()} onPromoted={vi.fn()} onCleanNotice={quiet} />);
+    await screen.findByTestId("fragment-card-2");
+    fireEvent.click(screen.getByTestId("fragment-move-group-2"));
+    fireEvent.click(await screen.findByTestId("fragment-move-group-2-9"));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_fragment_group", { fragmentId: 2, groupId: 9 }));
+    expect(quiet, "无清理 ⇒ 不上抛").not.toHaveBeenCalled();
   });
 });

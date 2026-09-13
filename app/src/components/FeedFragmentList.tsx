@@ -2,11 +2,11 @@
  * FeedFragmentList — 收件箱碎片列表（v0.12.2 收件箱动线；自 feed 组碎片列表改造）。
  *
  * @ai-context: 二元论（用户裁决）——碎片=原料不是短笔记，收件箱只装碎片
- *               （未归组笔记在「全部笔记」，两种实体两条动线）。碎片卡三出口：
+ *               （未归组笔记在「全部笔记」，两种实体两条动线）。碎片卡四出口：
  *               ✍ 升为笔记（轻确认：标题预填首句可改 + 归组下拉默认未归组 →
  *               promote_fragment_to_note 事务建笔记+删碎片 → 父层右侧自动打开）、
  *               ⚙ 升为闪卡（promote_fragment_to_card 幂等——已升级/单句无卡
- *               返回 0 不报错）、🗑 删除（二次确认）。
+ *               返回 0 不报错）、🗑 删除（二次确认）、📁 移动到组（归组 / 移出组 —— 批 7 C11）。
  * @ai-context: 恒常视图——不再依赖 feed 组展开（开关只控制快速记录入口
  *              与后端准入）；空态引导三种归宿（规划 §3）。
  */
@@ -17,6 +17,7 @@ import type { Fragment, Note, NoteGroup } from "../types";
 import type { DeleteFragmentResult, PromoteNoteResult } from "../types/notes";
 import { fragmentPreview, promoteTitleFor } from "../utils/inbox";
 import { ConfirmDialog, StatusLine, Surface, Text } from "../ui/primitives";
+import FragmentGroupAction from "./FragmentGroupAction";
 
 interface Props {
   /** 列宽（v0.15 全站自适应——父层 useColumnLayout 驱动；缺省 320=历史值） */
@@ -232,6 +233,8 @@ export default function FeedFragmentList({ width = 320, onChanged, onPromoted, o
               >
                 🗑 删除
               </button>
+              <FragmentGroupAction fragmentId={f.id} groupId={f.groupId} groups={containerGroups} onNeedGroups={loadGroupsIfNeeded}
+                disabled={busy} onMoved={() => { void load().then(onChanged); }} onError={setErr} onCleanNotice={onCleanNotice} />
               <span style={{ fontSize: 9, color: "#d1d5db", marginLeft: "auto" }}>
                 {new Date(f.createdAt * 1000).toLocaleDateString()}
               </span>

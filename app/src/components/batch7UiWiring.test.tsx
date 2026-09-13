@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /**
- * batch7UiWiring.test.tsx — 批 7 T20 的 6 条「补 UI」接线判据（§9 #34 / #37 / #39 / #40 / #42 / #47）。
+ * batch7UiWiring.test.tsx — 批 7 T20 的 6 条「补 UI」接线判据（§9 #34 / #37 / #39 / #40 / #42 / #47）
+ *   + T23 补漏的第 7 条（§9 #46 `update_fragment_group` —— 规格那格写「补 UI（本批）」，T20 漏做）。
  *
  * @ai-context 每条命令两条独立判据（缺一不可）：
  *   ① **行为**：入口存在 ⇒ 交互 ⇒ `invoke` 的命令名与载荷逐字正确（**只写按钮不调 `invoke`」会红**）；
@@ -30,13 +31,14 @@ import SessionRefineSection from "./session-detail/SessionRefineSection";
 import KnowledgeSystemEditPanel from "./KnowledgeSystemEditPanel";
 import StaleSessionRecoveryBar from "./StaleSessionRecoveryBar";
 
-/** 六条命令 → 落地件（源码探针与行为判据共用一份名单） */
+/** 七条命令 → 落地件（源码探针与行为判据共用一份名单；末条由 T23 补入） */
 const COMMANDS = [
   "analyze_session_command",
   "delete_session_images_all",
   "finish_session",
   "get_decision",
   "refine_session",
+  "update_fragment_group",
   "update_knowledge_system",
 ] as const;
 
