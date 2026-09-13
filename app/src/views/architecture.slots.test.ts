@@ -38,13 +38,17 @@ const REPO = join(APP, "..");
 const PROBE_DIR = join(REPO, ".superpowers", "sdd", "2026-09-12-frontend-redesign-batch5-view-layer", "tmp", "t15");
 
 describe("A6 · 每个视图组件的 props 只来自 slot（**类型级** tsc 探针，不用文本匹配）", () => {
-  /** 组件路径 → 它的 slot 类型（顺序即探针里的调用顺序） */
+  /** 组件路径 → 它的 slot 类型（顺序即探针里的调用顺序）。
+   *  批 8 T8 追加第 6 项（`views/note/NoteEvidenceTrackView.tsx`）：🔴 这份名单是**硬编码**的
+   *  ⇒ 新视图**不会**自动进探针（「新增视图 = 自动被守卫覆盖」是错的预期）。追加它才让 T8 的 V3
+   *  （给视图加 slot 外**必填** prop ⇒ 探针报 `TS2769`）在**本件**上真的变红。 */
   const VIEWS: readonly (readonly [string, "SessionViewSlot" | "NoteViewSlot"])[] = [
     ["views/session/SessionTriTrackView.tsx", "SessionViewSlot"],
     ["views/session/SessionProofView.tsx", "SessionViewSlot"],
     ["views/session/SessionCardFlowView.tsx", "SessionViewSlot"],
     ["views/session/SessionNotePreview.tsx", "SessionViewSlot"],
     ["views/note/NoteCardFlowView.tsx", "NoteViewSlot"],
+    ["views/note/NoteEvidenceTrackView.tsx", "NoteViewSlot"],
   ];
   const nameOf = (f: string): string => `V${f.split("/").pop()!.replace(/\.[^.]*$/, "")}`;
   /** 从探针目录指回 `app/src/...`（用 `relative` 现算，不手数 `../` —— #65 的教训） */
@@ -60,7 +64,7 @@ describe("A6 · 每个视图组件的 props 只来自 slot（**类型级** tsc �
     "",
     "declare const sessionSlot: SessionViewSlot;",
     "declare const noteSlot: NoteViewSlot;",
-    "/** 5 个视图各一次：slot 能整体传给组件 ⇒ 组件的 props 是 slot 的子集 */",
+    "/** 6 个视图各一次：slot 能整体传给组件 ⇒ 组件的 props 是 slot 的子集 */",
     "export const probes = [",
     ...VIEWS.map(([f, s]) => `  createElement(${nameOf(f)}, ${s === "NoteViewSlot" ? "noteSlot" : "sessionSlot"}),`),
     "];",
@@ -75,7 +79,7 @@ describe("A6 · 每个视图组件的 props 只来自 slot（**类型级** tsc �
     mkdirSync(PROBE_DIR, { recursive: true });
     writeFileSync(PROBE, src, "utf8");
     expect(readFileSync(PROBE, "utf8")).toBe(src);
-    expect(src.split("createElement(").length - 1, "5 个视图必须各有一个探针调用").toBe(5);
+    expect(src.split("createElement(").length - 1, "6 个视图必须各有一个探针调用").toBe(6);
   }, 30000);
 
   it("② 判据：`tsc` 对探针 **0 诊断**（任何 props 溢出/改形 ⇒ `no overload matches`）+ 牙齿自证", () => {
