@@ -150,3 +150,29 @@ describe("F14 页面级：畸形 get_session_detail 载荷（null）⇒ 降级�
     expect(panel.querySelectorAll("[data-evidence-for]").length, "畸形载荷把段落轨也带没了").toBe(1);
   });
 });
+
+/**
+ * F15 —— **注入路径真的被消费**（控制方 2026-09-13 裁定「必须加」的那条判据）。
+ *
+ * @ai-context 为什么必须有这一条：F12 用的 `LINES` 就是 `evidenceLinesOf(CONTENT)` ⇒ **两边同源**，
+ *   于是「视图**忽略**注入、永远自派生」这个变异体**抓不到**（实测 M1 = 等价变异体）⇒ 若真如此，
+ *   整条注入路径就是**死代码**而没有任何判据会注意到。⇒ 本条的夹具**刻意让注入值与自派生值不同**：
+ *   注入 **3 段**、而夹具笔记正文自派生只有 **2 段**（`# 正文` + `内容段落`）。视图渲染出 **3** 段且文本
+ *   逐字取自注入值 ⇒ **注入路径被消费**在 DOM 上成为可判事实（不是「看起来像」）。
+ * @ai-context 这不是「不真实夹具」：生产语义就是「容器是段落轨的派生方」—— 一旦视图回退自派生，
+ *   `paragraphIndex` 会与容器口径脱节（正是 T8 契约里那条静默错位）。本判据把该契约钉在行为面。
+ */
+describe("F15 注入路径被真正消费（夹具 lines 与自派生**刻意不同**）", () => {
+  it("F15 注入 3 段 / 正文自派生 2 段 ⇒ DOM 渲染**注入**的 3 段与逐字文本（忽略注入即红）", async () => {
+    const INJECTED = ["注入甲段", "注入乙段", "注入丙段"].map((text, paragraphIndex) => ({ paragraphIndex, text }));
+    const derived = evidenceLinesOf(note.content);
+    // 夹具自证：注入值与自派生值**必须不同**（否则本判据等价于 F12 ⇒ 抓不到「忽略注入」）
+    expect(derived.length, "夹具自证：自派生的段数不得等于注入的 3（否则本判据空真）").toBeLessThan(INJECTED.length);
+    render(<Harness evidence={{ segments: [], ocr: [], lines: INJECTED }} />);
+    await clickSegment("证据");
+    const panel = await screen.findByTestId("note-evidence-track");
+    expect(evidenceFors(panel), "视图没消费注入的 lines（回退自派生 ⇒ 整条注入路径是死代码）").toEqual(["0", "1", "2"]);
+    for (const l of INJECTED) expect(within(panel).getByText(l.text), `注入文本未渲染：${l.text}`).toBeTruthy();
+    expect(within(panel).queryByText("内容段落"), "自派生的正文也渲染了 ⇒ 段落轨有两处派生").toBeNull();
+  });
+});
