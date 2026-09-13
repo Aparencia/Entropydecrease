@@ -43,6 +43,8 @@
 - **硬约束**：上表「页面包大小 (JS) < 200KB (gzip)」与懒侧预算是**两个独立读数** —— 懒侧判定不得影响首屏读数，两者也不得并成一个预算。`--json` 的顶层 `pass` = **总体裁决**（两个读数的与），与退出码一致。
 - **逐族上限可「同提交重冻」**（批 7 §C32.3）：改动懒侧字节的单元可在**同一条提交**里把受影响族的 `gzipBytesMax` 重冻为新实测值（条件：提交信息点名是哪处改动推高 · 报告给前后逐键 diff · **总量不得抬高** · 评审核「是该次改动的必然后果」）。🔴 **懒侧总上限仍是硬棘轮、只许降**。
 - **工具**：`node scripts/check-bundle-budget.mjs`（不带 `--no-build` ⇒ 自行构建后再判两个预算，人类可读、**分别**打印两个 pass）；加 `--json` 得平级的 `firstScreen` / `lazyBudget` 两栏。退出码 `1` = **任一**预算超标（首屏 / 懒侧）。
+- 🔴 **执行者缺口（技术债 → 批 8；批 7 §C25.5② + §C14.5 逐字落账）**：本判据（**首屏 + 懒侧的唯一守卫**）在 `.github/workflows/pr-check.yml` / `.husky/pre-commit` / `scripts/validate-all.mjs` **三处都没有执行者** ⇒ **这道门禁的牙只在有人手工跑时才存在**（批 7 期间的唯一执行者 = 段收口单元 T12 与全批收口单元 T22，**均为人手工触发**）。**同源事实**：`pr-check.yml` 的 **paths-filter 根本没有 `scripts/**` glob**（T8 实测缺 `scripts/lib/**`；T11 新增 `scripts/check-exemption-prose.mjs` 后复查 ⇒ **缺口形态未变、逃逸文件集合 +1**）⇒ **只改 `scripts/**` 的 PR 不被任何被过滤的 job 看见**。🔴 **批 7 裁决：不动 `.github/workflows/`**（AGENTS.md §10 的额外审查清单 + `semantic-release` 的发布自动化连带面 + 本批的规格义务与登记项里**没有** CI 工作；批 7 对 `scripts/**` 的门禁靠**收口单元直接跑脚本**，覆盖等效）。**修复形态 = ① 给 paths-filter 补 `scripts/**` glob ② 给本守卫（及同域脚本）接一个执行者**；**归属批 8**。
+- 🔴 **同批登记（不在本文件，仅互指）**：`scripts/check-exemption-prose.mjs`（批 7 T11 新建的**散文对拍探针**，112 行）**已入库但不入八闸 / CI / husky** ⇒ 登记为「**批 8 的候选闸**」（§C11.8 ③），并**同样进入上面那条 paths-filter 缺口名单**；落点见 [`line-limit-exemptions.md`](line-limit-exemptions.md) 的批 7 收口加注。
 
 ### 第二部分：测量与 Profiling
 
