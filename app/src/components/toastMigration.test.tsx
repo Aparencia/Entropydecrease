@@ -52,8 +52,12 @@ const selfDrawnHits = (s: string): string[] =>
 
 /** 三个实现文件（页级/hook 式/全局）—— 第 ④ 套是消费者，另有判据 */
 const IMPL_FILES = ["App.tsx", "pages/SessionsPage.tsx", "hooks/useTransientToast.tsx"] as const;
+/** 批 7 T1：全局 AI toast 的**装配件**从 `App.tsx` 抽到 `shell/aiToast.tsx`（纯搬迁，签名与三个字面量
+ *  逐字不变）⇒ 断言「该链路的实现体在哪」的两条随之换新家；`App.tsx` 仍是**调用点**（§① 第 3 条守它，
+ *  §① 的域仍是「三套实现」（页级 / hook 式 / 全局），故本文件只增读一个新家、不改域）。 */
+const MOVED_IMPL = "shell/aiToast.tsx";
 const CODE: Readonly<Record<string, string>> = Object.fromEntries(
-  IMPL_FILES.map((f) => [f, stripComments(read(f))]),
+  [...IMPL_FILES, MOVED_IMPL].map((f) => [f, stripComments(read(f))]),
 );
 
 /** barrel 名字表 / 深导入（`./ui/primitives` 与 `../ui/primitives` 都算 barrel） */
@@ -121,8 +125,10 @@ describe("① 三个实现文件剥注释后 0 处自绘浮动 toast 特征", ()
 });
 
 describe("② 三条链路都经 barrel 到达 `Toast`（ADR-033 §1；深导入禁止）", () => {
-  it("App.tsx / useTransientToast.tsx 的 barrel 名字表含 Toast，且无深导入", () => {
-    for (const f of ["App.tsx", "hooks/useTransientToast.tsx"]) {
+  it("shell/aiToast.tsx / useTransientToast.tsx 的 barrel 名字表含 Toast，且无深导入", () => {
+    // 批 7 T1：AI toast 的 barrel 接缝随装配件搬到 `shell/aiToast.tsx`（`App.tsx` 已不再 import 原语）
+    // —— 判据强度不降：同一条 `RE_BARREL` + `RE_DEEP`，只是文件键换成实现体所在的新家。
+    for (const f of [MOVED_IMPL, "hooks/useTransientToast.tsx"]) {
       expect(barrelNames(CODE[f]), `${f} 未走 barrel`).toContain("Toast");
       expect(RE_DEEP.test(CODE[f]), `${f} 深导入了原语（会漏掉 motion.css 的 reduced-motion 块）`).toBe(false);
     }
@@ -142,9 +148,11 @@ describe("② 三条链路都经 barrel 到达 `Toast`（ADR-033 §1；深导入
 });
 
 describe("③ durationMs 逐处显式（防「统一成默认 3000」）", () => {
-  it("App.tsx 显式 3500（原值逐字保留）· SessionsPage 显式 3000 · hook 的原语时长为 0", () => {
-    expect(CODE["App.tsx"]).toContain("durationMs={3500}");
-    expect(CODE["App.tsx"]).not.toContain("durationMs={3000}");
+  it("shell/aiToast.tsx 显式 3500（原值逐字保留）· SessionsPage 显式 3000 · hook 的原语时长为 0", () => {
+    // 批 7 T1：`durationMs={3500}` 与 `AiToast` 的定义体一起搬到 `shell/aiToast.tsx`（字面量逐字不变）
+    // —— 判据强度不降：仍是「实现体里显式 3500 且没有 3000」，只是文件键换新家。
+    expect(CODE[MOVED_IMPL]).toContain("durationMs={3500}");
+    expect(CODE[MOVED_IMPL]).not.toContain("durationMs={3000}");
     expect(CODE["pages/SessionsPage.tsx"]).toContain("useTransientToast(3000)");
     // hook 保留自己的状态机（计时权在 hook，单计时器）⇒ 原语侧显式 0（边界④「不自动消失」）
     expect(CODE["hooks/useTransientToast.tsx"]).toContain("durationMs={0}");

@@ -157,6 +157,11 @@ describe("叶级错误边界 SlotErrorBoundary", () => {
   });
 });
 
+/** 批 7 T1：`PageSlot` 的**定义体**搬到 `shell/PageSlot.tsx`（纯搬迁，逐字不变）⇒ 「定义包住 children」
+ *  这条改读新家；`App.tsx` 侧的**调用点形状**判据（§① 的 9 槽位、② 的三个窗口变体段）一个不动。 */
+const PAGE_SLOT = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "PageSlot.tsx"), "utf8")
+  .replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
 describe("结构尺：App.tsx 的边界**按槽位逐个判**（不用全文计数）", () => {
   const slots = [...APP.matchAll(/<PageSlot\b[^>]*>/g)].map((m) => m[0]);
 
@@ -171,8 +176,9 @@ describe("结构尺：App.tsx 的边界**按槽位逐个判**（不用全文计�
 
   it("② 页级定义包住 children；overlay / float / dock 三处各有一个**包住面板**的边界", () => {
     const at = (s: string) => APP.indexOf(s);
-    const ps = at("function PageSlot(");
-    const def = APP.slice(ps, APP.indexOf("\n}\n", ps));
+    const ps = PAGE_SLOT.indexOf("function PageSlot(");
+    expect(ps, "PageSlot 定义体不在 shell/PageSlot.tsx（搬迁后误删 / 改成了别的形态）").toBeGreaterThan(-1);
+    const def = PAGE_SLOT.slice(ps, PAGE_SLOT.indexOf("\n}\n", ps));
     const overlay = APP.slice(at('query.get("overlay") === "1"'), at('query.get("float") === "1"'));
     const float = APP.slice(at('query.get("float") === "1"'), at("<AppErrorBoundary>"));
     const dock = APP.slice(at("{dockMounted && ("), at("export default"));

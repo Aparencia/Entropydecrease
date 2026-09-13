@@ -45,6 +45,7 @@ const CSS = readFileSync(join(HERE, "TopBar.css"), "utf8").replace(/\/\*[\s\S]*?
 const MOTION_CSS = readFileSync(join(HERE, "..", "ui", "primitives", "motion.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
 const TOPBAR_TSX = readFileSync(join(HERE, "TopBar.tsx"), "utf8");
 const APP_TSX = readFileSync(join(HERE, "..", "App.tsx"), "utf8");
+const AI_TOAST_TSX = readFileSync(join(HERE, "aiToast.tsx"), "utf8"); // 批 7 T1：AI toast 装配件的新家（纯搬迁）——「交给 belowNav 档」改读它；「导航行里不再有它」两条仍读 App.tsx
 /**
  * App.tsx 的**只留代码**版本：剥块注释与整行 `//` 注释。
  * Why 必须剥：App.tsx 的注释里逐字出现了 `<nav>`、`zIndex("toast")` 这些判据串 —— 不剥的话
@@ -273,7 +274,7 @@ describe("裁决 A3：AI toast 不在导航行里", () => {
     // （B13 逐字要求）；`ai-toast` 的 testid 语义改由**渲染级**断言保住（B15 ②），见
     // `components/toastMigration.test.tsx` §⑤（断言的是渲染出的元素，不是源码里出现过该字符串）。
     expect(TOAST_BASE_BODY, "原语基类不是 fixed 定位 ⇒ toast 仍会参与布局流向").toMatch(/position:\s*fixed/);
-    expect(APP_CODE, "App.tsx 没有把 AI toast 交给 belowNav 档").toContain('placement="belowNav"');
+    expect(AI_TOAST_TSX, "AI toast 没有交给 belowNav 档（批 7 T1：装配件已搬至 shell/aiToast.tsx）").toContain('placement="belowNav"');
     expect(TOAST_BELOW_NAV_BODY, "位置档的 top 没有消费壳层 token --ed-nav-h").toMatch(
       /top:\s*calc\(\s*var\(--ed-nav-h/,
     );

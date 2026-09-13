@@ -29,6 +29,10 @@ const APP_TSX = join(SRC, "App.tsx");
 const REGISTRY_TS = join(SRC, "shell", "navRegistry.ts");
 const PAGES = join(SRC, "pages");
 const appSource = () => readFileSync(APP_TSX, "utf8");
+/** 批 7 T1：`PageSlot` 的**定义体**从 `App.tsx` 抽到 `shell/PageSlot.tsx`（纯搬迁，逐字不变）
+ *  ⇒ 「display 门控而非卸载」那两条字面量判据改读新家；`mountedPages` 只增不变量仍读 `App.tsx`。 */
+const PAGE_SLOT_TSX = join(SRC, "shell", "PageSlot.tsx");
+const pageSlotSource = () => readFileSync(PAGE_SLOT_TSX, "utf8");
 
 /** 页面文件（不含测试）—— 从目录枚举，不手写清单 */
 function pageFiles(): string[] {
@@ -142,8 +146,9 @@ describe("导航注册表（规格 §10 批 3「9 页全走注册表」）", () 
     const app = appSource();
     // 只增的更新式（逐字）—— 换成「按当前页重建集合」即「切走即卸载」，是本仓禁止形态
     expect(app).toContain("prev.has(page) ? prev : new Set(prev).add(page)");
-    expect(app).toContain("if (!mounted) return null;");
-    expect(app).toContain('display: show ? "block" : "none"');
+    const slot = pageSlotSource();
+    expect(slot, "PageSlot 定义体不在家（搬迁后误删，或门控被改成卸载）").toContain("if (!mounted) return null;");
+    expect(slot, "PageSlot 不再用 display 门控（切页变成卸载 ⇒ 保活失效）").toContain('display: show ? "block" : "none"');
     expect(app).not.toMatch(/mountedPages\.delete\(/);
     expect(app).not.toMatch(/setMountedPages\(new Set\(\[page\]\)\)/);
     expect(app).not.toMatch(/setMountedPages\(\(\) =>/);
