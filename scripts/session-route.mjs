@@ -53,9 +53,9 @@ const ROUTING_RULES = [
       return false;
     },
     owner: {
-      type: 'skill',
-      path: '.qoder/skills/env-bootstrap.md',
-      description: '环境启动引导 Skill — 提供一键环境检测和启动指导',
+      type: 'memory',
+      path: null,
+      description: '环境启动的现执行者 = README.md 的「快速开始」（前置要求 / 开发运行 / Rust 侧验证 / 模型下载）；本仓无 .qoder/skills/ 持久 Skill，本规则不再指向 Skill 文件',
     },
   },
   {
