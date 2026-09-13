@@ -6,8 +6,13 @@
  * 副作用：`--write` 会重写 docs/standards/line-limit-exemptions.md（人工列按路径保留，唯带 `（自动摘取，待细化）` 标记的理由是生成物、每次重摘）；默认模式只读。
  * 用法：node scripts/line-limits.mjs [--write|--full]
  * 忽略任何传入的文件参数，**永远全树扫描**（门禁因此不必依赖 glob —— 旧 glob 的命中集还大于扫描域）。
+ *
+ * 判据 (f)（仅 `--full`，批 8 T2）：域内**非空**文件的最后一个字节必须是 `0x0A`（末尾换行存在性）。
+ * 🔴 **只判末尾 `0x0A` 是否存在，不判行尾风格** —— 本仓 CRLF 与 LF 并用（域内 1156 文件实测：以 CRLF 结尾 581 · 以裸 LF 结尾 575），
+ * 写成「必须 LF 行尾」会让**整仓 RED**。Why 非加它不可：末尾换行缺失时 `countLines()` 读数**纹丝不动**
+ * （公式已把「末尾无换行」折进去）⇒ (a)–(e) 与豁免表**都看不见**它（批 7 §C51.7① 在 `commands_video.rs` 上实测）。
  */
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROOT, SCAN_DIRS, SOURCE_EXT, TABLE_PATH, HARD_LIMIT, SOFT_LIMIT, FROZEN_OVER_LIMIT, scanTree, parseTable, parseHistory, autoReason, stripOverPrefix, OVER_PREFIX } from './lib/lineScan.mjs';
@@ -165,12 +170,24 @@ function check({ full }) {
       if (n !== undefined && n !== r.declared) problems.push(`(e) 行数不一致：${r.path} 声明 ${r.declared} / 实测 ${n} → 运行 --write`);
     }
   }
+  // (f) 末尾换行存在性（仅 --full；口径见头注「判据 (f)」）。
+  // Why 判**字节**而不判文本：`readFileSync(p, "utf8").endsWith("\n")` 在 CRLF 文件上同样为真，
+  // 看起来够用，却把「末尾恰有一个 0x0A」与「文本层最后一个字符是换行」混谈 —— 判据要的是前者。
+  // 空文件（`b.length === 0`）跳过：它没有「末尾」，补一行空行反而是内容改动（卡片 `:615` 逐字）。
+  if (full) {
+    for (const p of measured.keys()) {
+      const b = readFileSync(join(ROOT, p));
+      if (b.length > 0 && b[b.length - 1] !== 0x0a) problems.push(`(f) 末尾无换行：${p}`);
+    }
+  }
 
   const over = [...measured.entries()].filter(([, n]) => n > HARD_LIMIT).length;
   const band = [...measured.entries()].filter(([, n]) => n > SOFT_LIMIT && n <= HARD_LIMIT).length;
   const mode = full ? '--full' : '默认';
+  // 表头只在 **(f) 命中时**追加子口径名 ⇒ 既有五条判据单独命中时，表头与拆分前**逐字相同**。
+  const eolHit = problems.some((p) => p.startsWith('(f) '));
   if (problems.length) {
-    console.error(`❌ line-limits（${mode}）：${problems.length} 处问题`);
+    console.error(`❌ line-limits（${mode}${eolHit ? ' · 末尾换行' : ''}）：${problems.length} 处问题`);
     for (const p of problems) console.error(`  · ${p}`);
     console.error(`\n现状：>${HARD_LIMIT} 硬限 ${over}/${FROZEN_OVER_LIMIT.length}（棘轮）· ${SOFT_LIMIT+1}–${HARD_LIMIT} 档 ${band} · 登记条目 ${rows.length}`);
     process.exit(1);
