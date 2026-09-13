@@ -1,11 +1,29 @@
 /**
  * NoteMarkdown — 笔记阅读视图 Markdown 渲染（H5 自 NotesPage 拆分）。
  *
- * @ai-context: **react-markdown 站点 #1**（全站运行时站点恰 2，另一个是 `ChatMessageMarkdown`；
- *              判据 `views/note/noteViews.test.tsx:281-286`）。批 7 T13 拆件后本件只留
- *              「四条 remark 插件 + rehype-katex + URL 消毒 + 组件映射装配」这四件事，
- *              自定义渲染件与它们的闭包状态**整段**搬进 `noteMarkdownComponents.tsx`（工厂形态）——
- *              拆件的唯一目的是给 T14 的「#2 并入 #1」腾出净增头寸（本件拆前只剩 5 行余量）。
+ * @ai-context: **react-markdown 站点 #1；批 7 T14 把站点 #2 `ChatMessageMarkdown`（52 行）并入本件
+ *              后删除该文件 ⇒ 全站运行时站点 2 → 1、`remark-*`/`rehype-*` 站点 8 → 4**；判据 =
+ *              `views/note/noteViews.test.tsx:281-286`（三条站点断言，见该文件的 N5）。原站点 #2 的
+ *              三个消费点（`ChatMessageList.tsx:117` / `:146` · `TaskConversationView.tsx:189`）
+ *              改为调用本件（`content` 槽，见下）。
+ * @ai-context: **两模式、两棵渲染树，各自逐字保留**：① 笔记模式（`note` 槽 = 今天的形态**一字未改**）；
+ *              ② 聊天模式（`content` 槽 = 并入前 `ChatMessageMarkdown` 的语义**逐字**）。T14 是
+ *              **纯搬迁**（§C26.4 · §C9.19 第 1 条「只搬不改」）⇒ 两侧的 DOM 输出都必须**逐字节不变**：
+ *              聊天侧保留它自己的 wrapper `<div>`、**三条** remark 插件（无荧光笔）、**默认** URL 消毒
+ *              与自定 `code` 渲染件；笔记侧保留四条插件 + `noteUrlTransform` + 组件映射工厂。
+ * @ai-context: **为什么不做「单路径 + `previewMaxChars?` / `codeRenderer?` 参数化」**（计划 Interfaces
+ *              的原拟形态）：① 聊天侧入参是**裸字符串**、没有 `Note`（那一侧根本给不出 `note`/`searchQuery`
+ *              /`onTaskToggle`/`onImageOpen` 四槽）；② 两侧的 `components` 映射、外层 wrapper、
+ *              `urlTransform` 全都不同 ⇒ 参数化**必然**改掉其中一侧的 DOM 形态（C10.1 逐字禁止改渲染形态）
+ *              ⇒ 并入的可行形态只能是「同一模块内两条渲染路径，各自逐字保留」。截断语义仍由调用方
+ *              （`TaskConversationView`）用 `truncatePreview` 施加 —— 与并入前**同一处、同一默认值**，
+ *              不在渲染器内部新增第二条截断路径（那会是行为改动，违反「只搬不改」）。
+ * @ai-context: 站点判据是**按文件**的（`noteViews.test.tsx` 的 `edgesOf`）⇒ 本件里出现第二条
+ *              `ReactMarkdown` 调用不改变该读数；但本件**仍只许有那 4 行** `remark-*`/`rehype-*` 说明符
+ *              的 import（多一行会把插件站点读数抬高、污染 C8 的锚）。
+ * @ai-context: 批 7 T13 拆件后，本件的 `components` 槽由 `noteMarkdownComponents.tsx` 的工厂产出
+ *              （自定义渲染件与它们的闭包状态整段搬去那边）；T13 拆件的目的是给 T14 的并入腾头寸
+ *              （拆前只剩 5 行余量）。
  * @ai-context: 集中全部自定义渲染：任务清单勾选回写（H1）、标题锚点（M5）、
  *              搜索高亮（M6）、时间戳回链（L6 radix）、图片/代码/表格样式。
  *              —— 逐条实现与修复背景见 `noteMarkdownComponents.tsx` 的同名 `@ai-context`。
@@ -18,6 +36,9 @@ import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
+// 批 7 T14：顶层 `katex` 的裸 CSS 说明符随聊天路径一并搬入本件（**不丢** —— 丢掉它 = 全站 `.katex`
+// 排版掉样式；两侧都渲染 `.katex` 结点，而全仓只有这一条 CSS 边）。C20.1 的四形态普查按此读数。
+import "katex/dist/katex.min.css";
 import type { Note } from "../types";
 import { remarkMarkHighlight } from "../utils/remarkMarkHighlight";
 import { noteMarkdownComponents } from "./noteMarkdownComponents";
@@ -44,7 +65,10 @@ export type RemarkPlugin = NonNullable<Parameters<typeof ReactMarkdown>[0]["rema
  */
 export type MarkdownComponents = NonNullable<Parameters<typeof ReactMarkdown>[0]["components"]>;
 
-interface Props {
+/**
+ * **笔记模式**的入参与今天**逐字同义**（T14 未增删任何一项）。
+ */
+interface NoteModeProps {
   note: Note;
   /** 搜索关键词（空串=不高亮）——由 NoteReadingView 按 searchActive 门控传入 */
   searchQuery: string;
@@ -69,6 +93,18 @@ interface Props {
 }
 
 /**
+ * **聊天模式**的入参（批 7 T14 并入的站点 #2 形态）—— 只有一条：裸 markdown 文本。
+ *
+ * @ai-context 判据：这条槽的存在使得「3 个消费点改调 `NoteMarkdown`」不必伪造 `Note`。缺省不出现
+ *   ⇒ 笔记模式的类型面**一字未变**（`note` 仍是必填）。
+ */
+interface ChatModeProps {
+  content: string;
+}
+
+export type NoteMarkdownProps = NoteModeProps | ChatModeProps;
+
+/**
  * `[[ts:ms]]` 回链的**内部锚点**语法 + URL 消毒的唯一出口（批 6 T26 实测）。
  *
  * @ai-context 为什么必须显式放行：href 到 hast 阶段是**百分号编码**的 `%5B%5Bts:52500%5D%5D`，
@@ -76,6 +112,8 @@ interface Props {
  *   **根本没渲染**（落成 `<a href="">⏱ 00:52</a>`，下面的 `tsMatch` 永不命中；比 R5.5 顺带④ 记的还坏）。
  *   安全面零放松：只放行这一种形态（解码回规范形），其余全交回默认消毒器；该 href 仅用于识别，最终渲染成 `<span>`。
  *   ⇄ 规范形的**匹配**在 `noteMarkdownComponents.tsx` 的 `TS_HREF_RE`（`a` 渲染件用）。
+ *   ⚠️ 聊天模式**不走**它（并入前 `ChatMessageMarkdown` 也没有 `urlTransform`）：那一侧保留默认消毒器，
+ *   否则 `[[ts:ms]]` 会在聊天里变成回链芯片 —— 那是**行为变化**，「只搬不改」不允许。
  */
 const TS_HREF_ENCODED_RE = /^%5B%5Bts:(\d+)%5D%5D$/i;
 const noteUrlTransform = (url: string): string => {
@@ -83,7 +121,17 @@ const noteUrlTransform = (url: string): string => {
   return m ? `[[ts:${m[1]}]]` : defaultUrlTransform(url);
 };
 
-export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSession, onOpenSessionAt, onImageOpen, remarkPluginsExtra }: Props) {
+/**
+ * 全站唯一的 markdown 渲染入口（批 7 T14 归一后的形态）。
+ *
+ * @ai-context 分派：`content` 槽 ⇒ 聊天模式（`ChatMarkdown`，并入前的站点 #2 逐字）；
+ *   否则 ⇒ 笔记模式（今天的路径逐字）。**两模式不会互相切换**（同一调用点的槽固定）⇒
+ *   `ChatMarkdown` 与笔记模式的 hooks（`noteMarkdownComponents` 工厂内的两个 `useMemo`/两个 `useRef`）
+ *   各自在各自的分支里无条件执行，hooks 顺序与并入前**同序**。
+ */
+export default function NoteMarkdown(props: NoteMarkdownProps) {
+  if ("content" in props) return <ChatMarkdown content={props.content} />;
+  const { note, searchQuery, onTaskToggle, onOpenSession, onOpenSessionAt, onImageOpen, remarkPluginsExtra } = props;
   return (
     <ReactMarkdown
       // v0.15：remark-breaks——单换行（软换行）渲染为 <br>，与编辑态所见一致
@@ -100,5 +148,56 @@ export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSe
     >
       {note.content}
     </ReactMarkdown>
+  );
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * 以下为批 7 T14 并入的**站点 #2**（原 `components/ChatMessageMarkdown.tsx`，52 行）：
+ * 组件体、`PREVIEW_MAX_CHARS` 与 `truncatePreview` **逐字**搬来（只去缩进/改组件名与可见性），
+ * 语义一字未改 —— 证据 = 并入前/后两棵树的渲染输出逐字节对拍（§C26.4，探针在 `tmp/t14/`）。
+ * ---------------------------------------------------------------------------------------------- */
+
+/** 深度预览截断（轨迹/结果展开用——长文不撑爆 DOM） */
+export const PREVIEW_MAX_CHARS = 2000;
+
+export function truncatePreview(text: string, max: number = PREVIEW_MAX_CHARS): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}\n\n…（内容过长已截断，仅展示前 ${max} 字符）`;
+}
+
+/**
+ * 聊天消息的渲染体（并入前 = `ChatMessageMarkdown` 的默认导出）。
+ *
+ * @ai-context: 聊天渲染专用轻量栈（GFM + 数学 + 换行），**不复用**笔记域的组件映射
+ *              （那是笔记域——任务勾选回写/时间戳回链/图片组件耦合笔记上下文）；
+ *              聊天消息无这些语义，保持渲染器单一职责。
+ * @ai-context 为什么保留独立 wrapper `<div>`：并入前它就带 `fontSize: 13.5 / lineHeight: 1.7 /
+ *              wordBreak: break-word`，而笔记模式**不套 wrapper**（`NoteMarkdown.test.tsx:89` 甚至
+ *              断言根下无 `div`）⇒ 两者不能共用一层。
+ */
+function ChatMarkdown({ content }: ChatModeProps) {
+  return (
+    <div style={{ fontSize: 13.5, lineHeight: 1.7, wordBreak: "break-word" }}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
+        rehypePlugins={[rehypeKatex]}
+        components={{
+          code: ({ className, children }) => {
+            const isBlock = className?.includes("language-");
+            const text = String(children).replace(/\n$/, "");
+            if (isBlock) {
+              return (
+                <pre style={{ background: "#f6f8fa", padding: 10, borderRadius: 6, overflowX: "auto" }}>
+                  <code className={className}>{text}</code>
+                </pre>
+              );
+            }
+            return <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 4 }}>{text}</code>;
+          },
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 }

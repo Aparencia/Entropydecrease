@@ -11,7 +11,10 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiEnrichResult, AiTaskRecord, AiTurn } from "../types";
-import ChatMessageMarkdown, { truncatePreview } from "./ChatMessageMarkdown";
+// 批 7 T14：站点 #2 `ChatMessageMarkdown` 已并入 `NoteMarkdown`（`content` 槽 = 聊天模式）；
+// `truncatePreview` / `PREVIEW_MAX_CHARS` 随代码搬到同一件 ⇒ 截断仍在**本文件**（调用方）施加，
+// 默认值 2000 与并入前逐字相同（`chatHelpers.test.ts` 的三条判据钉住）。
+import NoteMarkdown, { truncatePreview } from "./NoteMarkdown";
 import { Surface, Text } from "../ui/primitives";
 
 interface Props {
@@ -186,7 +189,7 @@ export default function TaskConversationView({ task, turns, refTitle, onOpenSess
           </button>
           {openResult && (
             <Surface level="canvas" style={{ padding: "10px 14px", marginTop: 6, maxHeight: 420, overflowY: "auto" }}>
-              <ChatMessageMarkdown content={truncatePreview(extractResultMarkdown(task.resultJson))} />
+              <NoteMarkdown content={truncatePreview(extractResultMarkdown(task.resultJson))} />
             </Surface>
           )}
         </div>

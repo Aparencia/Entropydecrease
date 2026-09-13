@@ -11,7 +11,9 @@
  */
 import { useEffect, useRef } from "react";
 import type { ChatMessage, KbHit } from "../types";
-import ChatMessageMarkdown from "./ChatMessageMarkdown";
+// 批 7 T14：站点 #2 `ChatMessageMarkdown` 已并入 `NoteMarkdown`（`content` 槽 = 聊天模式，
+// 渲染树逐字节不变 ⇒ 本文件只换 import 源与标签名，props 一字未改）。
+import NoteMarkdown from "./NoteMarkdown";
 import CitationChips from "./CitationChips";
 import { parseKbMeta } from "../utils/kbHits";
 import { Surface, Text } from "../ui/primitives";
@@ -114,7 +116,7 @@ export default function ChatMessageList({ messages, streaming, onRegenerate, onE
                     )}
                   </Text>
                   <Surface level="canvas" style={{ padding: "8px 12px" }}>
-                    <ChatMessageMarkdown content={m.content} />
+                    <NoteMarkdown content={m.content} />
                     {/* v0.19.1：引用 chips（answer 与 hits-only 引导同款展示） */}
                     {meta && meta.hits.length > 0 && (
                       <CitationChips hits={meta.hits} onOpenNote={onOpenCitedNote} />
@@ -143,7 +145,7 @@ export default function ChatMessageList({ messages, streaming, onRegenerate, onE
       {streaming?.text !== null && streaming?.text !== undefined && (
         <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 12 }}>
           <Surface level="canvas" style={{ padding: "8px 12px", maxWidth: "86%" }}>
-            <ChatMessageMarkdown content={streaming.text} />
+            <NoteMarkdown content={streaming.text} />
             {(streaming.hits?.length ?? 0) > 0 && <CitationChips hits={streaming.hits ?? []} onOpenNote={onOpenCitedNote} />}
             <span style={{ display: "inline-block", width: 6, height: 14, background: "#0d9488", verticalAlign: "text-bottom", marginLeft: 2 }} />
           </Surface>

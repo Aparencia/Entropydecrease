@@ -7,7 +7,9 @@
  */
 import { describe, expect, it } from "vitest";
 import { parseUsage } from "./ChatMessageList";
-import { truncatePreview } from "./ChatMessageMarkdown";
+// 批 7 T14：`truncatePreview` 随 `ChatMessageMarkdown` 并入 `NoteMarkdown`（搬迁的必需后果：
+// 只换 import 源，三条断言与实参一字未改）。
+import { truncatePreview } from "./NoteMarkdown";
 
 describe("parseUsage", () => {
   it("解析 OpenAI 口径 total_tokens", () => {
