@@ -89,6 +89,26 @@ pub fn session_audio_status(state: State<'_, AppState>) -> SessionAudioStatus {
     status_of(&state.data_dir)
 }
 
+/// 设置音频落盘开关（T27；持久化，下次实时会话生效）。
+///
+/// @ai-context: 入参 = **类型化的 `bool`**（取值域只有两态 ⇒ 无越界面要校验；同
+///              `audio_preproc_set` 先例）。路径由**后端**从 `state.data_dir` 构造，前端
+///              **不传路径**（AGENTS.md §4「文件系统访问限定应用数据目录」）。
+/// @ai-context: 先 `load` 再改**一个**字段再 `save`（**不整份覆盖**：保留期/预算不在本命令的
+///              入参面内，整份覆盖会把它们抹回默认）；返回值是**回读落盘结果**，前端据此刷
+///              UI（不做本地乐观状态 —— 写盘失败必须看得见）。
+#[tauri::command]
+pub fn session_audio_config_set(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<SessionAudioStatus, String> {
+    let path = state.data_dir.join("audio-store.json");
+    let mut config = AudioStoreConfig::load(&path);
+    config.enabled = enabled;
+    config.save(&path).map_err(|e| e.to_string())?;
+    Ok(status_of(&state.data_dir))
+}
+
 /// 手动触发音频清理（超保留期删除 + 超预算删最旧）。
 #[tauri::command]
 pub fn session_audio_cleanup(state: State<'_, AppState>) -> Result<crate::audio_store::CleanupSummary, String> {
