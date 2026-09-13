@@ -2563,6 +2563,9 @@ surfaceBaseline.ts:49 →  *     阴影 **24 → 24 处 / 24 文件（…）**�
 | 9 | **`v0.22` / 规格的渲染观感** | 无渲染器 | `docs-check` 只判链接/文件名/索引 ⇒ **内容正确性靠人工评审** |
 | 10 | **真实构建的懒侧 katex 去向** | 🔴 **需真实构建**（取锁 + `npm run build`）⇒ 若 T17 未跑 ⇒ **写「未判定」**（C6.4 逐字） | 若跑了 ⇒ **族前缀 + 逐块字节闭合核算**（C9.6 第 2 条） |
 
+> 🔻 **批 8 T16 就地加注 · 上表第 6 条的**理由句**不准确**（2026-09-13；**上表原文一字未改**）**：`jsdom 不做样式级联（getComputedStyle 拿不到生效值）` 这句经批 8 侦察 A 实测（jsdom 30.0.1 · `.superpowers/sdd/2026-09-13-frontend-redesign-batch8/recon-A-visual-verification.md` §3.1 / §3.3）**为假** —— jsdom **做**级联：类规则 / ID 规则 / 子选择器 / 继承 / `!important` **全部正确生效**。真正拿不到的是：① **任何几何 / 排版**（`getBoundingClientRect` / `offset*` / `client*` / `scroll*` 全 0；`elementFromPoint` 与 `Range` 的两个 `*Rects` 方法不存在）② **`var()` 不解析**（回字面量）· **简写 → 长写不展开**（`transition` 整体读得到，`transition-duration` 读成 `0s`）③ **伪元素 / 伪类**不命中 ④ `matchMedia` / `ResizeObserver` / `IntersectionObserver` / canvas 2D / `document.fonts` 全缺席。
+> ⇒ **第 6 条的结论不变**（`Surface` 逐处迁移的**层叠观感**仍不可判），**变的是理由**：判据只能落在**源码文本 + 类名 + DOM 属性**上，是因为**几何全 0 + `var()` 不解析 + 简写不展开 + 伪元素不命中 + 环境 API 缺席**，**不是**因为 jsdom 不做级联。同句的另两处在批 8 T16 一并收窄：`docs/standards/motion.md`（规范层加注）与 `app/src/test/motionHarness.ts:50-53`（代码注释就地改写）。
+
 ### 二、本批未做（**做得了，本批不做**；逐条带去向）
 
 | # | 项 | 为什么本批不做 | 去向 |
