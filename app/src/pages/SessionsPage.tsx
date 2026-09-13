@@ -28,6 +28,7 @@ import type { BatchNoteResult, BatchSessionDeleteResult, CourseGroup, SessionDet
 import { columnSpec } from "../shell/columnRegistry";
 import { viewsFor } from "../views/registry"; // 批 5 T10（C1①）：视图清单在本层注入（面板/宿主只收注入）
 import { Text } from "../ui/primitives";
+import type { FocusSeek } from "../shell/focusRouting";
 
 interface Props {
   focusSessionId?: number | null;
@@ -43,6 +44,12 @@ interface Props {
   active: boolean;
   /** 查看笔记 → 笔记页直达（App 层切页 + focusNoteId） */
   onOpenNote: (noteId: number) => void;
+  /** 批 7 T1（C9.2）：`[[ts:ms]]` 深链的 ms 载体（接口在 7a 备好；**消费与透传归 7b 的 T17**）。
+   *  ⚠️ 本任务**不解构**它 —— 解构而不读会触发 `noUnusedLocals`（TS6133），而透传给
+   *  `<SessionDetailPanel>` 需要改该面板的 props 面（属 T17 的写者域）⇒ 只备类型。 */
+  focusSeekMs?: FocusSeek | null;
+  /** 批 7 T1：`focusSeekMs` 消费完成回调（App 清空——防陈旧 ms 跨导航复触发）；消费逻辑归 T17。 */
+  onFocusSeekConsumed?: () => void;
 }
 
 export default function SessionsPage({ focusSessionId, onFocusSessionConsumed, focusRefineTaskId, onFocusRefineTaskConsumed, onRefineTaskStarted, active, onOpenNote }: Props) {

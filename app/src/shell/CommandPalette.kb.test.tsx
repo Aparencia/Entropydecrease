@@ -172,7 +172,9 @@ describe("⑤ App.tsx 侧的接线与入口收敛（**静态**判据；运行期
 
   it("10 个 focus* 字段一个不少（只收敛入口、不删状态机），跳转入口已具名化", () => {
     const fields = ["focusSessionId", "focusNoteId", "focusNoteSearch", "focusSystemId", "createSystemSignal",
-      "focusGroupId", "focusReviewGroupId", "focusRefineTaskId", "focusChatTaskId", "focusChatId"];
+      "focusGroupId", "focusReviewGroupId", "focusRefineTaskId", "focusChatTaskId", "focusChatId",
+      // 批 7 T1（C9.9 授权的「只增」）：`[[ts:ms]]` 深链的 ms 载体 —— 原 10 个字段一个不少。
+      "focusSeekMs"];
     const missing = fields.filter((f) => !new RegExp(`const \\[${f}, set`).test(APP_CODE));
     expect(missing, `这些 focus* 字段被删/改名了（本批不动状态机）：${missing.join(" / ")}`).toEqual([]);
     const entries = ["goSessions", "openNoteHighlight", "goSystem", "goGroup", "goReviewGroup",

@@ -20,7 +20,7 @@
 
 | 文件 | 行数 | 豁免理由 | 拆分计划 |
 |---|---|---|---|
-| app/src/App.tsx | 537 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
+| app/src/App.tsx | 549 | 根装配（页面切换/焦点跨页直达状态机/全局事件监听）+ v0.20.5 行动页 + v0.20.10 批 5 复习页 Tab/深链/保活挂载（f702d876）——登记值 363 过期，实测纠偏 | 若再增长：焦点跨页直达 state 族拆至 useFocusRouting.ts |
 | app/src/pages/ChatPage.tsx | 579 | AI 对话页编排；批 1（REQ-306/307）active 门控/终态订阅接线净增——2026-09-09 实测纠偏（登记值 529 过期） | 若再增长：任务工具条与发起流拆至 ChatTasksToolbar.tsx |
 | app/src-tauri/src/db_migrations.rs | 573 | v0.20.11 批 6（REQ-315）再增：note_groups.pin ensure_column + note_group_orders 建表（+21，实测 573——登记值 492 过期；schema 单点收敛理由同左） | 若再增长：kb_* 与 chat_* 表 DDL 拆至 db_migrations_kb.rs |
 | app/src-tauri/src/lib.rs | 572 | crate 根 **322 `mod` + 15 `#[cfg]` = 337 行地板**（Task 1 评审实测更正：原写「321 `mod` + 16 `#[cfg]`」，总数 337 不变；322 含本任务新增的 `mod app_commands;`）；注册清单已移至 `app_commands.rs`（**数据文件**，同属 300–600 豁免带）—— 结构性下界，非欠账 | 已完成（批 0-C3 Task 1，2026-09-11）；余下 161 行模块理由注释 + 装配逻辑，无进一步拆分标的 |
@@ -106,7 +106,7 @@
 | app/src-tauri/src/commands_asr_pass2.rs | 333 | 实时链路只有端点句 SenseVoice 重打分；本命令把"导入同级的全窗离线质量"带给已结束会话：读取 S4 落盘音频（data_dir/session-audio/{id}.wav，16k PCM16）后台分窗重跑SenseVoice → 逐窗与现网轴比对 → 产 session_refine_drafts（pending），用户经 second_pass_list/decide 预览采纳/回退。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/commands_after.rs | 332 | v0.20.3（REQ-294/295/299/300）收尾命令域（批决议/导出/练习/问题）内聚；2026-09-06 实测登记（TD-2026-09-06-G） | 若再增长：批决议核心拆至 weekly_resolve.rs |
 | app/src-tauri/src/fusion.rs | 332 | 纯规则融合（无 LLM，本地优先降级路径）。规则按优先级：1) 字幕权威——字幕段覆盖时间窗内以字幕为准（准确率近 100%）2) ASR 补缝——字幕段之间 gap > gap_ms 的空隙用 ASR 填补3) 重叠校对——REQ-062 升级为概率加权：编辑距离高相似（sim ≥阈值，≈旧 ≤2 规则）一律字幕胜；相似度不足时比较P(字幕胜出)=conf_sub×(0.6+0.4×sim) 与 P(ASR 保留)=conf_asr×(0.4+0.6×sim)；双源低置信 → 输出低置信核对段（B3 落库标记）；置信度缺失（None=旧数据）→ 回退旧硬规则（距离>2 保留核对段）4) 时间轴对齐——重叠部分归属字幕，ASR 段被裁剪到空隙5) 空窗丢弃——两端无内容的静默窗不产出段@ai-context: 输入字幕段需已含 end_ms（编排按下一字幕出现时刻补齐）。（自动摘取，待细化） | 若再增长：按职责拆分 |
-| app/src/pages/SessionsPage.tsx | 332 | 本层为状态宿主与数据编排：会话列表/详情状态、事件驱动刷新（live:status/session:fused/切页 active）、转化与删除操作；左栏列表 UI 拆至 SessionListPanel、右栏详情拆至 SessionDetailPanel（豁免清单拆分计划落地，本文件 ≤300 行）。（自动摘取，待细化） | 若再增长：按职责拆分 |
+| app/src/pages/SessionsPage.tsx | 339 | 本层为状态宿主与数据编排：会话列表/详情状态、事件驱动刷新（live:status/session:fused/切页 active）、转化与删除操作；左栏列表 UI 拆至 SessionListPanel、右栏详情拆至 SessionDetailPanel（豁免清单拆分计划落地，本文件 ≤300 行）。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/capture/dxgi_capture.rs | 331 | 主路径用 DXGI 桌面复制（GPU 直取，性能最优）；new 或运行时捕获失败（远程桌面/锁屏/设备丢失）自动降级 GDI BitBlt（gdi_capture.rs），调用方无感知。帧输出 BGRA8，支持按窗口矩形裁剪与底部字幕区裁剪。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/commands_knowledge_decisions.rs | 331 | 本层只做参数校验、调用数据层、错误映射（AGENTS.md §6）；编排 `fn xxx_inner(db, …)`为纯函数（:memory: 可测），薄 `#[tauri::command]` 壳只取 state.db 调 inner。一表两面：kind 区分 decision（思辨面）/application（学习面·记一次使用），不双表双记、只记"我的决策"。（自动摘取，待细化） | 若再增长：按职责拆分 |
 | app/src-tauri/src/structure_capture_tests.rs | 331 | 纯函数（网格换算/裁剪钳制/过滤上下文组装）+ 端到端集成（合成表格帧+字幕帧参考图集 → 直扫分析 → 只收表格拒字幕 + 幂等重跑+ 降级跳过）；tempfile + 内存库隔离（不触碰真实数据）。（自动摘取，待细化） | 若再增长：按职责拆分 |

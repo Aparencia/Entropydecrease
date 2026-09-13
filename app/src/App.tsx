@@ -19,7 +19,7 @@
  *              `ShellFallback` 首访加载态（此前懒 chunk 失败会一路抛到最外层 AppErrorBoundary ⇒
  *              整个导航壳被卸载、已访问页状态一起丢）。边界在 `shell/ShellFallback.tsx`。
  */
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -46,6 +46,8 @@ import { ShellFallback, SlotErrorBoundary } from "./shell/ShellFallback";
 // 两件**签名与语义逐字不变**（只搬不改，C9.19 第 1 条）：文档段随代码搬走，本文件只剩装配与调用点。
 import { PageSlot } from "./shell/PageSlot";
 import { AiToast } from "./shell/aiToast";
+// 批 7 T1：`[[ts:ms]]` 深链的目标规格（**纯数据 + 纯函数**）—— 状态与 setter 仍住本文件（源码文本判据）。
+import { seekKeyOf, type FocusSeek } from "./shell/focusRouting";
 // REQ-274（v0.19.4）：全局 AI 对话面板（丙案——按需唤起 + 内容保活）
 // 批 2 包体治理：从静态 import 改为按需 import，并在它之前加一道「首开挂载」闸门。
 // @ai-context: 原语义（见文件末尾 dock 渲染处的注释）是「常驻挂载——开合仅切 display，
@@ -159,6 +161,10 @@ function MainShell() {
   const [focusNoteId, setFocusNoteId] = useState<number | null>(null);
   // v0.19.1（REQ-260）：引用跳笔记 + 命中词高亮（key 递增——同笔记重复引用可重触发）
   const [focusNoteSearch, setFocusNoteSearch] = useState<{ noteId: number; search: string; key: number } | null>(null);
+  // 批 7 T1（R4/R9.1 的最小形态 · C9.2）：`[[ts:ms]]` 深链的 **ms 载体**（`goSessions` 的第二个实参写它；`undefined` ⇒ 不 seek）。
+  // @ai-context 为什么是 `{ms,key}` 而不是裸 number：裸值 setState 同值不触发 ⇒ 会话页已打开时再点同一时间码不会重新定位（其余 5 个粘滞字段的形态改造越权，登记批 8）。
+  const [focusSeekMs, setFocusSeekMs] = useState<FocusSeek | null>(null);
+  const focusSeekKeyRef = useRef(0);
 
   // v0.19.1 审查 H1 修复：普通打开统一清带词态——focusNoteSearch 只写不清时，
   // NotesPage 合并 effect 会优先取残留的旧引用笔记，后续普通跨页跳转被重定向
@@ -175,7 +181,10 @@ function MainShell() {
   // 状态机、字段类型、各页消费逻辑一个字节未动（删字段 / 改路由参数是批 5 的视图层重构）。
   // 入口映射：⌘K 侧能独立发起的是页面命令（9 个）· 建体系向导 · 检索结果（带 ID 的笔记深链）；
   // 其余带 ID 的深链（会话/体系/复习组/工作台/对话）仍由**页内入口**发起 —— ID 只有页内有。
-  const goSessions = (sessionId: number) => {
+  const goSessions = (sessionId: number, ms?: number) => {
+    const key = seekKeyOf(Date.now(), focusSeekKeyRef.current);
+    focusSeekKeyRef.current = key;
+    setFocusSeekMs(ms === undefined ? null : { ms, key });
     setFocusSessionId(sessionId);
     setPage("sessions");
   };
@@ -399,6 +408,9 @@ function MainShell() {
             onRefineTaskStarted={(_sessionId, taskId) => goChatTask(taskId)}
             active={page === "sessions"}
             onOpenNote={(id) => openNotePlain(id)}
+            // 批 7 T1（C9.2：接口在 7a 备好、行为在 7b 落地）：ms 载体下传 + 消费后复位
+            focusSeekMs={focusSeekMs}
+            onFocusSeekConsumed={() => setFocusSeekMs(null)}
           />
         </PageSlot>
         <PageSlot show={page === "notes"} mounted={mountedPages.has("notes")}>
