@@ -182,6 +182,8 @@ const SLOT: SessionViewSlot = {
   onClearToast: () => undefined,
   autoRefineTaskId: 77,
   onRefineTaskStarted: (sessionId: number, taskId: number) => `cb#${sessionId}/${taskId}`,
+  /** T17（§C49①）：`[[ts:ms]]` 芯片的**页内 seek** 出口（返回标记串 ⇒ 能逐字断言 ms 到位） */
+  onSeekMs: (ms: number) => `seek#${ms}`,
 };
 
 /** 每次渲染前清空：`NotePreviewView` 被 mock 成记录器 ⇒ 见证「适配器交给它什么」。 */
@@ -203,7 +205,7 @@ async function previewAdapter(): Promise<(p: SessionViewSlot) => unknown> {
 }
 
 describe("A1 `preview` 走会话槽适配器：SessionViewSlot ⇒ NotePreviewView props 逐字映射", () => {
-  it("load 解析出的组件把 detail.session.id / autoRefineTaskId / onRefineTaskStarted 逐字交给 NotePreviewView", async () => {
+  it("load 解析出的组件把 detail.session.id / autoRefineTaskId / onRefineTaskStarted / onSeekMs 交给 NotePreviewView", async () => {
     const Adapter = await previewAdapter();
     seen.length = 0;
     renderToStaticMarkup(Adapter(SLOT) as never);
@@ -216,9 +218,17 @@ describe("A1 `preview` 走会话槽适配器：SessionViewSlot ⇒ NotePreviewVi
     expect(props.autoTaskId).toBe(77);
     // ③ 回调身份不变（同一引用 ⇒ 下游 onTaskStarted 仍能触发宿主的状态更新）
     expect(props.onTaskStarted).toBe(SLOT.onRefineTaskStarted);
-    // ④ 反面对照：适配器**不得**把整个槽当 props 甩给容器（那正是 `as` 强转的形态）
-    expect(Object.keys(props).sort()).toEqual(["autoTaskId", "onTaskStarted", "sessionId"]);
+    // ④ 反面对照：适配器**不得**把整个槽当 props 甩给容器（那正是 `as` 强转的形态）。
+    //    ⚠️ T17（§C49①）扩写：期望集合**多出 `onOpenSessionAt`** —— 仍是**逐字等式**（等强：
+    //    少一个映射键、或多甩一个槽字段都会被这条抓住），只是把新映射的那个出口也钉住。
+    expect(Object.keys(props).sort()).toEqual(["autoTaskId", "onOpenSessionAt", "onTaskStarted", "sessionId"]);
     expect(props.detail, "槽本身被当成 props 传下去了（= 强转形态，sessionId 会是 undefined）").toBeUndefined();
+    // ⑤ T17（§C49①）：`[[ts:ms]]` 芯片的 **ms 出口** —— 会话页**已经在目标会话里** ⇒ 不是跨页跳转，
+    //    而是**页内 seek**（`NotePreviewView.onOpenSessionAt(sessionId, ms)` → 槽的 `onSeekMs(ms)`）。
+    //    没有这条 ⇒「点了没反应的死芯片」可以悄无声息地回来（其变异体 = T17 报告 §4 的 M7）。
+    const at = props.onOpenSessionAt as ((sessionId: number, ms: number) => void) | undefined;
+    expect(typeof at, "适配器没把 ms 出口交给 NotePreviewView ⇒ 会话页预览里的芯片是死交互元素").toBe("function");
+    expect(at?.(1042, 5000), "芯片的 ms 没走到槽的 `onSeekMs`（页内 seek 断路）").toBe("seek#5000");
   });
 
   it("阴性样本：换了槽的 id，映射跟着变（常量冒充当场露馅）", async () => {
