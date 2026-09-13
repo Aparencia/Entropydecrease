@@ -59,7 +59,7 @@
    ⇒ 不进基类名单、只按「`animation` 声明逐字进名单」那条加进 `motion.css` 的 reduced-motion 块。
    `@keyframes` 在 `motion.css`（本层零 keyframes）；幅度真源 = `app/src/motion/env.ts` 的
    `LOW_CONFIDENCE_INK_AMPLITUDE`（本文件只写两端极值，不写 0.02）。
-   生产调用点 = `components/structuredBlocks.ts` 的 `lowConfidenceClass()`（`confidence < 0.5`）。 */
+   生产调用点 = `utils/lowConfidence.ts` 的 `lowConfidenceClass()`（`confidence < 0.5`）。 */
 .ed-text--low-confidence {
   animation: ed-unconfirmed-breathe calc(var(--ed-dur-skeleton, 1200ms) * 4)
              var(--ed-ease-paper, cubic-bezier(0.215, 0.61, 0.355, 1)) infinite;

@@ -38,7 +38,7 @@ export const LOW_CONFIDENCE_INK_AMPLITUDE = 0.02;
  *
  * 🔴 形状受 `ui/primitives/motion-coverage.test.ts` 的选择器域约束，**不得**改回旧的 `ed-low-confidence`
  * （那个名字不在任何基类域内，会被「未登记基类」判据拦下；要放行它就得改三条既有断言 = G16，
- * 控制方 R12.1 已裁定**不启用**）。生产调用点 = `components/structuredBlocks.ts` 的
+ * 控制方 R12.1 已裁定**不启用**）。生产调用点 = `utils/lowConfidence.ts` 的
  * `lowConfidenceClass()`（`SessionSegment.confidence < 0.5` 的段）；样式落点 = `ui/primitives/Text.css`。
  */
 export const LOW_CONFIDENCE_CLASS = "ed-text--low-confidence";

@@ -180,7 +180,7 @@ pub async fn delete_session(state: State<'_, AppState>, id: i64) -> Result<bool,
     Ok(ok)
 }
 
-/// 追加转写段（实时捕获链路调用）。
+/// 追加转写段（**不是**实时捕获链路的调用点 —— 真实链路是 `live_session_persist.rs` 直呼 `db.add_segment`）。
 /// @ai-context 已依规格 §1 L5 行 31 从 IPC 撤下（批 7）；实现保留供内部/未来接线，勿再注册。
 #[allow(dead_code)] // 批 7：已从 IPC 撤下（规格 §1 L5 行 31）⇒ lib 内暂无调用方，保留实现（同 db_colors.rs:42 先例）
 pub async fn add_session_segment(
@@ -211,7 +211,7 @@ pub async fn add_session_segment(
     state.db.add_segment(&new).map(|s| s.id).map_err(|e| e.to_string())
 }
 
-/// 追加 OCR 块（实时捕获链路调用）。
+/// 追加 OCR 块（**不是**实时捕获链路的调用点 —— 真实链路是 `live_frame_process.rs` / `live_keyframes.rs` 直呼 `db.add_ocr_block`）。
 /// @ai-context 已依规格 §1 L5 行 31 从 IPC 撤下（批 7）；实现保留供内部/未来接线，勿再注册。
 #[allow(dead_code)] // 批 7：已从 IPC 撤下（规格 §1 L5 行 31）⇒ lib 内暂无调用方，保留实现（同 db_colors.rs:42 先例）
 pub async fn add_session_ocr_block(
