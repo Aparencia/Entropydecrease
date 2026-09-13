@@ -31,7 +31,7 @@ import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AiToast } from "../App";
+import { AiToast } from "../shell/aiToast"; // 批 7 T1（Y1）：装配件搬到 shell/aiToast.tsx（纯搬迁）
 import { Z_TIER } from "../ui/zIndex";
 
 const HERE = dirname(fileURLToPath(import.meta.url));

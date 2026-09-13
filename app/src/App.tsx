@@ -42,12 +42,10 @@ import { CommandPalette } from "./shell/CommandPalette";
 // 批 3 T13：壳层的**首访加载态**与**叶级错误边界**（批 2 §瓶颈清单转交的三条）——自足实现、
 // 刻意不 import 原语层（非目标 2，两个组件是批 4 换 `Loading` / `StatusLine` 的迁移点）。
 import { ShellFallback, SlotErrorBoundary } from "./shell/ShellFallback";
-// 批 4 T10：AI toast 从自足内联实现交给 L1 的 `Toast` 原语（文件末尾 `AiToast` 处）。
-// @ai-context: 批 3 T7 曾把它从 56px 导航行搬到固定覆盖层（实测它是 1024 溢出的唯一主因：
-//   单项 373.75 px = 视口的 36.5%；含它 1375.74 px、剔除它 997.99 px），本任务承其结论不动落点，
-//   只把**定位 / 层级 / 三档墨度 / 退场**四项交给原语（fixed + `--ed-nav-h` 锚点 + `zIndex("toast")`
-//   全在原语层）。⚠️ 这是 B5 的 barrel 代价在首屏的第二个触发点（T9 先到则归 T9）。
-import { Toast } from "./ui/primitives";
+// 批 7 T1：`PageSlot`（页面容器）与 `AiToast`（AI toast 装配件）的定义体从本文件抽到 `shell/`（C9.2 腾行数）——
+// 两件**签名与语义逐字不变**（只搬不改，C9.19 第 1 条）：文档段随代码搬走，本文件只剩装配与调用点。
+import { PageSlot } from "./shell/PageSlot";
+import { AiToast } from "./shell/aiToast";
 // REQ-274（v0.19.4）：全局 AI 对话面板（丙案——按需唤起 + 内容保活）
 // 批 2 包体治理：从静态 import 改为按需 import，并在它之前加一道「首开挂载」闸门。
 // @ai-context: 原语义（见文件末尾 dock 渲染处的注释）是「常驻挂载——开合仅切 display，
@@ -140,66 +138,6 @@ function App() {
         <MainShell />
       </CaptureStatusProvider>
     </AppErrorBoundary>
-  );
-}
-
-/**
- * PageSlot — 页面容器：首访挂载 + 保活 + display 门控 + 独立 Suspense。
- *
- * @ai-context: 批 2 包体治理的挂载闸门，也是「保留挂载」语义的唯一实现点。
- *   · mounted=false ⇒ 整棵子树不渲染 ⇒ 该页的 lazy chunk **不会被请求**（首屏收益的来源）；
- *   · mounted=true 之后永不回到 false ⇒ 已访问页面常驻（TD-004 保活语义，状态与事件监听不重置）；
- *   · 每页一个独立 Suspense + **叶级** `SlotErrorBoundary`：只有**新挂载**的页会挂起，
- *     已经可见的页不会因为邻居加载而被替换成 fallback（避免可见的闪烁）。
- * @ai-context: 批 3 T13：fallback 从 `null` 换成 `ShellFallback`（首访加载态，静态无动效），并在
- *   ⚠️ Suspense 之外加了**叶级**边界：懒 chunk 失败原本会一路抛到最外层 AppErrorBoundary ⇒
- *   **整个 MainShell 被卸载**（已访问页状态一起丢，批 2 评审 M-1）。边界在本函数内 ⇒ 只卸载出错的
- *   那一页，兄弟槽位与壳层状态保留（证明见 `shell/ShellFallback.test.tsx` 的「叶级」用例）。
- * 副作用：无。边界：children 是懒组件元素，未 mounted 时不会被 React 渲染 ⇒ 不触发 dynamic import。
- */
-function PageSlot({ show, mounted, children }: { show: boolean; mounted: boolean; children: React.ReactNode }) {
-  if (!mounted) return null;
-  return (
-    <div style={{ flex: 1, display: show ? "block" : "none", overflow: "hidden" }}>
-      <SlotErrorBoundary>
-        <Suspense fallback={<ShellFallback />}>{children}</Suspense>
-      </SlotErrorBoundary>
-    </div>
-  );
-}
-
-/**
- * AiToast — AI 任务完成/失败通知的**装配层**（批 4 T10：渲染交给 L1 `Toast`）。
- *
- * @ai-context: 状态仍由 `MainShell` 持有（监听 `ai:task-update`），本组件只做「状态 → 原语 props」
- *   的映射，并把迁移前逐字保留的三样东西钉在一处：文案（含 ✨/❌，逐字沿用）、时长 **3500ms**、
- *   testId **`ai-toast`**（批 3 裁决 A3 的语义锚；B15 要求它以**渲染级**断言保住 —— 本仓
- *   `MainShell` 未导出，故判据渲染这个**真实**装配件，见 `components/toastMigration.test.tsx`）。
- *   位置档 `placement="belowNav"`（读原语 `.ed-toast--below-nav`，消费壳层 token `--ed-nav-h`）：
- *   调用点写行内 `top` 覆盖类语义被 ADR-033 §4 逐字禁止 ⇒ 走 B6 特殊条款加的那个具名 prop。
- * 副作用：无（不读 store、不发请求、不写磁盘）。自动消失由原语计时（进入 `entered` 才开始，
- *   边界①），到点走 140ms 退场后回调 `onDismiss` —— 父级自己置 `open=false` 不会收到回敬（边界②）。
- * 边界：**同文案连续事件不重置窗口**（原语边界③ 以 `message`/`kind` 判「接管」）——迁移前
- *   `MainShell` 的裸 `setTimeout` 是「每个事件都重新计时」；差异只在「两次 AI 任务在同一 3.5s 内
- *   完成且文案逐字相同」时出现（该场景下可见时长可能比旧实现短，不会更长）。已登记在 T10 报告。
- */
-export function AiToast({
-  toast,
-  onDismiss,
-}: {
-  toast: { text: string; kind: "ok" | "err" } | null;
-  onDismiss: () => void;
-}): React.ReactElement {
-  return (
-    <Toast
-      open={toast !== null}
-      message={toast?.text ?? ""}
-      kind={toast?.kind ?? "ok"}
-      durationMs={3500}
-      placement="belowNav"
-      testId="ai-toast"
-      onDismiss={onDismiss}
-    />
   );
 }
 
