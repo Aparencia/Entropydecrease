@@ -14,7 +14,10 @@
  * 副作用：无（纯函数式渲染）。边界：`partials` 里 `committed === false` 的行按句读**一对多**展开
  *   （一行文本出多行），故本件返回的是**数组**而非单元素（`<>…</>` 不产生 DOM 节点）。
  */
+import { useMemo, useRef } from "react";
 import type { ReactElement } from "react";
+import { useRevealChoreography } from "./session-detail/useRevealChoreography";
+import type { RevealSegment } from "./session-detail/useRevealChoreography";
 import { Text } from "../ui/primitives";
 
 /** 定稿转写行（字幕或语音） */
@@ -68,25 +71,56 @@ function hasText(seg: string): boolean {
   return seg.trim().length > 0 && !/^[。！？!?…\s]+$/.test(seg);
 }
 
-/** 一条**定稿**转写行（时间码 · 来源色点 · 正文）—— 形态与拆前逐字相同 */
+/**
+ * 一条**定稿**转写行（时间码 · 来源色点 · 正文）—— 形态与拆前逐字相同。
+ *
+ * @ai-context 批 7 T20 的 7b 半（§C9.16）：本件是「逐段显影」（#2，`useRevealChoreography`）在
+ *   **采集期**的落点（课后落点 = `session-detail/SessionRawView.tsx`，批 6 T28）。两处**同一支动效**：
+ *   ① 这一行是**容器**（`ref`），② 行本体带 `data-seg-id`（`SEGMENT_SELECTOR` 的锚点），
+ *   ③ `data-tone="instrument"`（R3.4 逐字「每个动效落点显式声明基调」—— 采集面属**精密仪器**族）。
+ * @ai-context 🔴 **为什么逐行调用 hook、而不是整列表一个容器**：转写行是**流式追加**的 ——
+ *   整列表一个容器时，每到达一行都会让 `segments` 数组换新 ⇒ `delays` 换新 ⇒ 效果重跑 ⇒
+ *   **全部旧行一起重播**（每分钟几十次跳动）。逐行调用后：段数组逐行 memo 化（只认本行的
+ *   `text` / `time`）⇒ **只有新挂载的那一行显影一次**，旧行的依赖一个字不变、不重播。
+ * @ai-context 时间轴投影：直播行**没有 `end_ms`**（到达即定稿）⇒ 传退化段（`start_ms === end_ms`），
+ *   `charRate` 走 `len / 1` 的已登记退化口径（见 `useRevealChoreography.ts` 文件头）。
+ *   位移只由 hook 经出口写（本件**不自持**起始态、不写 `style.transform`）。
+ * @ai-context 边界：`eco` / reduced-motion ⇒ 出口直接落终态、零在场 tween（hook 内部决定，本件不复制
+ *   第二份 `matchMedia` 分支）；**未沉淀行（`PendingRows`）不挂显影** —— 它们的文本每来一个 partial
+ *   就整体换新，挂上去等于「每次识别都重播」，那不是显影而是抖动。⚠️ 逐行观感/真实帧率**本批未测**
+ *   （jsdom 无排版、无 paint；像素与手感归批 8）。
+ */
 export function TranscriptRow({ line, fmtTime }: { line: TranscriptLine; fmtTime: (ms: number) => string }): ReactElement {
+  const box = useRef<HTMLDivElement | null>(null);
+  const segs = useMemo<RevealSegment[]>(
+    () => [{ text: line.text, start_ms: line.time, end_ms: line.time }],
+    [line.text, line.time],
+  );
+  const reveal = useRevealChoreography(box, segs);
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 13, lineHeight: 1.6 }}>
-      <Text tone="ink-3" style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-        {fmtTime(line.time)}
-      </Text>
-      <span
-        title={line.source === "subtitle" ? "字幕" : "语音"}
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: 4,
-          flexShrink: 0,
-          alignSelf: "center",
-          background: line.source === "subtitle" ? "#0d9488" : "#9ca3af",
-        }}
-      />
-      <span style={{ color: line.source === "subtitle" ? "#0f766e" : "#374151" }}>{line.text}</span>
+    <div ref={box}>
+      <div
+        data-seg-id={`live-${line.id}`}
+        data-tone="instrument"
+        data-reveal-epoch={reveal.revealEpoch}
+        style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 13, lineHeight: 1.6 }}
+      >
+        <Text tone="ink-3" style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+          {fmtTime(line.time)}
+        </Text>
+        <span
+          title={line.source === "subtitle" ? "字幕" : "语音"}
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            flexShrink: 0,
+            alignSelf: "center",
+            background: line.source === "subtitle" ? "#0d9488" : "#9ca3af",
+          }}
+        />
+        <span style={{ color: line.source === "subtitle" ? "#0f766e" : "#374151" }}>{line.text}</span>
+      </div>
     </div>
   );
 }
