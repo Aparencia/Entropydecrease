@@ -1,21 +1,22 @@
 {
-  "generatedFrom": "node scripts/check-bundle-budget.mjs --no-build --json（2026-09-13 实测；批 7 T9）",
+  "generatedFrom": "node scripts/check-bundle-budget.mjs（**真构建**，不带 --no-build）· 源码 = 80b1eabc（T9 的提交树） · 读数存档 tmp/t9/fresh-dist.json",
   "unit": "gzip = zlib.gzipSync level 6 · 族前缀 = 去掉 8 位内容 hash 的 chunk 名 + '-'（chunk 名带内容 hash，不稳定，不能当键）",
-  "semantics": "全部字段 = 当次实测的**冻结值**，只许降（批 7 §C9.6 第 2 条 / §C10.4）；写乐观「预算值」会立刻红",
+  "scope": "🔴 必须在**新鲜构建**产物上判定（§C21.3）：旧 dist 上的 --no-build 读数含时代残渣，上界会虚高（实测 +64,497 B）⇒ 本判据的合格调用 = 不带 --no-build（本脚本自行构建）或显式 --dist 指认受判产物",
+  "semantics": "全部字段 = 实测**冻结值**，只许降（批 7 §C9.6 第 2 条 / §C10.4）；写乐观「预算值」会立刻红",
   "lazyChunkCountMax": 36,
-  "lazyTotalGzipBytesMax": 698859,
+  "lazyTotalGzipBytesMax": 634316,
   "families": [
     {
       "prefix": "ActionPage-",
-      "gzipBytesMax": 8191
+      "gzipBytesMax": 8190
     },
     {
       "prefix": "AiConversationDock-",
-      "gzipBytesMax": 2807
+      "gzipBytesMax": 2806
     },
     {
       "prefix": "CaptureFloatPanel-",
-      "gzipBytesMax": 4538
+      "gzipBytesMax": 4537
     },
     {
       "prefix": "CaptureOverlayPanel-",
@@ -23,11 +24,11 @@
     },
     {
       "prefix": "ChatPage-",
-      "gzipBytesMax": 11382
+      "gzipBytesMax": 11383
     },
     {
       "prefix": "ConfirmDialog-",
-      "gzipBytesMax": 765
+      "gzipBytesMax": 764
     },
     {
       "prefix": "GoalsPage-",
@@ -35,19 +36,19 @@
     },
     {
       "prefix": "KnowledgePage-",
-      "gzipBytesMax": 27621
+      "gzipBytesMax": 27620
     },
     {
       "prefix": "NoteCardFlowView-",
-      "gzipBytesMax": 787
+      "gzipBytesMax": 785
     },
     {
       "prefix": "NoteMarkdown-",
-      "gzipBytesMax": 2948
+      "gzipBytesMax": 2950
     },
     {
       "prefix": "NotesPage-",
-      "gzipBytesMax": 47047
+      "gzipBytesMax": 47045
     },
     {
       "prefix": "RefineLaunchDialog-",
@@ -55,23 +56,23 @@
     },
     {
       "prefix": "RefineStrategyPicker-",
-      "gzipBytesMax": 2710
+      "gzipBytesMax": 2709
     },
     {
       "prefix": "ReviewPage-",
-      "gzipBytesMax": 6815
+      "gzipBytesMax": 6813
     },
     {
       "prefix": "SessionCardFlowView-",
-      "gzipBytesMax": 767
+      "gzipBytesMax": 766
     },
     {
       "prefix": "SessionNotePreview-",
-      "gzipBytesMax": 4899
+      "gzipBytesMax": 4898
     },
     {
       "prefix": "SessionProofView-",
-      "gzipBytesMax": 1069
+      "gzipBytesMax": 1067
     },
     {
       "prefix": "SessionScreenCard-",
@@ -79,15 +80,15 @@
     },
     {
       "prefix": "SessionTriTrackView-",
-      "gzipBytesMax": 4325
+      "gzipBytesMax": 4324
     },
     {
       "prefix": "SessionsPage-",
-      "gzipBytesMax": 21012
+      "gzipBytesMax": 20987
     },
     {
       "prefix": "SettingsPage-",
-      "gzipBytesMax": 17762
+      "gzipBytesMax": 17760
     },
     {
       "prefix": "TaskConversationView-",
@@ -95,7 +96,7 @@
     },
     {
       "prefix": "ViewSwitcher-",
-      "gzipBytesMax": 562
+      "gzipBytesMax": 559
     },
     {
       "prefix": "colorPalette-",
@@ -123,7 +124,7 @@
     },
     {
       "prefix": "useColumnFlip-",
-      "gzipBytesMax": 817
+      "gzipBytesMax": 815
     },
     {
       "prefix": "useDbRefresh-",
@@ -143,7 +144,7 @@
     },
     {
       "prefix": "vendor-katex-",
-      "gzipBytesMax": 144412
+      "gzipBytesMax": 79915
     },
     {
       "prefix": "vendor-md-",

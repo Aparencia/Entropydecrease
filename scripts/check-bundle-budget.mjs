@@ -14,10 +14,12 @@
  *  3. gzip = `zlib.gzipSync(buf, { level: 6 })`；kB = **十进制 ÷1000**（vite 自己打印的口径，不是 KiB ÷1024）。
  *     冻结校准点：今天单一 chunk 构建下入口 chunk = **654,722 B = 654.72 kB**，与 vite 打印值逐字相等
  *     （计划者 / Task 1 / 控制方三方独立复现）。**若本脚本与此值不符，先怀疑脚本，绝不改数字。**
- *  4. **懒侧（仅动态可达的 `.js`）有独立的第二个预算**（批 7 §C9.6 / §C10.4）：族前缀**清单等式** +
+ *  4. **懒侧（仅动态可达的 `.js`）有独立的第二个预算**（批 7 §C9.6 / §C10.4 / §C21.3）：族前缀**清单等式** +
  *     **逐族 gzip 上限** + **懒侧总 gzip 上限**（另加 chunk 数上限），基线 = `scripts/lazyBudget.json` 的
- *     **实测冻结值**、只许降（写「预算值」式的乐观目标会立刻红）。判据键是**族前缀**（`vendor-katex-*`）而非
- *     chunk 名（后者带内容 hash、不稳定）。🔴 首屏与懒侧是**两个独立读数**：懒侧判定不得影响首屏字段。
+ *     **实测冻结值**、只许降。判据键是**族前缀**（`vendor-katex-*`）而非 chunk 名（带内容 hash、不稳定）。
+ *     🔴 **口径：本判据只在新鲜构建的产物上成立** —— 旧 `dist` 带着上一个时代的残渣（实测：顶层 katex 被删后旧
+ *     产物仍多 **64,497 B** gzip）⇒ **`--no-build` 的读数不可用于本判据**（要判既有产物就显式 `--dist` 指认）。
+ *     首屏与懒侧是**两个独立读数**：懒侧判定不得影响首屏字段。
  *
  * 仪器陷阱（本批实测，勿改回）：
  *  - 静态边在产物里长 `from"./x-abc.js"`：**引号必须紧跟** `from` / `import`，故 `import(` 天然不匹配；
@@ -25,18 +27,18 @@
  *  - chunk basename 必须用 `[^"'/\\]+\.js`：产物名含 `-` 与 `.`，收窄成 `\w+` 会一个 chunk 都扫不到。
  *  - 扫描是正则级、不做 AST：注释/字符串里恰好出现 `from"./x.js"` 会误判（本仓产物实测未触发）。
  *  - `modulepreload` 交叉核对只作参考、不影响退出码（vite 对动态依赖的预载发生在运行时）。
- * 边界：vite 的 chunk 一律**平铺**在 `dist/assets/` 下（本脚本按 basename 解析）；不解析 sourcemap、
- *      不解析 CSS 里的 `url()`、不认带 query 的说明符 —— 三者在本仓产物中都不存在。
+ * 边界：vite 的 chunk 一律**平铺**在 `dist/assets/` 下（本脚本按 basename 解析）；不解析 sourcemap、CSS 里的 `url()`、带 query 的说明符 —— 三者在本仓产物中都不存在。
  *
  * 副作用：默认执行 `cd app && npm run build`（写 `app/dist/`）；`--no-build` 只读既有产物。
  *        `--self-test` 在 `os.tmpdir()` 下建夹具并在结束时删除，**不碰真实 `app/dist`**。
  * 用法：node scripts/check-bundle-budget.mjs [--no-build] [--budget <kB>] [--json] [--self-test] [--dist <目录>] [--no-lazy]
- *        `--dist` 供自检夹具 / 备用产物目录使用（默认 `app/dist`），与构建互斥、须配 `--no-build`。
+ *        `--dist` 供自检夹具 / 备用产物目录使用（默认 `app/dist`），与构建互斥、须配 `--no-build`。给 `--dist`
+ *        即视作**你把该产物作为受判对象**（懒侧判据据此启用）；不给则 `--no-build` **只判首屏**（懒侧见下条）。
  *        `--json` 与默认构建同用会把 vite 输出混进 stdout；机器消费请配 `--no-build`。
- *        `--no-lazy` **只**给 `--dist` 的夹具用，且**不得**指向默认产物目录 ⇒ CI / husky / 收口读数都不带它，
- *        **真实产物上懒侧门禁恒开**（它不是「可以关掉的守卫」）。
+ *        `--no-lazy` **只**给 `--dist` 的夹具用（人工造的夹具不可能命中真实基线），且**不得**指向默认产物目录。
  * 退出码：0 = **首屏与懒侧两个预算都达标** · 1 = **任一预算超标（首屏 / 懒侧）** ·
- *        2 = 构建失败 / 产物缺失 / 自检失败。两个读数**互相独立**：懒侧判定**不得**影响首屏字段（批 7 §C11.5）。
+ *        2 = 构建失败 / 产物缺失 / 自检失败。两个读数**互相独立**：懒侧判定**不得**影响首屏字段（批 7 §C11.5）；
+ *        懒侧**未判**时（裸 `--no-build`）退出码回到「只判首屏」的旧契约 —— 不许把「没判」当「达标」。
  */
 import { readFileSync, existsSync, statSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
@@ -60,6 +62,8 @@ const DIST = resolve(opt("--dist", join(APP, "dist")));
 const BUDGET_KB = Number(opt("--budget", "200"));
 const BUDGET_SOURCE = "docs/standards/performance.md:28";
 const LAZY_BUDGET = join(dirname(SELF), "lazyBudget.json");
+// 懒侧判据的**合格口径 = 新鲜构建**（§C21.3）：① 不带 `--no-build` ⇒ 本次真构建；② 显式 `--dist` ⇒ 操作者把该产物作为受判对象交进来；两者都不满足（裸 `--no-build`）⇒ 只判首屏，懒侧**不下判定**。
+const JUDGE_LAZY = !NO_LAZY && (!NO_BUILD || has("--dist"));
 
 /** 全部失败路径的统一出口：**必须** exit 2（1 只留给「超预算」），并给出可执行的下一条命令。 */
 function fail(msg) {
@@ -67,9 +71,7 @@ function fail(msg) {
   process.exit(2);
 }
 
-/**
- * 懒侧基线（冻结值）：**缺失即失败**，绝不静默放行 —— 「读不到基线就当达标」是这类门禁最典型的失效形态。
- */
+/** 懒侧基线（冻结值）：**缺失即失败**，绝不静默放行 —— 「读不到基线就当达标」是这类门禁最典型的失效形态。 */
 function loadLazyBudget(p) {
   if (!existsSync(p) || !statSync(p).isFile()) fail(`找不到懒侧基线 ${rel(p)} —— 基线缺失时不得静默按「达标」放行。`);
   const b = JSON.parse(readFileSync(p, "utf8"));
@@ -83,9 +85,8 @@ const HASH_SUFFIX = /-[A-Za-z0-9_-]{8}\.js$/;
 const familyPrefixOf = (name) => (HASH_SUFFIX.test(name) ? name.replace(HASH_SUFFIX, "") + "-" : null);
 
 /**
- * 懒侧四条判据：① **清单等式**（每个懒侧 chunk 都必须归属某个已登记族 —— 没有 `others` 白名单，就是要让
- * 产物演进**红**而不是静默通过）② **逐族 gzip 上限** ③ **总 gzip 上限** ④ chunk 数上限。
- * 每条**各产生一条具名 reason**（C9.6 第 3 条：必须红在具名断言上）。
+ * 懒侧四条判据：① **清单等式**（每个懒侧 chunk 都必须归属某个已登记族 —— 没有 `others` 白名单，就是要让产物
+ * 演进**红**而不是静默通过）② **逐族 gzip 上限** ③ **总 gzip 上限** ④ chunk 数上限；每条各一条**具名 reason**。
  */
 function judgeLazy(r, base) {
   const fams = new Map(base.families.map((f) => [f.prefix, { prefix: f.prefix, gzipBytesMax: f.gzipBytesMax, chunks: [], gzipBytes: 0 }]));
@@ -98,13 +99,12 @@ function judgeLazy(r, base) {
   }
   const families = [...fams.values()];
   const totalBytes = r.lazy.reduce((a, c) => a + c.gzipBytes, 0);
-  const overFamilies = families.filter((f) => f.gzipBytes > f.gzipBytesMax);
   const reasons = [];
   if (unlisted.length) reasons.push(`① 族前缀清单等式：未归族 ${unlisted.length} 个（${unlisted.join(", ")}）`);
-  for (const f of overFamilies) reasons.push(`② 逐族上限：${f.prefix} gzip ${fmtB(f.gzipBytes)} B > 上限 ${fmtB(f.gzipBytesMax)} B`);
+  for (const f of families) if (f.gzipBytes > f.gzipBytesMax) reasons.push(`② 逐族上限：${f.prefix} gzip ${fmtB(f.gzipBytes)} B > 上限 ${fmtB(f.gzipBytesMax)} B`);
   if (totalBytes > base.lazyTotalGzipBytesMax) reasons.push(`③ 懒侧总 gzip：${fmtB(totalBytes)} B > 上限 ${fmtB(base.lazyTotalGzipBytesMax)} B`);
   if (r.lazy.length > base.lazyChunkCountMax) reasons.push(`④ 懒侧 chunk 数：${r.lazy.length} > 上限 ${base.lazyChunkCountMax}`);
-  return { families, unlisted, overFamilies, totalBytes, totalMax: base.lazyTotalGzipBytesMax, count: r.lazy.length, countMax: base.lazyChunkCountMax, reasons, pass: reasons.length === 0 };
+  return { families, unlisted, overFamilies: families.filter((f) => f.gzipBytes > f.gzipBytesMax), totalBytes, totalMax: base.lazyTotalGzipBytesMax, count: r.lazy.length, countMax: base.lazyChunkCountMax, reasons, pass: reasons.length === 0 };
 }
 
 /** 参考项：HTML 用 modulepreload 声明但静态闭包没覆盖的 .js —— 值得人看一眼，不影响判定。 */
@@ -128,9 +128,8 @@ function printHuman(r, pass, lazy) {
   const lazyBytes = r.lazy.reduce((a, c) => a + c.gzipBytes, 0);
   console.log(`懒加载 chunk（仅动态可达，独立于首屏预算）：${r.lazy.length} 个 · gzip ${fmtB(lazyBytes)} B = ${kB(lazyBytes)} kB`);
   if (lazy) {
-    console.log(`  懒侧口径：族前缀清单等式 + 逐族 gzip 上限 + 懒侧总 gzip 上限 · 基线 ${rel(LAZY_BUDGET)}（实测冻结值，只许降）· 未归族与超上限都红`);
-    console.log(`  ⇒ 懒侧预算 ${lazy.pass ? "✅ 达标" : "❌ 超标"}：gzip ${kB(lazy.totalBytes)} kB / 上限 ${kB(lazy.totalMax)} kB · chunk ${lazy.count} 个 / 上限 ${lazy.countMax} 个 · 未归族 ${lazy.unlisted.length} 个 · 超上限族 ${lazy.overFamilies.length} 个`);
-  } else console.log(`  ⇒ 懒侧预算 ⏭ 未判（--no-lazy，仅供 --dist 夹具；真实产物上恒判）`);
+    console.log(`  ⇒ 懒侧预算 ${lazy.pass ? "✅ 达标" : "❌ 超标"}：gzip ${kB(lazy.totalBytes)} kB / 上限 ${kB(lazy.totalMax)} kB · chunk ${lazy.count} 个 / 上限 ${lazy.countMax} 个 · 未归族 ${lazy.unlisted.length} 个 · 超上限族 ${lazy.overFamilies.length} 个（基线 ${rel(LAZY_BUDGET)}，实测冻结值只许降）`);
+  } else console.log(`  ⇒ 懒侧预算 ⏭ 未判（${NO_LAZY ? "--no-lazy：自检夹具" : "--no-build 的读数不可用于本判据（旧产物会多算 ~64 kB）—— 去掉 --no-build 让本脚本代跑构建，或显式 --dist 指认受判产物"}）`);
   console.log(`不计入预算但须报告（CSS / 字体）：index.html ${fmtB(r.htmlBytes)} B = ${kB(r.htmlBytes)} kB · gzip ${kB(r.htmlGzip)} kB`);
   const byExt = new Map();
   for (const a of r.excluded) {
@@ -157,6 +156,7 @@ const jsonOf = (r, pass, lazy) => ({
   lazy: { count: r.lazy.length, chunks: r.lazy, totalBytes: r.lazy.reduce((a, c) => a + c.gzipBytes, 0) },
   lazyBudget: lazy
     ? {
+        judged: true,
         pass: lazy.pass,
         baseline: rel(LAZY_BUDGET),
         count: lazy.count,
@@ -168,18 +168,18 @@ const jsonOf = (r, pass, lazy) => ({
         fails: lazy.reasons,
         families: lazy.families.map((f) => ({ prefix: f.prefix, chunkCount: f.chunks.length, gzipBytes: f.gzipBytes, gzipBytesMax: f.gzipBytesMax, pass: f.gzipBytes <= f.gzipBytesMax })),
       }
-    : { pass: true, skipped: "--no-lazy（仅供 --dist 夹具；真实产物上恒判）" },
+    : { judged: false, pass: null, skipped: NO_LAZY ? "--no-lazy（自检夹具）" : "--no-build 的读数不可用于懒侧判据（口径要求新鲜构建；亦可在显式 --dist 下判定）" },
   excludedFromBudget: { indexHtml: { bytes: r.htmlBytes, gzipBytes: r.htmlGzip }, assets: r.excluded },
   pass,
 });
 
 /**
- * 报表 + 退出码：0 = **两个预算都达标** · 1 = **任一超标**（首屏 / 懒侧，各自点名）。
- * 🔴 顶层 `pass` 是**首屏** pass（既有消费方的兼容字段）；懒侧见 `lazyBudget.pass`。
+ * 报表 + 退出码：0 = **两个预算都达标** · 1 = **任一超标**（首屏 / 懒侧，各自点名）。顶层 `pass` 是**首屏** pass
+ * （既有消费方的兼容字段）；懒侧见 `lazyBudget.pass`（`judged:false` 时它是 `null`，不是「达标」）。
  */
 function finish(r) {
   const pass = r.eagerBytes / 1000 < BUDGET_KB;
-  const lazy = NO_LAZY ? null : judgeLazy(r, loadLazyBudget(LAZY_BUDGET));
+  const lazy = JUDGE_LAZY ? judgeLazy(r, loadLazyBudget(LAZY_BUDGET)) : null;
   if (AS_JSON) {
     console.log(JSON.stringify(jsonOf(r, pass, lazy), null, 2));
   } else {
