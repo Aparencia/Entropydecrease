@@ -131,6 +131,9 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
   // ── 视频类型档案（v0.5.0 M1，REQ-043：混合检测用户确认结果）──
   // v0.7.1：初始「未知」——未检测/无法自动识别时如实标注（参数走默认档零回归）
   const [profileKind, setProfileKind] = useState<ProfileKind>("unknown");
+  // 批 7 T19：画面档用户选择（**仅显式改档时非空**——null 交给后端按记忆体解析，
+  // 否则每次都用本地默认档覆盖记忆，「跨会话记住」永不成立）
+  const [tierChoice, setTierChoice] = useState<string | null>(null);
 
   /** 开始实时捕获（REQ-007~012）：窗口可选（未选=全屏）；携带档案（REQ-043）。
    *  批 2b：受理/等待态 starting、prepare 重同步、守卫错自愈、20s 看门狗全部
@@ -144,6 +147,8 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
       sourceWindow: selectedWindow?.title ?? null,
       windowId: selectedWindow?.id ?? null,
       profile: profileKind,
+      // 批 7 T19：用户显式改过的画面档随 start 生效（null=后端按记忆体解析）
+      tier: tierChoice,
     });
     if (!outcome.ok) {
       // 无 message = 连点被 pending 忽略——静默，不当失败弹错
@@ -275,6 +280,7 @@ export default function ClassroomPage({ onOpenSessions }: { onOpenSessions?: (se
         onOpenSessions={onOpenSessions}
         onDismissFused={() => setFusedSessionId(null)}
         onProfileChange={setProfileKind}
+        onTierChange={setTierChoice}
       />
     </div>
   );

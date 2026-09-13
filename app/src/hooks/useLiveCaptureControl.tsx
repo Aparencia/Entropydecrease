@@ -44,6 +44,7 @@ export interface CaptureStartArgs {
   sourceWindow: string | null;
   windowId: number | null;
   profile: string;
+  tier?: string | null; // 批 7 T19：画面档（仅显式改档时给；缺省 ⇒ 后端按记忆体解析）
 }
 
 /** 动作结果（守卫错自愈 healed=true；message 供调用方转 UI 提示——不吞） */
@@ -184,6 +185,7 @@ export function CaptureStatusProvider({ children }: { children: ReactNode }) {
           sourceWindow: args.sourceWindow,
           windowId: args.windowId,
           profile: args.profile,
+          tier: args.tier ?? null,
         });
         const engineReady = freshPrepare === "ready";
         dispatch({ type: "start-resolved", sessionId, engineReady, nowMs: Date.now() });

@@ -1,10 +1,10 @@
 //! 档案记忆偏好域（REQ-043 / v0.7.2 REQ-152 系列键 / v0.9.0 REQ-188 四维形态 / v0.13.6 REQ-222 领域记忆）。
 //!
 //! @ai-context: 从 video_profile.rs 拆出（AGENTS.md §3 单文件 ≤300 行）：记忆偏好 =
-//!              「用户确认过一次 → 同窗口标题/同系列下次直接生效」。三条通道互相独立：
-//!              kind/form 走 entries，domain 走 domain_entries（防 domain-only 条目把
-//!              legacy kind 结果染成 Unknown）；三者的 tie-break 一律「最长关键词优先」
-//!              （len > best 严格大于 ⇒ 等长时先入条目胜出）。
+//!              「用户确认过一次 → 同窗口标题/同系列下次直接生效」。四条通道互相独立：
+//!              kind/form 走 entries，domain 走 domain_entries，tier 走 tier_entries
+//!              （批 7 T19）——防某通道的条目把别的通道结果染脏；四者的 tie-break 一律
+//!              「最长关键词优先」（len > best 严格大于 ⇒ 等长时先入条目胜出）。
 //! @ai-context: 副作用 = 文件 IO：load 读 JSON（缺失/损坏回落空库，不阻断启动）；
 //!              save 先写 .tmp 再 rename（原子写，防写一半损坏记忆库）。调用方保证
 //!              路径与并发（本域无锁、无 tauri state，可 tempfile 单测）。
@@ -46,6 +46,22 @@ pub struct DomainMemoryEntry {
     pub domain: crate::video_profile_spec::DomainTag,
 }
 
+/// 批 7 T19（规格 §1 L5 行 34「记忆加 tier 字段」）：画面档记忆条目。
+///
+/// @ai-context: 与 MemoryEntry（kind/form 通道）**分离**——防 tier-only 条目把
+///              legacy kind/form 结果染脏（与 DomainMemoryEntry 的分离理由同族）；
+///              与 `update_live_profile`（**采集态热切换**，改正在跑的会话）严格区分：
+///              本条只写记忆偏好（下次同标题/同系列会话的起点）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TierMemoryEntry {
+    pub keyword: String,
+    /// series 键标记（与 MemoryEntry.is_series 同口径）
+    #[serde(default)]
+    pub is_series: bool,
+    /// 用户确认的画面档（rich/medium/low/none）
+    pub tier: crate::video_profile_spec::VisualTier,
+}
+
 /// 记忆偏好库（JSON 持久化；同 vocab 模式：路径可注入，测试用 tempfile）。
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ProfileMemory {
@@ -53,6 +69,9 @@ pub struct ProfileMemory {
     /// v0.13.6（REQ-222）：领域记忆独立通道（旧 JSON 缺省空——零迁移）
     #[serde(default)]
     pub domain_entries: Vec<DomainMemoryEntry>,
+    /// 批 7 T19：画面档记忆独立通道（旧 JSON 缺省空——零迁移，同 domain_entries 先例）
+    #[serde(default)]
+    pub tier_entries: Vec<TierMemoryEntry>,
 }
 
 impl ProfileMemory {
@@ -191,6 +210,46 @@ impl ProfileMemory {
         best.map(|(_, tag)| tag)
     }
 
+    /// 批 7 T19（规格 §1 L5 行 34）：记录用户确认的画面档——同标题/系列下次直接生效。
+    ///
+    /// @ai-context: 独立通道不污染 kind/form 记忆；空键拒绝（不记悬挂条目）。
+    pub fn remember_tier(&mut self, keyword: &str, tier: crate::video_profile_spec::VisualTier) {
+        let (key, is_series) = Self::memory_key(keyword);
+        if key.is_empty() {
+            return;
+        }
+        if let Some(e) = self.tier_entries.iter_mut().find(|e| e.keyword == key) {
+            e.is_series = is_series;
+            e.tier = tier;
+        } else {
+            self.tier_entries.push(TierMemoryEntry { keyword: key, is_series, tier });
+        }
+    }
+
+    /// 按标题查询画面档记忆（批 7 T19）：series 键优先，完整标题兜底；最长关键词优先。
+    pub fn lookup_tier(&self, title: &str) -> Option<crate::video_profile_spec::VisualTier> {
+        if let Some(info) = crate::series_detect::extract_series(title) {
+            if let Some(t) = self.lookup_tier_best(&info.series) {
+                return Some(t);
+            }
+        }
+        self.lookup_tier_best(title)
+    }
+
+    /// 最长关键词优先匹配（纯函数；档位记忆专用通道）。
+    fn lookup_tier_best(&self, key: &str) -> Option<crate::video_profile_spec::VisualTier> {
+        let mut best: Option<(usize, crate::video_profile_spec::VisualTier)> = None;
+        for e in &self.tier_entries {
+            if key.contains(&e.keyword) && !e.keyword.is_empty() {
+                let len = e.keyword.chars().count();
+                if best.as_ref().is_none_or(|(bl, _)| len > *bl) {
+                    best = Some((len, e.tier));
+                }
+            }
+        }
+        best.map(|(_, tier)| tier)
+    }
+
     /// 按标题查询四维形态记忆（REQ-188）：form 优先，旧条目经 kind 映射兜底。
     ///
     /// @ai-context: 消费端 v2（检测卡/会话落库）用本方法；旧 lookup 保留为
@@ -226,3 +285,7 @@ impl ProfileMemory {
         best.map(|(_, form)| form)
     }
 }
+
+#[cfg(test)]
+#[path = "video_profile_memory_tests.rs"]
+mod tests;

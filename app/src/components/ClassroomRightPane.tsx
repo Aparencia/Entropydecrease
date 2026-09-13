@@ -15,7 +15,7 @@ import LiveActivityPanel from "./LiveActivityPanel";
 import ProfileDetector from "./ProfileDetector";
 import { Surface } from "../ui/primitives";
 import { columnSpec } from "../shell/columnRegistry";
-import type { Note, ProfileKind, WindowInfo } from "../types";
+import type { Note, ProfileKind, VisualTier, WindowInfo } from "../types";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
 
@@ -44,6 +44,8 @@ interface Props {
   onOpenSessions?: (sessionId: number) => void;
   onDismissFused: () => void;
   onProfileChange: (kind: ProfileKind) => void;
+  /** 批 7 T19：画面档显式改档上报（透传给 start_live_session 的第 5 参 tier） */
+  onTierChange?: (tier: VisualTier) => void;
 }
 
 export default function ClassroomRightPane({
@@ -57,6 +59,7 @@ export default function ClassroomRightPane({
   onOpenSessions,
   onDismissFused,
   onProfileChange,
+  onTierChange,
 }: Props) {
   return (
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -98,6 +101,7 @@ export default function ClassroomRightPane({
               <ProfileDetector
                 windowTitle={selectedWindow?.title ?? null}
                 onProfileChange={onProfileChange}
+                onTierChange={onTierChange}
               />
             </div>
             {lastNote ? (

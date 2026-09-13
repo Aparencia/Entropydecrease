@@ -6,10 +6,18 @@
  *              （美食烹饪等新增）、细目多选 chips（list_domain_fine 源 + 检测
  *              预选 + 切换即 preheat/remember——修改即记忆契约）、平台分区
  *              映射形态优先（platform_form 覆盖记忆/候选）。
+ * @ai-context: 批 7 T19 补三块（验收「档位选完真生效」的前端侧机器判据）：
+ *              ① 改档 ⇒ **真写后端** `remember_video_profile_tier`（含载荷逐字）+ 上报父级
+ *              （父级据此把 tier 带给 start_live_session 的第 5 参）；
+ *              ② 读端接线：`video_profile_for_spec`（形态 × 档位）是模板/采样行**真源**；
+ *              ③ 兜底必须留（AGENTS.md §3.4）：后端失败 ⇒ 回落本地 `video_profiles`。
  */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { DetectResult } from "../types";
+import type { DetectResult, VideoProfile } from "../types";
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
@@ -27,12 +35,28 @@ const detectResult: DetectResult = {
   domain: { kind: "economy", fine_tags: [], fine_ids: ["invest"], source: "platform-map", confidence: 1.0 },
 };
 
+/** 后端读端桩（video_profile_for_spec 的返回值——形态 × 档位 → 采样/模板） */
+const specStub: VideoProfile = {
+  kind: "lecture",
+  detect_signals: { title_keywords: [], url_keywords: [], frame_switch_range: null, prefers_subtitle: true, min_duration_min: null },
+  sampling_budget: { subtitle_every: 5, full_every: 60, silent_subtitle_every: 30, silent_full_every: 300 },
+  signal_weights: { subtitle_priority: true, ocr_weight: 0.7, asr_weight: 1 },
+  postprocess_rules: { chapter_detect: true, step_cards: false, verbal_normalize: false, highlight: true, speaker_detect: false, glossary: true },
+  artifact_template: "lecture-notes",
+  storage_tier: "balanced",
+  disable_ocr: false,
+  disable_asr: false,
+};
+
+/** 本地兜底桩（video_profiles 的返回值——离线/后端失败时的那条路） */
+const localStub: VideoProfile = { ...specStub, artifact_template: "summary" };
+
 beforeEach(() => {
   invokeMock.mockReset();
   invokeMock.mockImplementation(async (cmd: string) => {
     switch (cmd) {
       case "video_profiles":
-        return [];
+        return [localStub];
       case "list_domain_fine":
         return [["economy", [{ id: "invest", label: "投资理财" }, { id: "accounting", label: "会计财务" }]]];
       case "detect_video_profile":
@@ -89,5 +113,62 @@ describe("ProfileDetector v0.13.6 三维交互", () => {
         fine: ["invest", "accounting"],
       }),
     );
+  });
+
+  it("批 7 T19 ①：改档 ⇒ 真写后端记忆（载荷逐字）+ 上报父级（start 第 5 参的来源）", async () => {
+    const onTierChange = vi.fn();
+    render(<ProfileDetector windowTitle="某视频_哔哩哔哩_bilibili" onTierChange={onTierChange} />);
+    const combos = await screen.findAllByRole("combobox");
+    const tierSelect = combos[1] as HTMLSelectElement; // 形态/画面/领域
+    await waitFor(() => expect(tierSelect.value).toBe("low")); // 候选 talking-head 的默认档
+    // Act：用户显式改档（高）
+    fireEvent.change(tierSelect, { target: { value: "rich" } });
+    // Assert：① 真写后端记忆（跨会话通道）；② 上报父级（父级带进 start_live_session）
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("remember_video_profile_tier", {
+        title: "某视频_哔哩哔哩_bilibili",
+        tier: "rich",
+      }),
+    );
+    expect(onTierChange).toHaveBeenCalledWith("rich");
+    // 文案不再说谎（旧「仅本次会话生效」已随真写后端更正）
+    expect(await screen.findByText("画面档已记住（同标题/同系列下次生效）")).toBeTruthy();
+  });
+
+  it("批 7 T19 ②：模板/采样行以后端 video_profile_for_spec 为真源（形态 × 档位）", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "video_profiles") return [localStub];
+      if (cmd === "detect_video_profile") return detectResult;
+      if (cmd === "video_profile_for_spec") return specStub;
+      return null;
+    });
+    render(<ProfileDetector windowTitle="某视频_哔哩哔哩_bilibili" />);
+    // Assert：生产调用点（形态 × 档位）+ **用其返回值**（lecture-notes / 5s / 60s
+    // 来自后端；本地兜底桩是 summary ⇒ 两者可区分，防"只调不用"的假接线）
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith("video_profile_for_spec", { form: "lecture", tier: "low" }),
+    );
+    expect(await screen.findByText(/lecture-notes 模板 · 5s\/字幕 · 60s\/全帧/)).toBeTruthy();
+  });
+
+  it("批 7 T19 ③：读端失败 ⇒ 回落本地映射（兜底必须留——AGENTS.md §3.4）", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "video_profiles") return [localStub];
+      if (cmd === "detect_video_profile") return detectResult;
+      if (cmd === "video_profile_for_spec") throw new Error("offline");
+      return null;
+    });
+    render(<ProfileDetector windowTitle="某视频_哔哩哔哩_bilibili" />);
+    expect(await screen.findByText(/summary 模板/)).toBeTruthy();
+  });
+
+  it("批 7 T19 V6′/V7：前端映射仍在（角色=离线兜底）+ 文案注释不再说谎", () => {
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "ProfileDetector.tsx"), "utf8");
+    // V6′①：KIND_TO_FORM/KIND_TO_TIER **不得删除**（§C11.4：并行真源 → 离线降级路径）
+    expect(src, "KIND_TO_FORM 被删（兜底路径没了）").toContain("export const KIND_TO_FORM");
+    expect(src, "KIND_TO_TIER 被删（兜底路径没了）").toContain("const KIND_TO_TIER");
+    // V7：旧注释/旧文案已更正（拼接写法：避免本文件自身被后续全仓字面量扫描误伤）
+    expect(src.includes("TODO(" + "后端)"), "TODO(后端) 未删（它说的命令已存在）").toBe(false);
+    expect(src.includes("仅本次" + "会话生效"), "旧文案仍在（写后端之后它是谎话）").toBe(false);
   });
 });

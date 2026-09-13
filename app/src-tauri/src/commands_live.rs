@@ -42,6 +42,12 @@ pub struct LiveSessionStatus {
 /// @param sourceWindow - 目标窗口标题（笔记命名与检索）
 /// @param windowId - 目标窗口句柄（i64，None=全屏）
 /// @param profile - 视频类型档案标识（REQ-043，kebab-case；None=自动检测结果）
+/// @param tier - 批 7 T19（规格 §1 L5 行 34）：画面档位（kebab-case；**仅在用户显式改档
+///               时传入**——None 时按记忆体（同标题/同系列）兜底，仍无则不覆写 ⇒ 与
+///               今天逐字相同。非法值不阻断开始，按缺失处理，与 `profile` 同口径）
+/// @ai-context: 与 `update_live_profile`（**采集态热切换**：改正在跑的会话）严格区分——
+///              本参数只决定**新会话的起点档**（走 profile_override 共享槽，worker
+///              首拍消费并 retune 采样器），不改变任何在跑会话的语义。
 #[tauri::command]
 pub async fn start_live_session(
     state: State<'_, AppState>,
@@ -49,6 +55,7 @@ pub async fn start_live_session(
     source_window: Option<String>,
     window_id: Option<i64>,
     profile: Option<String>,
+    tier: Option<String>,
 ) -> Result<i64, String> {
     // v0.11.7（图文会话，ADR-020）：互斥——图文采集中不得开始实时捕获
     if state.photo_session.lock().map(|g| g.is_some()).unwrap_or(false) {
@@ -79,6 +86,22 @@ pub async fn start_live_session(
         }
     };
 
+    // 批 7 T19（§11-8「档位选完真生效 / 跨会话记住」）：档位解析 = 显式入参 > 记忆体
+    // （键用**窗口标题**——与检测卡写记忆时同一个键；会话标题已过同源去重/平台尾缀
+    // 净化，不能当记忆键）> None（不覆写 ⇒ 既有默认档行为逐字不变）。
+    let memory_title = source_window.clone().unwrap_or_else(|| title.clone());
+    let resolved_tier = {
+        let memory = state
+            .profile_memory
+            .lock()
+            .map(|m| m.clone())
+            .unwrap_or_default();
+        resolve_start_tier(tier.as_deref(), &memory, &memory_title)
+    };
+    // 预置覆写槽（与 update_live_profile 同一条 command→worker 通道）：start 内部只复位
+    // tier_override/applied_tier，**不**复位本槽 ⇒ 先写后 start 无竞态（首拍即消费）。
+    let override_slot = state.live_session.profile_override_slot();
+    let seeded = seed_initial_tier(&override_slot, resolved_tier);
     let params = LiveSessionParams {
         title: title.clone(),
         source_window: source_window.map(|s| s.chars().take(100).collect()),
@@ -113,9 +136,54 @@ pub async fn start_live_session(
     };
     // REQ-104/132：剪贴板监听时间戳基准——与实时会话纪元同域（图片文件名不冲突）
     let epoch = Instant::now();
-    let session_id = state.live_session.start(params).map_err(|e| e.to_string())?;
+    let session_id = match state.live_session.start(params) {
+        Ok(id) => id,
+        Err(e) => {
+            // 启动失败 ⇒ 清掉预置覆写（防残留到下个会话——同 tier_override 按会话复位之因）
+            if seeded {
+                if let Ok(mut guard) = override_slot.lock() {
+                    *guard = None;
+                }
+            }
+            return Err(e.to_string());
+        }
+    };
     start_clipboard_monitor(&state, session_id, epoch);
     Ok(session_id)
+}
+
+/// 把启动解析出的档位预置进档案覆写槽（批 7 T19 · 落地「档位随 start 生效」）。
+///
+/// @ai-context: screen worker 首拍 `take()` 消费 ⇒ 新会话从**用户选的档**起（而非默认
+///              档），并经 `applied_tier` 槽回读（live_session_status.tier）。
+/// @ai-context: `None` = **不动槽**（既有行为零改动；也避免清掉并发写入的覆写）。
+/// @return 是否写入——调用方在 start 失败时据此回滚（防档位残留到下一个会话）。
+fn seed_initial_tier(
+    slot: &std::sync::Arc<std::sync::Mutex<Option<crate::live_session::ProfileOverride>>>,
+    tier: Option<crate::video_profile_spec::VisualTier>,
+) -> bool {
+    let Some(t) = tier else { return false };
+    let Ok(mut guard) = slot.lock() else { return false };
+    *guard = Some(crate::live_session::ProfileOverride {
+        tier: Some(t),
+        ..Default::default()
+    });
+    true
+}
+
+/// 会话启动档位解析（批 7 T19 · 规格 §11-8 的单一裁决点；纯函数，可离线单测）。
+///
+/// @ai-context: 优先级 = 显式入参（前端仅在**用户显式改档**时传）> 记忆体（同标题/
+///              同系列 ⇒ 跨会话记住上次选择）> None（不覆写 ⇒ 消费端按既有默认档起）。
+/// @ai-context: 非法显式值**不阻断**会话开始，按缺失处理（与 `profile` 参数同口径）。
+fn resolve_start_tier(
+    explicit: Option<&str>,
+    memory: &crate::video_profile::ProfileMemory,
+    title: &str,
+) -> Option<crate::video_profile_spec::VisualTier> {
+    explicit
+        .and_then(crate::video_profile_spec::VisualTier::parse)
+        .or_else(|| memory.lookup_tier(title))
 }
 
 /// 确认画面档降档（v0.9.0 M2，REQ-189：降档需用户确认——降采样可能丢信息）。
@@ -397,3 +465,7 @@ pub fn update_live_profile(
         .map_err(|e| e.to_string())?;
     Ok(true)
 }
+
+#[cfg(test)]
+#[path = "commands_live_tests.rs"]
+mod tests;

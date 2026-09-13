@@ -283,6 +283,8 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         // v0.13.6（REQ-220/222）：细目选项表 + 领域记忆（coarse+细目多选）
         crate::commands_video::list_domain_fine,
         crate::commands_video::remember_video_profile_domain,
+        // 批 7 T19（规格 §1 L5 行 34）：画面档跨会话记忆（与 start_live_session 的 tier 成对）
+        crate::commands_video::remember_video_profile_tier,
         // v0.12.0 M6（采集体验债）：采集浮窗关闭
         crate::commands_window::close_capture_float,
         // v0.12.3（交互/架构升级）：浮窗点击穿透/置顶/状态查询 + 回主窗

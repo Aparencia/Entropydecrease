@@ -18,6 +18,9 @@ use crate::video_profile_spec::{ContentForm, ProfileSpec};
 /// 档案标识最大长度（防御超长输入污染记忆库）。
 const KIND_MAX_CHARS: usize = 30;
 
+/// 画面档标识最大长度（批 7 T19；kebab-case 最长 "medium"——防超长输入污染记忆库）。
+const TIER_MAX_CHARS: usize = 10;
+
 /// 导出五档案（前端展示/校准；JSON 序列化即档案可校准接口）。
 #[tauri::command]
 pub fn video_profiles() -> Vec<VideoProfile> {
@@ -255,7 +258,11 @@ pub fn video_profile_memory(state: State<'_, AppState>) -> ProfileMemory {
 /// 按四维规格查参数矩阵（形态 × 画面档 → 采样/OCR/存储/模板）。
 ///
 /// @param form - 形态标识（kebab-case；None=识别中——模板走默认讲义式）
-/// @param tier - 画面档标识（kebab-case；缺省=中档——开始前默认+诚实声明）
+/// @param tier - 画面档标识（kebab-case；缺省=按形态默认档——开始前默认+诚实声明）
+/// @ai-context: 读端**真源**（批 7 T19 · `rulings.md` §C11.4 裁决）：前端检测卡以本命令
+///              返回值作为「形态 × 档位 → 模板/采样」的真源；本地
+///              `KIND_TO_FORM` / `KIND_TO_TIER` 映射**降级为离线兜底**（该调用失败/
+///              纯 web dev 时才用）——兜底必须留（AGENTS.md §3.4 硬性要求）。
 #[tauri::command]
 pub fn video_profile_for_spec(form: Option<String>, tier: Option<String>) -> VideoProfile {
     let form = form.and_then(|f| ContentForm::parse(&f));
@@ -298,6 +305,44 @@ pub fn remember_video_profile_form(
             .lock()
             .map_err(|e| format!("档案记忆锁中毒: {}", e))?;
         guard.remember_form(&title, form);
+        guard
+            .save(&path)
+            .map_err(|e| format!("保存档案记忆失败: {}", e))?;
+    }
+    Ok(())
+}
+
+/// 批 7 T19（规格 §1 L5 行 34）：记录用户确认的**画面档**（跨会话记忆）——
+/// 同标题/同系列下次直接生效（由 start_live_session 的 tier 解析读取）。
+///
+/// @param title - 窗口标题（记忆匹配键；series 键剥离与形态/领域记忆同口径）
+/// @param tier - 画面档标识（kebab-case：rich/medium/low/none；非法值明确报错）
+/// @ai-context: 与 `update_live_profile`（**采集态热切换**：改正在跑的会话）严格区分——
+///              本条只写记忆偏好（下次会话的起点档），**不触碰任何运行中会话**；
+///              两条命令不可互相替代（C3.1 逐字）。
+#[tauri::command]
+pub fn remember_video_profile_tier(
+    state: State<'_, AppState>,
+    title: String,
+    tier: String,
+) -> Result<(), String> {
+    let title = title.trim().to_string();
+    if title.is_empty() {
+        return Err("窗口标题为空，无法记忆画面档".to_string());
+    }
+    let title = title.chars().take(200).collect::<String>();
+    let tier = crate::video_profile_spec::VisualTier::parse(
+        &tier.chars().take(TIER_MAX_CHARS).collect::<String>(),
+    )
+    .ok_or_else(|| format!("非法画面档标识: {}", tier.chars().take(TIER_MAX_CHARS).collect::<String>()))?;
+    let path = state.profile_memory_path.clone();
+    let memory = state.profile_memory.clone();
+    // 锁内 read-modify-write（与形态/领域记忆同模式，防 TOCTOU 文件竞争）
+    {
+        let mut guard = memory
+            .lock()
+            .map_err(|e| format!("档案记忆锁中毒: {}", e))?;
+        guard.remember_tier(&title, tier);
         guard
             .save(&path)
             .map_err(|e| format!("保存档案记忆失败: {}", e))?;

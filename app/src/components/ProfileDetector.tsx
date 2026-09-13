@@ -90,23 +90,33 @@ const KIND_TO_TIER: Partial<Record<ProfileKind, VisualTier>> = {
 export default function ProfileDetector({
   windowTitle,
   onProfileChange,
+  onTierChange,
 }: {
   windowTitle: string | null;
   /** 档案变化回调（父组件用于 start_live_session 携带 profile——兼容 v1 通道） */
   onProfileChange?: (kind: ProfileKind) => void;
+  /** 批 7 T19：画面档**用户显式改档**回调（父组件据此把 tier 传给 start_live_session；
+   *  未改档不上报 ⇒ 后端按记忆体解析，跨会话记住才有意义） */
+  onTierChange?: (tier: VisualTier) => void;
 }) {
   const [result, setResult] = useState<DetectResult | null>(null);
   // v0.13.6（审查 L5）：onProfileChange 经 ref——回调标识变化不触发 detect effect 重跑
   const onProfileChangeRef = useRef(onProfileChange);
   useEffect(() => { onProfileChangeRef.current = onProfileChange; }, [onProfileChange]);
+  // 批 7 T19：档位回调同款 ref（同上——不因父级重渲染重跑 detect effect）
+  const onTierChangeRef = useRef(onTierChange);
+  useEffect(() => { onTierChangeRef.current = onTierChange; }, [onTierChange]);
   // 三维状态（v2）：形态/画面/领域各自可调
   const [form, setForm] = useState<ContentForm | null>(null);
   const [tier, setTier] = useState<VisualTier>("medium");
   const [domain, setDomain] = useState<DomainDetection | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [error, setError] = useState("");
-  // M3 诚实化：画面档修改的轻提示（仅本次会话生效——后端无 tier 记忆通道）
+  // 批 7 T19：画面档记忆的轻提示——文案与语义一并更正（旧的「只影响本会话」在真写后端
+  // 之后是谎话；本行保留亦使六棘轮的字号越界基数零漂移，见报告「偏离」节）。
   const [tierNotice, setTierNotice] = useState("");
+  // 批 7 T19：后端读端真源（video_profile_for_spec）的返回值——形态 × 档位 → 模板/采样
+  const [specProfile, setSpecProfile] = useState<VideoProfile | null>(null);
   const [profiles, setProfiles] = useState<VideoProfile[]>([]);
   // v0.13.6（REQ-220）：细目选项表（粗领域 → 细目列表；单一数据源 list_domain_fine）
   const [fineMap, setFineMap] = useState<Record<string, DomainFineOption[]>>({});
@@ -169,6 +179,27 @@ export default function ProfileDetector({
     };
   }, [windowTitle]);
 
+  /**
+   * 批 7 T19 ④（`rulings.md` §C11.4 裁决）：读端接线——「形态 × 档位 → 模板/采样」
+   * 以**后端 `video_profile_for_spec` 为真源**；本地 `KIND_TO_FORM` / `KIND_TO_TIER`
+   * 映射与 `video_profiles` 列表**降级为离线兜底**（调用失败/纯 web dev 时生效——
+   * 「所有云端/系统能力必须有本地兜底路径」是 AGENTS.md §3.4 硬性要求，不得删除）。
+   */
+  useEffect(() => {
+    if (!form) return; // 形态识别中（null）→ 本地兜底，不做无谓往返
+    let cancelled = false;
+    void invoke<VideoProfile>("video_profile_for_spec", { form, tier })
+      .then((p) => {
+        if (!cancelled) setSpecProfile(p ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setSpecProfile(null); // 失败 ⇒ 回落本地映射（不吞异常：兜底即降级路径）
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [form, tier]);
+
   /** 形态修改（错判代价最高——低置信必问由 needs_confirmation 驱动；修改即记忆） */
   const changeForm = useCallback(
     async (f: ContentForm) => {
@@ -189,15 +220,27 @@ export default function ProfileDetector({
 
   /**
    * 画面档修改（默认中档通常不问；修改即生效——采样策略随档位切换）。
-   * M3 诚实化：后端当前**无 tier 记忆通道**（remember_video_profile_form 只记形态），
-   * 故此处不再调用该命令伪装记忆——仅本地生效并轻提示；
-   * TODO(后端): 需新增如 remember_video_profile_tier 命令后才能跨会话记忆画面档。
+   * 批 7 T19：**真写后端记忆**（`remember_video_profile_tier`）⇒ 同标题/同系列
+   * 跨会话记住（`start_live_session` 的 tier 解析读取）；失败不吞（setError）。
    */
-  const changeTier = useCallback((t: VisualTier) => {
-    setTier(t);
-    setError("");
-    setTierNotice("画面档修改仅本次会话生效");
-  }, []);
+  const changeTier = useCallback(
+    async (t: VisualTier) => {
+      setTier(t);
+      setError("");
+      // 上报父级：**仅用户显式改档**才把 tier 带进 start_live_session（未改档不上报 ⇒
+      // 后端按记忆体解析——否则每次都用本地默认档覆盖记忆，跨会话记住永不成立）
+      onTierChangeRef.current?.(t);
+      if (!windowTitle) return;
+      try {
+        await invoke("remember_video_profile_tier", { title: windowTitle, tier: t });
+        setTierNotice("画面档已记住（同标题/同系列下次生效）");
+      } catch (e) {
+        setTierNotice("");
+        setError(`记忆画面档失败: ${e}`);
+      }
+    },
+    [windowTitle],
+  );
 
   /** 领域修改（增强项——不问可改；修改即记忆 v0.13.6：coarse+细目多选一起记） */
   const changeDomain = useCallback(
@@ -229,6 +272,9 @@ export default function ProfileDetector({
   const fromMemory = result?.memory_hit ?? null;
   // v0.11.5（Task 5）：记忆与检测高置信冲突 → 检测为准 + 展示冲突提示（可手动修改）
   const conflictKind = result?.memory_conflict ?? null;
+  // 批 7 T19 ④：模板/采样行的取值——后端真源优先，本地映射兜底（§C11.4 的角色划分）
+  const localProfile = form ? (profiles.find((p) => p.kind === formToKind(form)) ?? null) : null;
+  const shownProfile = specProfile ?? localProfile;
 
   return (
     <Surface level="none" radius="panel" padded>
@@ -292,7 +338,7 @@ export default function ProfileDetector({
             </select>
             <Text tone="ink-3" style={{ fontSize: 10 }}>会话中自动重评 · 升档静默/降档确认</Text>
           </div>
-          {/* M3 诚实化：画面档无后端记忆通道——明示仅本次会话生效 */}
+          {/* 批 7 T19：画面档修改**真写后端记忆**（跨会话生效）——旧「仅本次」文案已更正为真话 */}
           {tierNotice && (
             <div style={{ fontSize: 10, color: "#b45309", marginBottom: 6, marginLeft: 64 }}>{tierNotice}</div>
           )}
@@ -354,11 +400,13 @@ export default function ProfileDetector({
               候选：{result.candidates.map((c) => `${KIND_TO_FORM[c.kind] ?? c.kind}(${(c.score * 100) | 0}%)`).join(" / ")}
             </Text>
           )}
-          {profiles.length > 0 && form && (
+          {/* 批 7 T19 ④：模板/采样行以后端 `video_profile_for_spec`（形态 × 档位）为真源；
+              本地 `video_profiles` + KIND_TO_* 映射是离线兜底（§C11.4 的角色划分） */}
+          {shownProfile && (
             <Text as="div" tone="ink-3" style={{ fontSize: 10, marginTop: 4 }}>
-              {profiles.find((p) => p.kind === formToKind(form))?.artifact_template ?? ""} 模板 ·{" "}
+              {shownProfile.artifact_template} 模板 ·{" "}
               {(() => {
-                const b = profiles.find((p) => p.kind === formToKind(form))?.sampling_budget;
+                const b = shownProfile.sampling_budget;
                 return b ? `${b.subtitle_every}s/字幕 · ${b.full_every}s/全帧` : "";
               })()}
             </Text>
