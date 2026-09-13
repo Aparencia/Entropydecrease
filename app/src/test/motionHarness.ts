@@ -47,10 +47,10 @@
  * 副作用：`installMatchMediaStub` **临时改写** `window.matchMedia`（`restore()` 复原，含「原本就没有」
  *   的情形 ⇒ `delete` 回 `undefined`）；其余导出全是纯函数 / 只读。**遗漏 `restore()` 会污染同文件
  *   后续用例** —— 本模块**不做**自动清理（vitest 的 `afterEach` 注册会侵入调用方生命周期）。
- * 边界：① 本模块只解决**时序确定性**，**不解决** jsdom 不做样式级联（`getComputedStyle` 拿不到
- *   transition / animation 的生效值）⇒ 观感类判据本批一律不做；② `animatedProps` 读的是 `el.style` 的
- *   **内联**属性集合，**看不见**类规则里的属性；③ `freezeAt` 只对 **paused** timeline 是确定性的 ——
- *   非 paused 的 timeline 会被 ticker 用墙钟推进（调用方负责传 paused 的那一个）。
+ * 边界：① 本模块只解决**时序确定性**，**不解决** jsdom 渲染差异 ⇒ 观感类判据本批一律不做。🔴 **批 8 T16 收窄**（原句
+ *   「jsdom 不做样式级联」**不准确**）：jsdom **做**级联 —— 类规则 / ID / 子选择器 / 继承 / `!important` 实测全生效；**不可得**：
+ *   `var()` 不解析（回字面量）· 简写→长写不展开（`transition-duration`=`0s`）· **几何全 0** · 伪元素不命中；② `animatedProps` 读的是
+ *   `el.style` 的**内联**属性集合，**看不见**类规则里的属性；③ `freezeAt` 只对 **paused** timeline 确定（非 paused 的由墙钟推进）。
  */
 import { gsap } from "../motion/engine";
 import type { GsapTimeline } from "../motion/engine";

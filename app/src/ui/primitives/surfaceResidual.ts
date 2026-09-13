@@ -69,6 +69,7 @@ export const BORDER_RESIDUAL: readonly { file: string; kind: SurfaceResidualKind
   { file: "components/note-selection/SelectionActionMenu.tsx", kind: "b1-non-migrated", count: 1 },
 ];
 
+// 🔴 **批 8 T16 登记（欠账 #10；只登记、不入棘轮）**：**非棘轮圆角档不在任何守卫内** —— 棘轮只覆盖 `6|12|14|999|2`（`surfaceBaseline.ts:16/:142`），映射表档 `0/3/4/5/8/10` 与两者都没列的 `1` 都不在任何棘轮内、无守卫（口径 = `borderRadius` 后的数值字面量处数 · 域 = `app/src` 入库域 · 时点 = 批 8 T16，读数进 `task-16-report.md`）。⚠️ 批 8 计划 `### 表 4` #10 把本写成「圆角 `26/5/4` 三档」，**该三元组在本仓不可复现** ⇒ 本条按实测口径登记，差异见 `task-16-report.md` 未决条第 1 条。
 /** 圆角族同上；**控件形态**按类别整体裁定，不逐文件登记（理由见文件头「★ 语义」） */
 export const RADIUS_RESIDUAL: readonly { file: string; kind: SurfaceResidualKind; count: number }[] = [
   { file: "components/CaptureOverlayPanel.tsx", kind: "b1-non-migrated", count: 2 },
@@ -98,7 +99,7 @@ export type ShadowResidualKind = "exception" | "anchored-menu" | "backlog";
  *   判据（`surfaceRatchet.test.ts` ⑧）逐条未改，只换导入来源。
  */
 export const SHADOW_RESIDUAL: readonly { file: string; kind: ShadowResidualKind; reason: string }[] = [
-  { file: "components/AiConversationDock.tsx", kind: "exception", reason: "`-8px 0 24px` 是**方向性**边缘投影（dock 向左升起）；`--ed-shadow-1/2` 是双向环境投影（`0 1px 2px …, 0 4px 12px …`）⇒ 换成 token 会丢掉「从右边滑出来」的暗示，属观感变化，登记给批 5" },
+  { file: "components/AiConversationDock.tsx", kind: "exception", reason: "`-8px 0 24px` 是**方向性**边缘投影（dock 向左升起）；`--ed-shadow-1/2` 是双向环境投影（`0 1px 2px …, 0 4px 12px …`）⇒ 换成 token 会丢掉「从右边滑出来」的暗示，属观感变化。🔴 **批 8 T16 就地更正**：原写「登记给批 5」，而批 5 已收口 ⇒ 该登记**掉地**（控制方 §A.7）；**批 8 已认领**，本批**不迁**（换 token 会丢方向性暗示 = 观感变化 ⇒ 需人的裁决），**具名归属 = 控制方（§A.7）**" },
   { file: "components/BrowserChrome.tsx", kind: "anchored-menu", reason: "B1 锚定菜单族（计划 §表 4 的 TABLE4_ALIAS，`data-app-menu` 右键菜单，`zIndex(\"popover\")`）⇒ 不迁原语；T17-B 第 1 批已把字面量换成 `boxShadow: \"var(--ed-shadow-1)\"`（token 引用不是字面量）" },
   { file: "components/CanvasNodeConcept.tsx", kind: "backlog", reason: "不在 B11 切片内（画布节点族）⇒ 余量登记给批 5/7" },
   { file: "components/CanvasNodeModel.tsx", kind: "backlog", reason: "不在 B11 切片内（画布节点族）⇒ 余量登记给批 5/7" },
