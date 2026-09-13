@@ -202,6 +202,8 @@ export interface DetectResult {
   memory_conflict?: ProfileKind | null;
   /** v0.13.6（REQ-221）：平台分区映射表命中的形态（优先级高于记忆/标题候选；未命中缺省 null） */
   platform_form?: ContentForm | null;
+  /** 批 7 T19（U2）：命中标题的画面档记忆（检测卡档位下拉初值 ⇒ 显示 == 实际生效档；旧响应缺省 null） */
+  memory_tier?: VisualTier | null;
 }
 
 /** 领域检测结果（Rust DomainDetection） */

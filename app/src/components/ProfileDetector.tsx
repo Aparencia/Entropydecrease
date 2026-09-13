@@ -153,7 +153,9 @@ export default function ProfileDetector({
         const top = r.candidates[0]?.kind ?? "unknown";
         const fromMemory = r.platform_form ?? r.memory_form ?? KIND_TO_FORM[top] ?? null;
         setForm(fromMemory);
-        setTier(KIND_TO_TIER[top] ?? "medium");
+        // 批 7 T19（U2）：档位初值以后端**记忆档**为真源（与 start_live_session 的解析同源：
+        // 显式 > 记忆）⇒ 显示档 == 新会话实际生效档；无记忆（旧后端/未选过）⇒ 回落本地映射。
+        setTier(r.memory_tier ?? KIND_TO_TIER[top] ?? "medium");
         // 领域检测结果（detect_video_profile 内已含平台/标题领域检测）
         if (r.domain?.kind || r.domain?.fine_tags?.length || r.domain?.fine_ids?.length) {
           setDomain(r.domain);

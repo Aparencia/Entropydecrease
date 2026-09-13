@@ -12,7 +12,7 @@ use crate::video_profile::{
     apply_profile_memory, vote_detect, DetectResult, ObservedSignals, ProfileCandidate,
     ProfileKind, ProfileMemory,
 };
-use crate::video_profile_spec::ContentForm;
+use crate::video_profile_spec::{ContentForm, VisualTier};
 
 /// 构造观测信号辅助（默认全 None）。
 fn signals() -> ObservedSignals {
@@ -172,4 +172,49 @@ fn detect_result_old_json_missing_memory_conflict() {
     // Assert：缺省 None（serde(default) 兼容旧 JSON）
     assert_eq!(r.memory_conflict, None);
     assert_eq!(r.candidates[0].kind, ProfileKind::Lecture);
+}
+
+/// 批 7 T19（U2）：记忆档随检测结果带回（检测卡档位下拉初值 ⇒ 显示 == 实际生效档）。
+#[test]
+fn memory_tier_reported_for_display() {
+    // Arrange：只记过档位（未记形态/kind）
+    let memory = {
+        let mut m = ProfileMemory::default();
+        m.remember_tier("零基础化妆教程", VisualTier::Rich);
+        m
+    };
+    // Act
+    let result = apply_profile_memory(vote_detect(&signals()), &memory, "零基础化妆教程");
+    // Assert：档位独立通道回填；kind/form 通道**未被** tier-only 条目污染
+    assert_eq!(result.memory_tier, Some(VisualTier::Rich), "记忆档应随检测结果带回");
+    assert_eq!(result.memory_hit, None, "tier-only 条目不得伪造 kind 命中");
+    assert_eq!(result.memory_form, None, "tier-only 条目不得伪造形态命中");
+}
+
+/// 批 7 T19（U2）边界：② 冲突象限（检测为准）**仍**带回记忆档——档位是独立轴，
+/// 与形态判定无关，且与 start_live_session 的解析（显式 > 记忆）口径一致。
+#[test]
+fn memory_tier_reported_even_when_detection_wins() {
+    let memory = {
+        let mut m = ProfileMemory::default();
+        m.remember_tier("实操演练", VisualTier::Low);
+        m
+    };
+    let result = apply_profile_memory(vote_detect(&strong_hands_on_signals()), &memory, "实操演练");
+    // Assert：形态按检测（无 memory_hit），档位仍按记忆
+    assert_eq!(result.memory_hit, None, "前置条件：高置信冲突 ⇒ 检测为准");
+    assert_eq!(result.memory_tier, Some(VisualTier::Low), "独立轴：档位不随形态冲突被丢弃");
+}
+
+/// 批 7 T19（U2）负控：无记忆档 ⇒ None（前端回落本地映射兜底，AGENTS.md §3.4）。
+#[test]
+fn memory_tier_none_without_memory() {
+    let result = apply_profile_memory(vote_detect(&signals()), &ProfileMemory::default(), "未记过的标题");
+    assert_eq!(result.memory_tier, None);
+    // 旧 JSON 兼容：缺 memory_tier 字段 → None（零迁移）
+    let old: DetectResult = serde_json::from_str(
+        r#"{"candidates":[{"kind":"lecture","score":1.0}],"needs_confirmation":false,"memory_hit":null}"#,
+    )
+    .unwrap();
+    assert_eq!(old.memory_tier, None);
 }

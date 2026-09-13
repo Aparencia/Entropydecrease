@@ -254,11 +254,16 @@ pub fn profile_by_kind(kind: ProfileKind) -> VideoProfile {
 ///              ④ 无记忆 → 纯检测（结果原样）
 /// @ai-context: 本函数不触碰 domain（命令层赋值）；记忆命中时按 REQ-188 回填
 ///              memory_form（检测为准的②场景不设——形态随检测）。
+/// @ai-context: 批 7 T19（U2）：`memory_tier` 是**独立通道**（tier_entries）⇒ 在 kind 判定
+///              **之外**回填（用户只改过档位、没改过形态时同样要带回）；其取值与
+///              `start_live_session` 的档位解析**同源**（显式 > 记忆）⇒ 检测卡的档位
+///              下拉初值 == 新会话实际生效档（§C11.4 后端真源的显示面）。
 pub fn apply_profile_memory(
     mut result: DetectResult,
     memory: &ProfileMemory,
     title: &str,
 ) -> DetectResult {
+    result.memory_tier = memory.lookup_tier(title);
     if let Some(kind) = memory.lookup(title) {
         let top = result.candidates.first().map(|c| c.kind);
         let high_conf = !result.needs_confirmation;

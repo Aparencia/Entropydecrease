@@ -171,4 +171,31 @@ describe("ProfileDetector v0.13.6 三维交互", () => {
     expect(src.includes("TODO(" + "后端)"), "TODO(后端) 未删（它说的命令已存在）").toBe(false);
     expect(src.includes("仅本次" + "会话生效"), "旧文案仍在（写后端之后它是谎话）").toBe(false);
   });
+
+  it("批 7 T19 U2：档位下拉初值取后端记忆——「生效档 ≠ 本地映射档」时显示真值", async () => {
+    // Arrange：候选 talking-head ⇒ 本地 KIND_TO_TIER 会是 "low"（该值由紧随其后的负控用例
+    //   用**同一份检测结果**（仅去掉 memory_tier）独立钉住）；后端记忆 = "rich"（用户上次选的）
+    //   ⇒ 「生效档(记忆 rich) ≠ 本地映射档(low)」，两者可区分。
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "video_profiles") return [localStub];
+      if (cmd === "detect_video_profile") return { ...detectResult, memory_tier: "rich" };
+      if (cmd === "video_profile_for_spec") return specStub;
+      return null;
+    });
+    render(<ProfileDetector windowTitle="某视频_哔哩哔哩_bilibili" />);
+    const combos = await screen.findAllByRole("combobox");
+    const tierSelect = combos[1] as HTMLSelectElement;
+    // Assert：显示档 == 后端记忆档（§C11.4 后端为真源；新会话实际生效档同源：显式 > 记忆）
+    await waitFor(() => expect(tierSelect.value).toBe("rich"));
+    expect(tierSelect.value, "不得显示本地映射档（= 显示/生效不一致，U2 要修的正是这个）").not.toBe("low");
+  });
+
+  it("批 7 T19 U2 负控：无记忆档 ⇒ 回落本地映射（兜底必须留）", async () => {
+    // Arrange：detect 响应无 memory_tier（旧后端/无记忆）⇒ 走本地映射
+    render(<ProfileDetector windowTitle="某视频_哔哩哔哩_bilibili" />);
+    const combos = await screen.findAllByRole("combobox");
+    const tierSelect = combos[1] as HTMLSelectElement;
+    await waitFor(() => expect(tierSelect.value).toBe("low"));
+    expect(tierSelect.value).not.toBe("rich");
+  });
 });

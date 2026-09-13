@@ -64,6 +64,13 @@ pub struct DetectResult {
     /// 高于记忆/标题候选：影视/直播分区直接定叙事/直播形态）；未命中 None。
     #[serde(default)]
     pub platform_form: Option<crate::video_profile_spec::ContentForm>,
+    /// 批 7 T19（U2）：命中标题的**画面档记忆**（独立通道——不随 kind 命中与否）。
+    ///
+    /// @ai-context: 检测卡 v2 用它做档位下拉**初值** ⇒ 显示档 == 新会话实际生效档
+    ///              （与 `start_live_session` 的档位解析同源：显式 > 记忆）；
+    ///              旧后端/旧 JSON 缺省 None（零迁移）⇒ 前端回落本地映射兜底。
+    #[serde(default)]
+    pub memory_tier: Option<crate::video_profile_spec::VisualTier>,
 }
 
 /// 检测得分阈值：top 得分低于该值视为信号不足。
@@ -106,6 +113,7 @@ pub fn vote_detect(signals: &ObservedSignals) -> DetectResult {
             domain: None,
             memory_conflict: None,
             platform_form: None,
+            memory_tier: None,
         };
     }
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -118,7 +126,7 @@ pub fn vote_detect(signals: &ObservedSignals) -> DetectResult {
             .get(1)
             .map(|(_, s)| scored[0].1 - *s < CONFLICT_GAP)
             .unwrap_or(false);
-    DetectResult { candidates, needs_confirmation, memory_hit: None, memory_form: None, domain: None, memory_conflict: None, platform_form: None }
+    DetectResult { candidates, needs_confirmation, memory_hit: None, memory_form: None, domain: None, memory_conflict: None, platform_form: None, memory_tier: None }
 }
 
 /// 单档案得分（纯函数，可注入 fake 信号单测）。
