@@ -32,16 +32,10 @@
  * 副作用：只挂 React 树 + 读写 jsdom 的 `localStorage`；不写盘、不发请求。
  */
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Note } from "../../types";
-import type { NoteEditHandle } from "../NoteEditView";
-import type { NoteViewSlot, ViewSpec } from "../../views/registry";
 import { viewsFor } from "../../views/registry";
-import { columnSpec } from "../../shell/columnRegistry";
-import { useColumnLayout } from "../../hooks/useColumnLayout";
 import { Toast } from "../../ui/primitives";
-import NotesReadingColumn from "./NotesReadingColumn";
+import { HarnessHost, MEMORY_KEY, handleOf, noop, note, type HarnessProps } from "./readingColumnTestKit";
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({
@@ -50,71 +44,8 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 vi.mock("../RichEditorView", () => ({ default: () => <div data-testid="editor-stub" /> }));
 
-const note: Note = {
-  id: 1,
-  title: "标题",
-  content: "# 正文\n内容段落",
-  source: "session",
-  session_id: 42,
-  rule_version: null,
-  purify_stats: null,
-  tags: "[]",
-  properties: null,
-  pin: 0,
-  group_id: null,
-  created_at: 1,
-  updated_at: 2,
-};
-
-const noop = vi.fn();
-const MEMORY_KEY = "view:default:note";
-
-/** 注入的编辑器出口（`NoteEditHandle` 契约一字未改 —— 这行是 C4「不改接口」的编译期锚） */
-function handleOf(flushSave: () => Promise<void>): NoteEditHandle {
-  return { flushSave, getContent: () => note.content };
-}
-
-interface HarnessProps {
-  readonly views?: readonly ViewSpec<NoteViewSlot>[];
-  readonly editing?: boolean;
-  readonly selected?: Note | null;
-  readonly handle?: NoteEditHandle | null;
-  /** 批 7 T17：卡片流那条链的 ms 出口（F11 用；缺省 = 今天的形态） */
-  readonly onOpenSession?: (sessionId: number) => void;
-  readonly onOpenSessionAt?: (sessionId: number, ms: number) => void;
-}
-
-/** 页面形态的宿主：真 `useColumnLayout` + 真注册表清单（与 `NotesPage` 的那一行同源） */
-function Harness({ views = viewsFor("note"), editing = false, selected = note, handle = null, onOpenSession, onOpenSessionAt }: HarnessProps) {
-  const outlineCol = useColumnLayout("notes-outline", columnSpec("notes-outline"));
-  const editorRef = useRef<NoteEditHandle | null>(handle);
-  return (
-    <NotesReadingColumn
-      selected={selected}
-      editing={editing}
-      setEditing={noop}
-      readerSearch={null}
-      noteColors={{}}
-      groups={[]}
-      editorRef={editorRef}
-      outlineCol={outlineCol}
-      onChanged={noop}
-      onError={noop}
-      onOpenAi={noop}
-      onOpenModelCard={noop}
-      onSelectionAction={noop}
-      onPinToggle={noop}
-      onDelete={noop}
-      onTaskToggle={noop}
-      onTagClick={noop}
-      onOpenSession={onOpenSession}
-      onOpenSessionAt={onOpenSessionAt}
-      onImageOpen={noop}
-      onCleanNotice={noop}
-      views={views}
-    />
-  );
-}
+/** 页面形态的宿主：夹具与挂载工具已搬到 `./readingColumnTestKit` —— 本行只补「真注册表清单」这个默认值（夹具件不得 import 注册表，理由见该件文件头）。 */
+const Harness = ({ views = viewsFor("note"), ...rest }: Partial<HarnessProps>) => <HarnessHost views={views} {...rest} />;
 
 /** 当前 `aria-pressed` 为真的段文本（= 切换器的受控值；`ViewSwitcher` 用 `aria-pressed` 承载选中态） */
 const pressedLabel = (): string => {
