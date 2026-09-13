@@ -15,8 +15,12 @@
  *   （`utils/html.ts` 是两者的唯一定义源）；本模块不新增任何拼接出口，也不引入 React 上下文。
  * 边界：① **不覆盖** `renderMarkdown` 的屏配图分支（`- ![alt](src)`）——它需要 `convertFileSrc` +
  *   `imageBaseUrl` / `dataDir` 两个**运行时**值，塞不进模式常量；该分支的迁移由 T17 在容器侧处置
- *   （本模块对它按段落档处理 ⇒ 迁移前**不得**用本模块渲染配图行）。② 芯片点击不在本模块（串渲染没有
- *   React 上下文）⇒ 由容器侧事件委托 `closest("[data-ts-ms]")` 处理（§C10.2）。
+ *   （🔴 **批 8 T16 更正**：本模块对它按 **`li` 档**处理 —— `- ` 前缀命中列表分支 ⇒ 输出 `• ![alt](src)`
+ *   **字面量**，**不落段落档**；原写「按段落档处理」，T13 实测为假）⇒ 迁移前**不得**用本模块渲染配图行。
+ *   ② 芯片点击不在本模块（串渲染没有 React 上下文）⇒ 由容器侧事件委托 `closest("[data-ts-ms]")` 处理（§C10.2）。
+ *   🔴 **同源登记（T13 实测 · 批 8 T16 只登记、不改行为）**：`utils/refineDiff.ts` 的工作台链**没有**
+ *   `components/NotePreviewView.tsx:52-67` 那道配图拦截 ⇒ 配图行在工作台渲染成**字面文本**（实测逐字
+ *   `• ![画面要点](session-images/frame-001.png)`）⇒ **去向**：观感/像素面，需人的裁决。
  */
 import { escapeHtml, renderTimestampAnchors } from "./html";
 
@@ -46,7 +50,9 @@ export interface LineRenderMode {
   readonly extra?: string;
 }
 
-/** **会话笔记预览模式**——值逐字取自 `NotePreviewView.renderMarkdown` 的 h2/h3/quote/li/p 五档。 */
+/** **会话笔记预览模式**——值逐字取自 `NotePreviewView.renderMarkdown` 的 h2/h3/quote/li/p 五档。
+ *  🔴 **批 8 T16 登记（欠账 #3；只登记、不改值）**：本件 `scale` 常量共含 **6 个原始 hex**（`#0f766e` / `#b45309` / `#fffbeb` / `#fde68a` /
+ *  `#4b5563` / `#374151`），而 `utils/**` **不在**零颜色字面量守卫域内（域 = `ui/primitives/*.css`，`style-seams.test.ts:248`）⇒ **改值 = 观感变化**（属像素面 + 需人的目标值）⇒ 本批只登记。 */
 export const PREVIEW_MODE: LineRenderMode = {
   scale: {
     h2: "font-size:15px;margin:10px 0 4px",
