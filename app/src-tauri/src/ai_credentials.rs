@@ -4,22 +4,53 @@
 //!              Windows 用 DPAPI CryptProtectData 加密后写入数据目录
 //!              ai_credentials.bin（当前用户作用域，管理员与其他用户不可解；
 //!              CRYPTPROTECT_UI_FORBIDDEN 禁弹窗，服务化场景不卡 UI）。
-//! @ai-context: scope 化（v0.11.6 M1）：默认条目 scope="default" 保持旧文件名
-//!              ai_credentials.bin 向后兼容（已存用户凭据不失效）；per-provider
-//!              隔离用 "provider:<id>" → ai_credentials_<safe_id>.bin，各自独立
-//!              DPAPI 加密。scope 字符白名单：字母/数字/-/_，其余映射为 '_'。
+//! @ai-context: scope 化（v0.11.6 M1）：per-provider 隔离用 "provider:<id>" →
+//!              ai_credentials_<safe_id>.bin，各自独立 DPAPI 加密。scope 字符
+//!              白名单：字母/数字/-/_，其余映射为 '_'。旧默认条目 scope="default"
+//!              的物理文件名（ai_credentials.bin）仍被 scoped_path 指认，但该槽
+//!              已废弃（见下方遗留槽移除条）。
 //! @ai-context: keyring crate spike 因本机 TLS 拦截（crates.io 新依赖下载
 //!              失败）跳过，直接走 v0.8.0 规划裁决的 DPAPI 直写 fallback
 //!              路径（裁决见 ADR-016）；环境变量 SILICONFLOW_API_KEY 保留
 //!              为开发路径，优先级：环境变量 > 凭据库（command 层解析）。
 //! @ai-context: 凭据库 roundtrip 单测走内存桩（M5 契约测试口径）——DPAPI
 //!              为系统调用不单测（与 model_downloader 网络路径同口径）。
+//! @ai-context: 遗留槽移除（2026-09-13 批 8 T25 · 用户裁决 U2 = c）：单 Provider
+//!              时代的 scope="default" **不再是合法槽位** —— save/load/clear
+//!              三条路径一律显式拒绝（守卫 ensure_slot_usable）。🔴 只移除
+//!              **代码路径**：用户已存的旧数据（DPAPI 文件与既有条目）**不删、
+//!              不改、不迁移**（物理抹除是另一件事，用户裁决未授权）；仅有旧槽
+//!              的真机用户需重填密钥（风险已登记）。
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-/// 凭据存储抽象（scope：默认条目 "default" 或 per-provider "provider:<id>"；
-/// 测试注入内存桩；平台存储 Windows=DPAPI 加密文件）。
+/// 遗留单 Provider 凭据槽名（v0.11.6 scope 化之前的唯一槽位）。
+///
+/// @ai-context: 2026-09-13 批 8 T25（U2 = c「删除」）：本槽**不再是合法槽位**，
+///              写/读/清三条路径全部显式拒绝（见 `ensure_slot_usable`）。旧数据
+///              仍在物理存储里（**不做**迁移、**不做**抹除），仅在应用内不再可达
+///              ⇒ 名字保留是为了「旧数据在哪」这件事仍可被指认与取证。
+pub const LEGACY_DEFAULT_SCOPE: &str = "default";
+
+/// 槽位守卫：拒绝遗留槽（per-provider `provider:<id>` 是唯一合法形态）。
+///
+/// @ai-context: 为什么**读**也拒：只要旧槽还算「合法槽位」，任何调用点都能把它
+///              当兜底读（批 1 删掉旧 IPC 后，`resolve_default_provider_key` 与
+///              启动迁移正是这样留着的）——把合法性收在存储抽象这一层，调用点
+///              无从绕过；拒绝是显式的（返回具名错误），不是静默返回 None。
+fn ensure_slot_usable(scope: &str) -> Result<(), String> {
+    if scope == LEGACY_DEFAULT_SCOPE {
+        return Err(format!(
+            "凭据槽 \"{}\" 已废弃：遗留单 Provider 槽位不再可用，请用 provider:<id> 保存密钥",
+            LEGACY_DEFAULT_SCOPE
+        ));
+    }
+    Ok(())
+}
+
+/// 凭据存储抽象（scope：per-provider "provider:<id>"；遗留 "default" 已废弃
+/// ⇒ 三条方法一律拒绝；测试注入内存桩；平台存储 Windows=DPAPI 加密文件）。
 pub trait CredentialStore: Send + Sync {
     fn save_key(&self, scope: &str, api_key: &str) -> Result<(), String>;
     fn load_key(&self, scope: &str) -> Result<Option<String>, String>;
@@ -56,9 +87,14 @@ pub struct DpapiCredentialStore {
 
 #[cfg(target_os = "windows")]
 impl DpapiCredentialStore {
-    /// scope → 凭据文件路径（default=旧文件名兼容；provider:<id> 按 id 隔离）
+    /// scope → 凭据文件路径（provider:<id> 按 id 隔离）。
+    ///
+    /// 🔴 遗留 "default" 的**物理键映射保留**（它指向旧文件 ai_credentials.bin）：
+    /// 删掉会改变旧数据的物理归属、让「旧数据在哪」无从指认（U2 的 (ii) 不做
+    /// 抹除 ⇒ 映射必须留着）。⚠️ 该分支经槽位 API **不可达**——三条方法已在入口
+    /// 拒绝遗留槽（U2 = c 的 (i)）。
     fn scoped_path(&self, scope: &str) -> PathBuf {
-        if scope == "default" {
+        if scope == LEGACY_DEFAULT_SCOPE {
             return self.path.clone();
         }
         let safe: String = scope
@@ -72,6 +108,7 @@ impl DpapiCredentialStore {
 #[cfg(target_os = "windows")]
 impl CredentialStore for DpapiCredentialStore {
     fn save_key(&self, scope: &str, api_key: &str) -> Result<(), String> {
+        ensure_slot_usable(scope)?;
         if api_key.trim().is_empty() {
             return Err("密钥不能为空".to_string());
         }
@@ -81,6 +118,7 @@ impl CredentialStore for DpapiCredentialStore {
     }
 
     fn load_key(&self, scope: &str) -> Result<Option<String>, String> {
+        ensure_slot_usable(scope)?;
         let raw = match std::fs::read(self.scoped_path(scope)) {
             Ok(b) => b,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -95,6 +133,7 @@ impl CredentialStore for DpapiCredentialStore {
     }
 
     fn clear_key(&self, scope: &str) -> Result<(), String> {
+        ensure_slot_usable(scope)?;
         match std::fs::remove_file(self.scoped_path(scope)) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -176,6 +215,7 @@ pub struct MemoryCredentialStore {
 
 impl CredentialStore for MemoryCredentialStore {
     fn save_key(&self, scope: &str, api_key: &str) -> Result<(), String> {
+        ensure_slot_usable(scope)?;
         if api_key.trim().is_empty() {
             return Err("密钥不能为空".to_string());
         }
@@ -187,15 +227,38 @@ impl CredentialStore for MemoryCredentialStore {
     }
 
     fn load_key(&self, scope: &str) -> Result<Option<String>, String> {
+        ensure_slot_usable(scope)?;
         Ok(self.inner.lock().map_err(|_| "凭据锁中毒".to_string())?.get(scope).cloned())
     }
 
     fn clear_key(&self, scope: &str) -> Result<(), String> {
+        ensure_slot_usable(scope)?;
         self.inner
             .lock()
             .map_err(|_| "凭据锁中毒".to_string())?
             .remove(scope);
         Ok(())
+    }
+}
+
+/// 测试专用：越过槽位 API 直接落**物理层**（模拟旧版本写下的遗留槽数据）。
+///
+/// @ai-context: 2026-09-13 批 8 T25：槽位 API 已拒绝遗留槽 ⇒ 单测要造「旧数据
+///              仍在」的前置状态，只能落物理层——这正是旧数据的真实成因。
+///              `#[cfg(test)]` ⇒ 生产二进制零足迹。
+#[cfg(test)]
+impl MemoryCredentialStore {
+    /// 直接写入遗留槽条目（不经过守卫）。
+    pub(crate) fn seed_legacy_default_for_tests(&self, value: &str) {
+        self.inner
+            .lock()
+            .expect("凭据锁")
+            .insert(LEGACY_DEFAULT_SCOPE.to_string(), value.to_string());
+    }
+
+    /// 直接读回遗留槽条目（键与值都可读 = 「数据仍在」的物理层证据）。
+    pub(crate) fn read_legacy_default_for_tests(&self) -> Option<String> {
+        self.inner.lock().expect("凭据锁").get(LEGACY_DEFAULT_SCOPE).cloned()
     }
 }
 

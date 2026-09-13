@@ -6,9 +6,13 @@
 //!              SiliconFlow 余额接口）——Ollama 本地同样可测。
 //! @ai-context: 锁序：配置读写在短锁内完成即释放；网络调用（测试连接）不持锁。
 //! @ai-context: resolve_default_provider_key 为默认 Provider 密钥统一解析口
-//!              （env 优先 > per-provider 凭据 > 旧 default scope 回退），
-//!              精修/补充/余额 4 个旧调用点统一改走此口——Provider 面板
-//!              保存的密钥对实际 AI 调用生效（Task 4 审查 Important 修复）。
+//!              （env 优先 > per-provider 凭据），精修/补充/余额 4 个旧调用点
+//!              统一改走此口——Provider 面板保存的密钥对实际 AI 调用生效
+//!              （Task 4 审查 Important 修复）。
+//! @ai-context: 2026-09-13 批 8 T25（用户裁决 U2 = c）：**移除**「无默认 Provider
+//!              时回落遗留 "default" 槽」的读路径——遗留槽已不是合法槽位
+//!              （见 ai_credentials::LEGACY_DEFAULT_SCOPE）。无默认 Provider
+//!              ⇒ 解析结果 None（调用点按「未配置密钥」处理，fail-closed）。
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -221,21 +225,38 @@ pub fn ai_provider_test(state: State<'_, AppState>, id: String) -> Result<String
 // 内部辅助
 // ────────────────────────────────────────────────────────────
 
-/// 解析默认 Provider 密钥（env 优先 > per-provider 凭据——Provider 面板
-/// 配置的密钥在此生效；无默认 Provider 回退旧 default scope 兼容迁移前）。
-pub fn resolve_default_provider_key(state: &AppState) -> Result<Option<String>, String> {
-    let env_key = std::env::var("DEEPSEEK_API_KEY").ok().filter(|k| !k.is_empty());
+/// 默认密钥解析内核（纯逻辑：env > 默认 Provider 槽；**无遗留槽回落**）。
+///
+/// @ai-context: 2026-09-13 批 8 T25（U2 = c）：批 1 删掉旧 IPC 后仍留着的
+///              `load_key("default")` 读兜底在本次移除——遗留槽不再是合法槽位
+///              （存储抽象三路全拒），故「无默认 Provider」= 无从解析 ⇒ None。
+///              抽成纯函数（入参即全部输入）以便单测钉死「不回落」这条语义。
+fn resolve_default_key(
+    env_key: Option<String>,
+    default_id: Option<&str>,
+    credentials: &dyn crate::ai_credentials::CredentialStore,
+) -> Result<Option<String>, String> {
     if env_key.is_some() {
         return Ok(env_key);
     }
+    match default_id {
+        Some(id) => credentials.load_key(&provider_scope(id)),
+        None => Ok(None),
+    }
+}
+
+/// 解析默认 Provider 密钥（env 优先 > per-provider 凭据——Provider 面板
+/// 配置的密钥在此生效）。
+///
+/// @ai-context: 无默认 Provider 时**不再回落**遗留 "default" 槽（U2 = c）：
+///              该槽已不是合法槽位，读它只会拿到 Err 或被当兜底悄悄生效。
+pub fn resolve_default_provider_key(state: &AppState) -> Result<Option<String>, String> {
+    let env_key = std::env::var("DEEPSEEK_API_KEY").ok().filter(|k| !k.is_empty());
     let default_id = {
         let store = state.ai_providers.lock().map_err(|e| format!("AI Provider 存储锁中毒: {}", e))?;
         store.effective_default_id()
     };
-    match default_id {
-        Some(id) => state.ai_credentials.load_key(&provider_scope(&id)),
-        None => state.ai_credentials.load_key("default"),
-    }
+    resolve_default_key(env_key, default_id.as_deref(), state.ai_credentials.as_ref())
 }
 
 /// 默认 Provider 是否就绪（有密钥 或 本地免密钥端点——Ollama 本地推理
@@ -315,3 +336,8 @@ fn to_view(p: &AiProviderConfig, has_key: bool, is_default: bool) -> AiProviderV
         is_default,
     }
 }
+
+/// 单测独立文件（口径同全仓：测试与实现分文件）。
+#[cfg(test)]
+#[path = "commands_ai_providers_tests.rs"]
+mod tests;
