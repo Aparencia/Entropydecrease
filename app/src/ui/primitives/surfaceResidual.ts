@@ -134,13 +134,15 @@ export const SHADOW_RESIDUAL: readonly { file: string; kind: ShadowResidualKind;
  *   token 变量 `var(--ed-bg-surface/…)` 绕开原语）。裁决：改成**登记制** —— 新文件把调用点登记进来
  *   （登记即计数），在保留全部防漂移牙齿的前提下允许合法增长。**这不是放宽**。
  *
- * ★ 判据语义（`surfaceTagRegistry.test.ts` ⑪ 逐条读它；**改本表 = 改这三条的口径**）
- *   ① **legacy 行**（下列 9 条，来自 T17-B 迁移快照）：
+ * ★ 判据语义（`surfaceTagRegistry.test.ts` ⑪ 逐条读它；**改本表 = 改这四条的口径**）
+ *   ① **legacy 档行**（下列 9 条，来自 T17-B 迁移快照）：
  *      · 登记值 = `≤` 上限（棘轮只许降：真迁走一处 ⇒ 手工收紧本行 **+** 总数 **+**
  *        `SURFACE_TAG_FROZEN_LEGACY_COUNT`，三处同改）；
- *      · 这 9 行的**登记值之和恒等于 `FROZEN_SURFACE_TAG_TOTAL`** ⇒ 未登记的涨、表值被悄悄降、
- *        总数被单独手改 —— 三条都会红。
- *   ② **新登记行**（批 5 起新增；`count ≥ 1` 且 `file` **不在** legacy 集里）：
+ *      · 这 9 行的**登记值之和恒等于 `SURFACE_TAG_FROZEN_LEGACY_COUNT`**（迁移面的份额；批 5/7 抬
+ *        `FROZEN_SURFACE_TAG_TOTAL` 时**未动**该和 ⇒ 两个数今日是 14 与 47，不是同一个数）⇒ 未登记的涨、
+ *        表值被悄悄降、总数被单独手改 —— 三条都会红。
+ *   ② **new 档行**（批 5 起新增；`count ≥ 1` 且 `tier: "new"` —— 判据看**档位**，不看「文件在不在
+ *      legacy 集里」；后者在同文件双行时会把 new 行算进 legacy 面）：
  *      · `count` 必须**恰等于**实测（不是 ≤）—— 防「先把表抬高再看」；
  *      · 同一次提交必须手工抬高 `FROZEN_SURFACE_TAG_TOTAL` **并**同步 `SURFACE_TAG_ANCHOR.entries`
  *        （只许抬高到「Σ 登记值」；凭空抬高总数而不登记 ⇒ 红）。
