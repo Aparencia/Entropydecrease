@@ -192,6 +192,7 @@ export const SURFACE_TAG_REGISTRY: readonly SurfaceTagRegistryEntry[] = [
   { file: "components/LiveImageStrip.tsx", count: 1, legacy: true, reason: "T17-B 第 2 批迁移：实时图像条的容器面 ⇒ 属迁移面" },
   { file: "components/MaterialInputPanel.tsx", count: 1, reason: "学习素材卡容器（原 `const panel` 共享样式）：批 7 T7 换成原语 `level=\"none\" radius=\"panel\" padded`" },
   { file: "components/NotePreviewView.tsx", count: 2, reason: "AI 精修版 / 规则版预览的 markdown 阅读面（两处 `dangerouslySetInnerHTML`）：批 7 T7 用受控槽 `html` 迁入" },
+  { file: "components/NoteTagsEditor.tsx", count: 1, reason: "标签编辑浮层（批 7 T18：`level=\"raised\"` 锚定面板，底/边/圆角/阴影四件都得走原语——该文件为新建件，无任何冻结键可承接字面量）" },
   { file: "components/PhotoCapturePanel.tsx", count: 1, reason: "图文采集卡容器（原 `const panel` 共享样式）：批 7 T7 换成原语 `level=\"none\" radius=\"panel\" padded`" },
   { file: "components/PracticeQuestionsOverlays.tsx", count: 2, reason: "练习条目行容器（整圈边框 + 无底色，两处）：批 7 T7 迁入 `level=\"none\"`，行内排布留在 `style`" },
   { file: "components/ProfileDetector.tsx", count: 1, reason: "视频档案卡容器（整圈边框 + 无底色）：批 7 T7 迁入 `level=\"none\" radius=\"panel\" padded`" },

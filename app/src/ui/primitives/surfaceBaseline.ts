@@ -242,8 +242,10 @@ export const FROZEN_SHADOW_BY_FILE: Readonly<Record<string, number>> = {
  *   legacy 9 行原样不动、其和 14 未变）。来源逐项：① 受控槽 `html`/`domId` 解锁 4 处
  *   （2 处 `dangerouslySetInnerHTML` 阅读面 + 1 处 diff 阅读面 + 1 处带锚点 `id` 的屏卡）；
  *   ② 新档 `level="none"`（只出边框不出底）解锁 19 处透明边框容器 —— 🔴 **按实测量登记，不是预测值**。
+ * ★ 批 7 T18 同步（登记制第二次使用）：`46 → 47`（Σ 登记值 46 → 47，条目 28 → 29）——
+ *   新增件 `components/NoteTagsEditor.tsx` 的 1 处标签编辑浮层（`level="raised"`）。legacy 9 行未动。
  */
-export const FROZEN_SURFACE_TAG_TOTAL = 46;
+export const FROZEN_SURFACE_TAG_TOTAL = 47;
 
 /**
  * 锚（三份；判据 ④ 逐条比对）—— `entries` = 基线条目数（防"表被悄悄删条目"）、
@@ -272,7 +274,7 @@ export const SURFACE_TAG_FROZEN_LEGACY_COUNT = 14;
  * 登记制的锚（与三条棘轮的锚同形、独立；`entries` = 登记表条数 · `file/value` = 一个具名登记的
  * 冻结值）——防「登记表被静默清空 / 仪器把它读成 0 而总数判据仍绿」。**新登记 = 手工同步本锚。**
  */
-export const SURFACE_TAG_ANCHOR = { entries: 28, file: "components/TaskConversationView.tsx", value: 3 } as const;
+export const SURFACE_TAG_ANCHOR = { entries: 29, file: "components/TaskConversationView.tsx", value: 3 } as const;
 
 /**
  * ★ 阴影残留的分类与逐文件理由（`ShadowResidualKind` / `SHADOW_RESIDUAL`）**已移到

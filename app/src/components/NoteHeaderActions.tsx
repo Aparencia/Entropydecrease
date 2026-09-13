@@ -16,6 +16,7 @@ import type { Note, NoteGroup } from "../types";
 import { paletteHex, parseNoteProperties } from "../utils/colorPalette";
 import type { ThemeMode } from "../utils/colorPalette";
 import NoteColorPicker from "./NoteColorPicker";
+import NoteTagsEditor from "./NoteTagsEditor";
 import NoteMoveToGroupMenu from "./NoteMoveToGroupMenu";
 import NoteLinkToSystem from "./NoteLinkToSystem";
 
@@ -78,6 +79,10 @@ export default function NoteHeaderActions({
           </div>
         )}
       </div>
+      {/* 批 7 T18（C2.1 / C2.2）：标签编辑入口——写端三条命令的唯一生产调用点。
+          入口用 `Button` 原语、浮层用 `<Surface>`：本文件的 nativeButton 与边框两格都已满
+          （§C9.12 实测 2/2 · 1/1）⇒ 这里**不得**再出现原生 `<button>` 或内联 `#e5e7eb` 边框。 */}
+      <NoteTagsEditor key={`tags-${note.id}`} note={note} onChanged={onChanged} onError={onError} />
       {/* v0.16.1：手动分组显式入口——移动/移出组（onChanged 刷新列表+右栏） */}
       <NoteMoveToGroupMenu
         key={`move-${note.id}`}
