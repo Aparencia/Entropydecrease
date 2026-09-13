@@ -63,6 +63,7 @@
 import type { CSSProperties, ReactElement } from "react";
 import { Button, EmptyState, Text } from "../../ui/primitives";
 import { fmtMs } from "../../utils/fmt";
+import { lowConfidenceClass } from "../../utils/lowConfidence"; // C4.2：低置信第 2 个生产调用点（第 1 点 = SessionRawView）
 import type { SessionViewSlot } from "../registry";
 import TimeRail from "./TimeRail";
 import "./TriTrackAlign.css";
@@ -123,6 +124,7 @@ interface AlignedItem {
   readonly meta?: string;
   /** 区间尾码（仅画面轨：`– ${fmtMs(last_seen_ms)}`） */
   readonly range?: string;
+  readonly confidence?: number | null; // 转写段置信度（R11.3/C4.2：<0.5 ⇒ 低置信墨度；画面/OCR 轨无此字段）
 }
 
 /** 一条轨：`track` 决定 DOM 锚点，`items` 已按 ms 升序（渲染层不再排序） */
@@ -145,6 +147,7 @@ function segmentItem(seg: Detail["segments"][number], index: number): AlignedIte
     time: timeOf(seg.start_ms),
     text: seg.text,
     meta: SOURCE_LABEL[seg.source] ?? seg.source,
+    confidence: seg.confidence,
   };
 }
 
@@ -229,7 +232,7 @@ function TriTrackItem({ item, onSeek, coaligned }: { readonly item: AlignedItem;
           {item.range}
         </Text>
       )}
-      <Text as="span" size={4} tone="ink-2">
+      <Text as="span" size={4} tone="ink-2" className={lowConfidenceClass(item.confidence)}>
         {item.text}
       </Text>
     </div>
