@@ -12,6 +12,10 @@ use tauri::State;
 use crate::commands::{normalize_title, AppState, TITLE_MAX_CHARS};
 use crate::types::{NewSession, NewSessionOcrBlock, NewSessionSegment, Session, SessionDetail, SessionListItem};
 
+/// 会话删除的音频级联清理面（T28；`#[path]` 由父模块声明 ⇒ `lib.rs` 一行未动）。
+#[path = "session_audio_purge.rs"]
+pub(crate) mod session_audio_purge;
+
 /// 会话列表单页上限。
 ///
 /// @ai-context: pub(crate) 供 commands_session_delete 等引用（批 4 审查修复
@@ -164,19 +168,39 @@ pub async fn get_session_detail(state: State<'_, AppState>, id: i64) -> Result<S
     Ok(SessionDetail { session, segments, ocr_blocks, events, screens })
 }
 
-/// 删除会话（级联清理转写段与 OCR 块）。
+/// 删除会话（级联清理转写段与 OCR 块 + **音频文件**，批 8 T28/U1-a）。
 #[tauri::command]
 pub async fn delete_session(state: State<'_, AppState>, id: i64) -> Result<bool, String> {
-    if id <= 0 {
-        return Err("无效的会话 id".to_string());
-    }
-    let ok = state.db.delete_session(id).map_err(|e| e.to_string())?;
+    let ok = delete_session_in(&state.db, &state.data_dir, id)?;
     // REQ-278：删除会话 → 广播 sessions 域（列表/关联视图即时刷新）
     if ok {
         crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Sessions);
         // 会话删除级联清笔记关联（notes.session_id SET NULL）——notes 域同播
         crate::notify::emit_changed(&state.app, crate::notify::DataDomain::Notes);
     }
+    Ok(ok)
+}
+
+/// `delete_session` 的命令体（抽出是为可单测：`#[tauri::command]` 薄壳要运行中的
+/// `AppHandle`，单测里造不出——同 T22 `session_audio_ref_in` 口径）。
+///
+/// @ai-context: 顺序 = ① 校验 id ② DB 删除（失败**上抛**，文件一个不动——活会话不得丢音频）
+///              ③ 音频清理 `{data_dir}/session-audio/{id}.wav` + sidecar；清理失败只登记
+///              不上抛（「部分删除」是允许的终态，见 `session_audio_purge` 的「DB 原子 +
+///              文件非原子」注解；AGENTS.md §4：不得空忽略，失败经 `report` 落 stderr）。
+/// @ai-context: **不读** `AudioStoreConfig`：删音频与「是否落盘」无关（关掉落盘不得变成
+///              「删会话不清音频」的豁免通道）。已不存在的会话（`ok == false`）同样清理
+///              ——幂等自愈，返回值语义逐字不变（仍 `Ok(false)`）。
+pub(crate) fn delete_session_in(
+    db: &crate::db::Db,
+    data_dir: &std::path::Path,
+    id: i64,
+) -> Result<bool, String> {
+    if id <= 0 {
+        return Err("无效的会话 id".to_string());
+    }
+    let ok = db.delete_session(id).map_err(|e| e.to_string())?;
+    session_audio_purge::purge_session_audio(data_dir, &[id]).report("delete_session", &[id]);
     Ok(ok)
 }
 

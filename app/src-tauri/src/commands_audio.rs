@@ -118,7 +118,12 @@ pub fn session_audio_cleanup(state: State<'_, AppState>) -> Result<crate::audio_
 }
 
 /// 会话音频目录名（与写入侧 `audio_store` 的 `{data_dir}/session-audio/{id}.wav` 一致）。
-const SESSION_AUDIO_DIR: &str = "session-audio";
+///
+/// @ai-context: `pub(crate)`（批 8 T28）：删除侧的清理面
+///              （`commands_session::session_audio_purge`）按**同一常量**拼路径 ——
+///              读写两侧各写一份字面量，正是「读的地方有音频、删的地方找不到」这类
+///              静默漂移的温床。可见性放开是**零行为**改动（编译期单一来源）。
+pub(crate) const SESSION_AUDIO_DIR: &str = "session-audio";
 /// WAV 头长度（RIFF 12 + fmt 24 + data 8；与 `audio_store::WAV_HEADER_LEN` 同值）。
 const WAV_HEADER_LEN: usize = 44;
 /// `data` 块长度字段在头内的偏移（`audio_store::write_header` 的写入位置）。
