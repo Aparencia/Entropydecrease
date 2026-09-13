@@ -50,27 +50,21 @@
  *              可见），不会静默白屏。棘轮口径：新增代码 0 处颜色/边框/字号字面量（错误色走
  *              `StatusLine` 原语 · 间距走 `--ed-space-*`），`style` 只承载布局（ADR-033 §4）。
  */
-import { Suspense, createElement, lazy, useCallback, useMemo, useState } from "react";
-import type { ComponentType, RefObject } from "react";
+import { Suspense, createElement, useCallback, useMemo, useState } from "react";
+import type { RefObject } from "react";
 import type { Note, NoteGroup } from "../../types";
 import type { NoteEditHandle } from "../NoteEditView";
 import type { ColumnLayout } from "../../hooks/useColumnLayout";
 import type { SelectionNoteAction } from "../../utils/noteSelectionMenu";
 import type { NoteViewSlot, ViewSpec } from "../../views/registry";
 import { useViewMemory } from "../../views/useViewMemory";
-import NoteReadingView from "../NoteReadingView";
-import RichEditorView from "../RichEditorView";
-import NoteHeaderActions from "../NoteHeaderActions";
-import VersionPanel from "../VersionPanel";
 import { ShellFallback } from "../../shell/ShellFallback";
-import { StatusLine, Text, ViewSwitcher } from "../../ui/primitives";
+import { StatusLine, ViewSwitcher } from "../../ui/primitives";
+import { ResidentNoteView } from "./NotesReadingColumn.parts";
+import { CARD_FLOW_LOAD, lazyMapOf } from "./readingColumnLoaders";
 
 /** `views` 缺席时的空清单：**模块级常量**（稳定引用 ⇒ 下面的 `useMemo` 不每渲染重算） */
 const NO_VIEWS: readonly ViewSpec<NoteViewSlot>[] = [];
-
-/** 卡片流键（= 注册表的 `NOTE_VIEWS[1]`；本件不 import 注册表 —— C1①）与其**带 seek 包装件**加载器（T17/C10.3：该槽缺 `onOpenSessionAt`）；仍经 `lazy()` ⇒ 模块级惰性不变。 */
-const CARD_FLOW_KEY = "cardflow";
-const CARD_FLOW_LOAD = (): Promise<{ default: ComponentType<NoteViewSlot> }> => import("../../views/note/NoteCardFlowWithSeek");
 
 interface Props {
   /** 当前选中笔记（null=空态占位） */
@@ -117,20 +111,8 @@ interface Props {
   views?: readonly ViewSpec<NoteViewSlot>[];
 }
 
-export default function NotesReadingColumn({
-  selected, editing, setEditing, readerSearch, noteColors, groups, editorRef, outlineCol,
-  onChanged, onError, onCreateSystem, onOpenAi, onOpenModelCard, onSelectionAction,
-  onPinToggle, onDelete, onTaskToggle, onTagClick, onOpenSession, onOpenSessionAt, onImageOpen, onCleanNotice,
-  views,
-}: Props) {
-  // H3：辅助面板插槽——VersionPanel（知识补充已迁移至编辑态 🤖 AI 菜单——
-  // v0.17.0 REQ-246：阅读态独立面板移除，用 AI 直接进入编辑态）
-  const auxPanels = selected ? (
-    <>
-      <VersionPanel key={`version-${selected.id}`} noteId={selected.id} onChanged={() => void onChanged()} onOpenSessionAt={onOpenSessionAt} />
-    </>
-  ) : null;
-
+export default function NotesReadingColumn(props: Props) {
+  const { selected, editorRef, onTaskToggle, onOpenSession, onOpenSessionAt, onImageOpen, views } = props;
   // ── 批 5 T14：视图宿主（C1① 注入 · C5 记忆 · C4 守卫 · C11 槽位）──
   const specs = views ?? NO_VIEWS;
   const keys = useMemo(() => specs.map((v) => v.key), [specs]);
@@ -163,15 +145,8 @@ export default function NotesReadingColumn({
     [viewKey, editorRef, setViewKey],
   );
 
-  /**
-   * 惰性映射：**默认视图无 `load` ⇒ 值为 `null`**，永不进 `React.lazy`（§7.3② 的构造性证据）。
-   * `lazy()` 只按 `specs` 引用建一次 —— 每渲染新建会让子树恒重挂（F5 的挂载计数会当场红）。
-   * T17：**卡片流**经包装件加载（键漂移会让它静默失效 ⇒ F11 用例即守卫）。
-   */
-  const lazyOf = useMemo(
-    () => new Map(specs.map((spec) => [spec.key, spec.load ? lazy(spec.key === CARD_FLOW_KEY ? CARD_FLOW_LOAD : spec.load) : null])),
-    [specs],
-  );
+  /** 惰性映射（键常量与工厂已搬到 `readingColumnLoaders`）；`useMemo` 留在宿主 —— 工厂是**纯函数**、不持有记忆。 */
+  const lazyOf = useMemo(() => lazyMapOf<NoteViewSlot>(specs, CARD_FLOW_LOAD), [specs]);
   const isDefault = viewKey === defaultKey;
   const LazyView = isDefault ? null : lazyOf.get(viewKey) ?? null;
   /** 非默认视图的槽（数据全在这里，视图自身零取数 —— C14②）；空态 ⇒ `null`（连卡片流都不挂）。
@@ -181,75 +156,8 @@ export default function NotesReadingColumn({
     : null;
   const viewProps = slot === null ? null : { ...slot, onOpenSessionAt };
 
-  /** 默认视图（原文）节点：T14 之前逐字相同，只是现在由常驻容器承载（§7.3①） */
-  const residentView = selected ? (
-    <NoteReadingView
-      note={selected}
-      editing={editing}
-      // v0.19.1：命中词阅读搜索（仅当请求属于当前选中笔记——过期请求不注入）
-      externalSearch={readerSearch && selected?.id === readerSearch.noteId
-        ? { key: readerSearch.key, query: readerSearch.search }
-        : null}
-      outlineFolded={outlineCol.folded}
-      // 批 3 T8：大纲列宽/拖拽经 props 注入（此前 NoteReadingView 写死 180，
-      // hook 的宽度记忆与 min/max 夹取全部失效——审计 J1-6「假可调」）
-      outlineWidth={outlineCol.width}
-      onOutlineResize={outlineCol.resizeBy}
-      onOutlineReset={outlineCol.resetWidth}
-      // 批 3 T8（J1-3）：窄条（ColumnBar）点击必须走 expand()——它同时清自动/手动
-      // 折叠态；旧实现只翻 manualFolded，窄窗自动折叠下 folded 恒为真 ⇒ 点窄条
-      // 永不展开。未折叠时的 ✕「收起大纲」仍是手动折叠（与 NotesGroupsColumn 的
-      // bar=expand / onCollapse=setManualFolded 同款形态）
-      onToggleOutline={() =>
-        outlineCol.folded ? outlineCol.expand() : outlineCol.setManualFolded(true)
-      }
-      editor={
-        <RichEditorView
-          key={selected.id}
-          ref={editorRef}
-          note={selected}
-          onCancel={() => {
-            // v0.13.6：完成编辑 → 列表重载 + 选中笔记重取（右栏立即显示新标题/正文）
-            setEditing(false);
-            void onChanged();
-          }}
-          // v0.14 A：编辑态图片点击放大（与阅读态同一入口）
-          onImageOpen={(src, title) => onImageOpen(src, title)}
-          // 批 8（REQ-317）：编辑态选区行动类（转问题/模型卡预填）
-          onSelectionAction={onSelectionAction}
-        />
-      }
-      auxPanels={auxPanels}
-      headerExtra={
-        <NoteHeaderActions
-          key={`hdr-${selected.id}`}
-          note={selected}
-          resolvedColor={noteColors[selected.id] ?? null}
-          groups={groups}
-          onChanged={() => void onChanged()}
-          onError={(m) => onError(m)}
-          onGotoKnowledgeSystem={onCreateSystem}
-          onOpenAi={onOpenAi}
-          onOpenModelCard={onOpenModelCard}
-          onCleanNotice={onCleanNotice}
-        />
-      }
-      onEdit={() => setEditing(true)}
-      onPinToggle={() => void onPinToggle(selected)}
-      onDelete={() => void onDelete(selected.id)}
-      onTagClick={onTagClick}
-      onOpenSession={(id) => onOpenSession?.(id)}
-      onOpenSessionAt={onOpenSessionAt}
-      onTaskToggle={onTaskToggle}
-      onImageOpen={(src, title) => onImageOpen(src, title)}
-      // 批 8（REQ-317）：阅读态选区行动类（转问题/模型卡预填）
-      onSelectionAction={onSelectionAction}
-    />
-  ) : (
-    <Text as="div" size={4} tone="ink-3" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      从左侧选择一条笔记查看
-    </Text>
-  );
+  /** 原文常驻子树的**展示装配**已搬到 `NotesReadingColumn.parts`（本件把整份 props 原样透传 —— 见该件文件头的字节预算理由）。 */
+  const residentView = <ResidentNoteView {...props} />;
 
   return (
     <div style={{ flex: 1, minWidth: 0, display: "flex", overflow: "hidden" }}>
