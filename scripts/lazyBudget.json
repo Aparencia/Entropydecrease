@@ -1,10 +1,10 @@
 {
-  "generatedFrom": "node scripts/check-bundle-budget.mjs（**真构建**，不带 --no-build）· 源码 = 80b1eabc（T9 的提交树） · 读数存档 tmp/t9/fresh-dist.json",
+  "generatedFrom": "node scripts/check-bundle-budget.mjs（**真构建**，不带 --no-build）· 源码 = 90bb5f6a（7a 段收口树）· 读数存档 tmp/t12/lazy-final-realbuild.json；上一版 = cd800d63（T9，批次中段快照）",
   "unit": "gzip = zlib.gzipSync level 6 · 族前缀 = 去掉 8 位内容 hash 的 chunk 名 + '-'（chunk 名带内容 hash，不稳定，不能当键）",
   "scope": "🔴 必须在**新鲜构建**产物上判定（§C21.3）：旧 dist 上的 --no-build 读数含时代残渣，上界会虚高（实测 +64,497 B）⇒ 本判据的合格调用 = 不带 --no-build（本脚本自行构建）或显式 --dist 指认受判产物",
-  "semantics": "全部字段 = 实测**冻结值**，只许降（批 7 §C9.6 第 2 条 / §C10.4）；写乐观「预算值」会立刻红",
-  "lazyChunkCountMax": 36,
-  "lazyTotalGzipBytesMax": 634316,
+  "semantics": "全部字段 = 实测**冻结值**，只许降（批 7 §C9.6 第 2 条 / §C10.4）；写乐观「预算值」会立刻红。★ 本次（rulings §C46.4「每收口一次、重冻一次」）为**一次性、可归属的重冻**：4 族按收口树**真实构建**的实测值重冻（NoteMarkdown- · NotesPage- · RefineLaunchDialog- · SessionsPage-）+ 新族 NoteCardFlowWithSeek- 登记 + chunk 数 36 → 37 + 总量 634,316 → 636,243；🔴 **vendor-* 五族逐族核对为「零增长」**（58,784 / 208,585 / 41,161 / 79,915 / 50,622 逐字节不变）⇒ 未触发 §C46.4 条件⑤ 的 STOP。**批 8 的基线 = 本批收口时的重冻值**（此后才是真正的硬棘轮）。",
+  "lazyChunkCountMax": 37,
+  "lazyTotalGzipBytesMax": 636243,
   "families": [
     {
       "prefix": "ActionPage-",
@@ -43,16 +43,20 @@
       "gzipBytesMax": 785
     },
     {
+      "prefix": "NoteCardFlowWithSeek-",
+      "gzipBytesMax": 391
+    },
+    {
       "prefix": "NoteMarkdown-",
-      "gzipBytesMax": 2950
+      "gzipBytesMax": 3278
     },
     {
       "prefix": "NotesPage-",
-      "gzipBytesMax": 47045
+      "gzipBytesMax": 48087
     },
     {
       "prefix": "RefineLaunchDialog-",
-      "gzipBytesMax": 7184
+      "gzipBytesMax": 7469
     },
     {
       "prefix": "RefineStrategyPicker-",
@@ -84,7 +88,7 @@
     },
     {
       "prefix": "SessionsPage-",
-      "gzipBytesMax": 20987
+      "gzipBytesMax": 21168
     },
     {
       "prefix": "SettingsPage-",
