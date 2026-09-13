@@ -13,7 +13,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import type { Note, NoteFilterResult, TextFilterDecision, TextFilterReview, TextFilterStatus } from "../types";
-import { escapeHtml, renderTimestampAnchors } from "../utils/html";
+import { escapeHtml } from "../utils/html";
+import { PREVIEW_MODE, mdLineHtml } from "../utils/markdownLine";
 import AiRefineCard from "./AiRefineCard";
 import { ConfirmDialog, Loading, Surface, Text } from "../ui/primitives";
 
@@ -32,11 +33,15 @@ const REASON_LABEL: Record<string, string> = {
   rhetorical: "反问",
 };
 
-/** 轻量 Markdown 渲染（标题/段落/列表/屏配图——笔记正文结构有限，避免引渲染库；
+/** 轻量 Markdown 渲染（标题/段落/列表/屏配图——笔记正文结构有限，避免引渲染库）；
  *  所有文本经 escapeHtml（utils/html.ts 单一定义源）转义——本地内容仍按不可信输入处理；
  *  v0.7.3：`![alt](session-images/...)` 配图行 → 本地图（baseUrl + convertFileSrc））
- *  v0.12.0：时间戳锚点 `[⏱ MM:SS]([[ts:ms]])`/章节锚点 → 芯片（renderTimestampAnchors
- *  ——修复笔记录库前预览仍显示原始锚点文本的真机验收问题） */
+ *  批 7 T17（C10.1 的 #4 迁入）：行级渲染改由 `utils/markdownLine.ts` 的 `mdLineHtml` 承担
+ *  ——它同时是精修工作台那条链的唯一实现；`PREVIEW_MODE` 的样式值逐字取自本函数迁移前的
+ *  h2/h3/quote/li/p 五档（§C11.1）⇒ 可见输出零变化（T16 的 34 条表征用例是回归网）。
+ *  🔴 边界（§C37.3）：`PREVIEW_MODE` **不覆盖图片行** —— 该分支需要 `convertFileSrc` +
+ *  运行时 `baseUrl`/`dataDir` 两个注入值，塞不进模式常量 ⇒ **它的前置判断必须留在本容器侧**，
+ *  否则配图行会退化成 `<p>`（T16 的 7 条图片用例即此判据）。 */
 function renderMarkdown(md: string, imageBaseUrl: string, dataDir: string): string {
   return md
     .split("\n")
@@ -60,16 +65,8 @@ function renderMarkdown(md: string, imageBaseUrl: string, dataDir: string): stri
         // convertFileSrc 虽已编码但直出分支无编码，统一 escapeHtml 兜底
         return `<img src="${escapeHtml(src)}" alt="${escapeHtml(img[1])}" loading="lazy" style="max-width:260px;border-radius:6px;border:1px solid #e5e7eb;margin:4px 0" />`;
       }
-      // v0.12.0：先转义再替换锚点（锚点语法字符不在转义集，匹配安全）
-      if (line.startsWith("# ")) return `<h2 style="font-size:15px;margin:10px 0 4px">${renderTimestampAnchors(escapeHtml(line.slice(2)))}</h2>`;
-      if (line.startsWith("## ")) return `<h3 style="font-size:13px;margin:8px 0 4px;color:#0f766e">${renderTimestampAnchors(escapeHtml(line.slice(3)))}</h3>`;
-      // v0.7.5（REQ-170）：会话异常警示行（Markdown 引用行 → 警示块）
-      if (line.startsWith("> ")) {
-        return `<div style="font-size:12px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin:6px 0">${renderTimestampAnchors(escapeHtml(line.slice(2)))}</div>`;
-      }
-      if (line.startsWith("- ")) return `<div style="font-size:12px;color:#4b5563">• ${renderTimestampAnchors(escapeHtml(line.slice(2)))}</div>`;
-      if (line.trim() === "") return "";
-      return `<p style="font-size:13px;color:#374151;margin:4px 0">${renderTimestampAnchors(escapeHtml(line))}</p>`;
+      // 其余各行（标题/引用/列表/空行/段落）—— 唯一实现，样式与迁移前逐字相同
+      return mdLineHtml(line, PREVIEW_MODE);
     })
     .join("");
 }
