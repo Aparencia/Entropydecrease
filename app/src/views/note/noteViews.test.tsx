@@ -13,8 +13,9 @@
  *   N3 卡片类走 `Surface` 族：每个卡片节点含 `ed-surface` / `ed-surface--bordered`，且类名集合与
  *      `<Surface level="surface" radius="panel" bordered padded>` **逐字相等**（防两处各写一份而漂移）。
  *   N4 `cardKindOf` 纯函数：4 条映射 + 未知 tag ⇒ `other`（+ mdast 侧同表 + 恒等性）。
- *   N5 C8 防「3 套变 4 套」：全站 `react-markdown` **运行时站点 == 2**（且是两个具名文件）；
- *      `remark-*` / `rehype-*` 站点数不变（8 处、同样两个文件）；`views/**` 含 `import type` 在内 0 站点。
+ *   N5 C8 防「3 套变 4 套」：全站 `react-markdown` **运行时站点 == 1**（批 7 T14 把站点 #2
+ *      `ChatMessageMarkdown` 并入站点 #1 后删除 ⇒ 只剩 `components/NoteMarkdown.tsx`）；
+ *      `remark-*` / `rehype-*` 站点 **4 处、同一个文件**；`views/**` 含 `import type` 在内 0 站点。
  *   N6 不改既有语义：① 不传 `remarkPluginsExtra` ⇒ 0 张卡（缺省不生效）；② 传了也**不替换**既有链
  *      （`<br>` / GFM 表格 / `mark.note-mark-red` / `.katex` 四条同时在场）；③ 既有 6 用例在
  *      `NoteMarkdown.test.tsx` 里原样绿（V1 同批跑，本文件不复制它们）。
@@ -274,16 +275,18 @@ describe("N6 不改既有语义（只追加、不替换）", () => {
 });
 
 describe("N5 C8 防「3 套变 4 套」：react-markdown 站点计数", () => {
-  it("全站运行时站点 == 2（且是两个具名文件）· views/** 含 import type 在内 0 站点 · 插件站点数不变", () => {
+  it("全站运行时站点 == 1（T14 归一后的唯一站点）· views/** 含 import type 在内 0 站点 · 插件站点 4 处同源", () => {
     const all = sourcesUnder(SRC);
     expect(all.length, "扫描域为空 ⇒ 下面所有计数都空真").toBeGreaterThan(150);
     const sites = all.flatMap((abs) => edgesOf(readFileSync(abs, "utf8"), RM_ID).map((e) => ({ file: relOf(abs), ...e })));
-    expect(sites.filter((s) => s.kind === "runtime").map((s) => s.file).sort(), "运行时站点必须恰是这两个文件（多一个 = 第 4 套渲染器）")
-      .toEqual(["components/ChatMessageMarkdown.tsx", "components/NoteMarkdown.tsx"]);
+    // 批 7 T14（Y4/Y5/Y6）：站点 2 → 1、插件 8 → 4 —— 少的是 `components/ChatMessageMarkdown.tsx`（整件并入 `NoteMarkdown` 后删除，3 个消费点改调后者的 `content` 槽）。强度未降：文件集合仍是全等断言，另把 4 条说明符逐个钉住。
+    expect(sites.filter((s) => s.kind === "runtime").map((s) => s.file).sort(), "运行时站点必须恰是这一个文件（多一个 = 第 4 套渲染器；T14 后少一个 = 归一未落地）")
+      .toEqual(["components/NoteMarkdown.tsx"]);
     expect(sites.filter((s) => s.file.startsWith("views/")), "views/** 里出现了 react-markdown 站点（含 import type 也算）").toEqual([]);
     const pluginSites = all.flatMap((abs) => pluginEdgesIn(readFileSync(abs, "utf8")).map((spec) => ({ file: relOf(abs), spec })));
-    expect(pluginSites.length, "remark-*/rehype-* 站点数变了（新增插件站点也算「第 4 套」的开端）").toBe(8);
-    expect([...new Set(pluginSites.map((s) => s.file))].sort()).toEqual(["components/ChatMessageMarkdown.tsx", "components/NoteMarkdown.tsx"]);
+    expect(pluginSites.length, "remark-*/rehype-* 站点数变了（新增插件站点也算「第 4 套」的开端；T14 后应为 4）").toBe(4);
+    expect([...new Set(pluginSites.map((s) => s.spec))].sort(), "剩下的 4 条 = NoteMarkdown 的 remark-breaks / remark-gfm / remark-math / rehype-katex（逐个钉住，防「计数没变但换了一条」）").toEqual(["rehype-katex", "remark-breaks", "remark-gfm", "remark-math"]);
+    expect([...new Set(pluginSites.map((s) => s.file))].sort()).toEqual(["components/NoteMarkdown.tsx"]);
 
     // 仪器双侧自证：真 import 必命中、`import type` 单列、注释与裸字符串必不命中
     expect(edgesOf(`import X from "${RM_ID}";`, RM_ID)).toEqual([{ line: 1, kind: "runtime" }]);
