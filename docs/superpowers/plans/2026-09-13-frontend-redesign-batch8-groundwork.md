@@ -46,8 +46,8 @@
    | **U4** | 🔴 **d = 入库 + 按需入口 + 写死触发条件** | **T12**（入库那一半）+ **T24**（入口与触发条件那一半） | 仪器落 `scripts/`；**正式调用形态**（`npm run check:visual` 或等价手工入口）+ **文档写死触发条件**（如「动了 `ui/primitives/**` / token / `.css` 时必须跑」）+ 🔴 **profile 落 `$env:TEMP` 写进仪器头注（硬要求，非选项）**；🔴 **不接 husky、不进 CI**（U4-b/c **用户未选**） |
    | **U5** | **沿用「跳过」**（控制方按建议默认） | **不排单元** | 批 8 的验收表述**逐字写明「未覆盖 IPC 壳 / WebView2」**；真机 pass 的 **7 条继续登记、不假装完成** |
 3. **`docs/tech-debt/` 的形态（U3 裁决 = 归档 ⇒ 本批**处置它**，且**只做归档**）**：🔴 **在 T26 落地之前**，全批 `git status --porcelain` 的**预期**是**恒为一行 `?? docs/tech-debt/`**（本计划者实测，2026-09-13）；**T26 落地之后**，该目录**不再存在**（内容进 `docs/archive/<执行日>/`）⇒ 🔴 **`git status` 的预期变为「空」**，且 `docs-check` 的读数**会变**：
-   - **本计划者实测（归档前）**：`docs-check` = **扫描 281 / 检查 181**（工作树，**含未跟踪的 `docs/tech-debt/`**）；**提交树**读到 **280 / 180** 时**必须逐字归因到它**。
-   - 🔴 **归档后的读数必须实测、不得推断**（控制方的预测 = **扫描 281 → 282 · 检查 181 → 181**，依据 `scripts/docs-check.mjs:108-110` 的 `INCLUDE_ARCHIVE` 分支：归档文件**进 `files`（扫描）但不进 `activeFiles`（检查）**）⇒ **T26 的 Verification 第 1 条就是这条实测**；**不符 ⇒ 给旧值 / 新值 + 归因**。
+   - **本计划者实测（归档前）**：`docs-check` = **扫描 281 / 检查 181**（工作树，**含未跟踪的 `docs/tech-debt/`**）；**提交树**读到 **280 / 180** 时**必须逐字归因到它**。🔻 **E8-12 时点更正（2026-09-13，E8 复测）**：**当前真值 = 282 / 182**（`5852cdc4` 入库后 +1/+1）⇒ 本行与下一行的 4 个数字**一律按「旧时点读数」读**，**不得**再当判据基线（见 `## E8` §E8.12）。
+   - 🔴 **归档后的读数必须实测、不得推断**（控制方的预测 = **扫描 281 → 282 · 检查 181 → 181**，依据 `scripts/docs-check.mjs:108-110` 的 `INCLUDE_ARCHIVE` 分支：归档文件**进 `files`（扫描）但不进 `activeFiles`（检查）**）⇒ **T26 的 Verification 第 1 条就是这条实测**；**不符 ⇒ 给旧值 / 新值 + 归因**。🔻 **E8-11 更正（2026-09-13）**：该预测建立在**旧基线 281/181** 上；现基线 **282 / 182** ⇒ **修正预测 = 扫描 284 / 检查 181**（结构算术：`files` 282 −1 +3 = 284；`activeFiles` 182 −1 +0 = 181），**仍必须实测**。
    - 🔴 **引用只写必要片段**、**不得**把它的正文写进任何入库文档（`## 诚实边界 §三` 逐字保留这条纪律）。
 
 
@@ -113,7 +113,7 @@
 | **§3.1** | 只本地提交、不推远端 | 同 §0.1 |
 | **§3.2** | 🔴 **新增陷阱 P-34**：一切「全仓 / 全树 / 0 命中」扫描，**域一律取 `git ls-files`（入库域）**；与 **R8.7** 配套：**必须声明域是否为入库域** | `## 陷阱` 的 **P-34** 条 + `### 表 3` 的仪器口径 |
 | **§3.3** | **P-31 / P-32 / P-33 全部沿用**（`--outputFile` 读前查 mtime · `Set-Content -Encoding UTF8` 写 BOM ⇒ 用 node `writeFileSync` · `ref` 操作走脚本 + 断言退出码 + 回读） | `## Global Constraints · 仪器纪律` + 全批 |
-| **§3.4** | 🔴 **回写类提交的三道判据**：`−` 列 = 0 · **纯空白行删除 = 0** · **标题/锚子序列对拍**（被删/被改 = 0） | **T3/T11/T15/T21** 的 Verification 表逐条落地 |
+| **§3.4** | 🔴 **回写类提交的三道判据**：`−` 列 = 0 · **纯空白行删除 = 0** · **标题/锚子序列对拍**（被删/被改 = 0） | **T3/T11/T15/T21** 的 Verification 表逐条落地；🔻 **E8-5 适用域更正（控制方 §10.1 逐字，2026-09-13）**：「`−` 列 = 0」**只适用于「纯追加型回写」**（在既有文本里只增不改），🔴 **不适用于 (a) 替换型**（代码散文改数字等）**与 (b) EOL / 空白修正型**（末尾换行归一）⇒ 这两类的正确判据 = **语义等价证明**：**替换型** ⇒ hunk 只含**被替换的那几行** + **常数 / 判据零改动**；**EOL/空白型** ⇒ **`git diff -w --numstat` 输出为空** + **`countLines()` 前后逐字相等** + **空白行 Δ = 0** + **逐文件字节证明**（`工作树(归一后) == git show HEAD:<p> + 恰好一个 0x0A`）⇒ 全文与实测见 `## E8 · 机器期望的系统扫描` **§E8.5** |
 | **§3.5** | 数字必须带**口径与时点**；🔴 集合差主张**必须列交集与差集**，**不许只给计数** | 全批：任务卡的「读数三要素」= 命令 + 口径 + 时点 |
 | **§3.6** | 🔴 **判据必须验牙口**：每条三条全答（变异体是什么 / 真改变行为吗 / 红在具名断言吗）；**答不全者标「牙口未证」** | **每个任务卡的 `Verification` 表**（第 2 列 = 专属变异体；第 3 列 = 期望） |
 | **§3.7** | 批 7 的 **7 条「牙口未证」是批 8 的判据加固输入**（最实质：V3 逐文件对拍的「红」是 exit code 且日志 `exit=1` 与 `failed=0` 自相矛盾；**源码探针只打印、零 `expect`**） | **本批的判据设计纪律**：① 任何「红」必须落在**具名断言**上；② **源码探针必须带 `expect`**（`batch7UiWiring.test.tsx:203-216` 是最低可接受形态：**正控 + 负控 + 断言**） |
@@ -148,7 +148,7 @@
 | 门禁 | 命令 | 本计划者实跑读数 | 出处 |
 |---|---|---|---|
 | ① 行数 | `node scripts/line-limits.mjs --full` | **exit 0** · `>600 硬限 0（棘轮内）· 301–600 档 121 · 登记条目 121` | **实跑** |
-| ② 文档 | `node scripts/docs-check.mjs` | **exit 0** · `扫描 281 个 Markdown 文件（检查 181 个…）` + 五条 ✅ | **实跑**（工作树；**含未跟踪的 `docs/tech-debt/`**） |
+| ② 文档 | `node scripts/docs-check.mjs` | **exit 0** · `扫描 281 个 Markdown 文件（检查 181 个…）` + 五条 ✅（🔻 **E8-12 时点更正：现读数 = 扫描 282 / 检查 182**） | **实跑**（工作树；**含未跟踪的 `docs/tech-debt/`**） |
 | ③ IPC 注册 | `node scripts/check-command-registry.mjs` | **exit 0** · `定义 311 / 注册 311 / 重复 0` | **实跑** |
 | ④ 类型 | `cd app; npx tsc --noEmit` | **exit 0 · 0 错** | **实跑** |
 | ⑤ 首屏 + 懒侧 | `node scripts/check-bundle-budget.mjs --no-build` | **exit 0** · 首屏 **105.95 kB**（余 94.05）· 懒侧 **37 个 / 637,501 B** ⇒ **⏭ 未判**（`--no-build` 裸跑只判首屏） | **实跑** |
@@ -160,7 +160,7 @@
 | 附 clippy | `cd app/src-tauri; cargo clippy --all-targets` | **引用**：批 6 基线 lib warnings **15** | 批 6 收口读数；🔴 **本批有 Rust 改动 ⇒ 8e 跑一次并给集合差异**（`-D warnings` 下 `unused_imports` 会变 error：**条数相同 ≠ 集合相同**） |
 
 > 🔴 **本批不新增门禁成员**（八闸集合不变；`check-exemption-prose` 只以 **CI step** 转正，**不入八闸对账**）。🔴 **一切门禁与变异体实验一律串行**（§C6.1 / P9）；**任何「并行跑出来的红」不得当缺陷登记**。
-> 🔴 **时点注（必读，否则下游会把「+1」误读成回升）**：上表 ② 的 **281 / 181** 是**本计划文件入库之前**的读数；**本计划文件本身入库后**（`5852cdc4`）工作树读数 = **282 / 182**（**+1 扫描 +1 检查**，本计划者**已实测**：新增一个 `docs/superpowers/plans/*.md` 会同时进 `files` 与 `activeFiles`）⇒ 下游对账时：**提交树基线（含本计划文件）= 282 / 182**，**不含本计划文件 = 281 / 181**；两者差额**必须归因到本计划文件本身**。🔴 **T26 的归档会再改这个数**（预测 282 → 283？—— **不推断，T26 必须实测**；控制方给的预测 282/181 是**归档前基线**下的口径）。
+> 🔴 **时点注（必读，否则下游会把「+1」误读成回升）**：上表 ② 的 **281 / 181** 是**本计划文件入库之前**的读数；**本计划文件本身入库后**（`5852cdc4`）工作树读数 = **282 / 182**（**+1 扫描 +1 检查**，本计划者**已实测**：新增一个 `docs/superpowers/plans/*.md` 会同时进 `files` 与 `activeFiles`）⇒ 下游对账时：**提交树基线（含本计划文件）= 282 / 182**，**不含本计划文件 = 281 / 181**；两者差额**必须归因到本计划文件本身**。🔴 **T26 的归档会再改这个数**（预测 282 → 283？—— **不推断，T26 必须实测**；控制方给的预测 282/181 是**归档前基线**下的口径）。🔴🔴 **常设提醒（E8-12 立此为本批反面教材，2026-09-13）**：**凡引用 `docs-check` 的「扫描 / 检查」计数，必须注明时点**；且🔴 **计划文件自身入库会使两个计数各 +1** —— 本批**共 30 行**写了过时的 `281 / 181`（其中 **26 行已就地更正**，**12 张卡 + 4 处全局**：`T2 / T3 / T4 / T5 / T6 / T11 / T12 / T14 / T16 / T18 / T21 / T26` + `Global Constraints 一/六 与 表 1` + `已裁决项 U3`，逐条位置见 `## E8` §E8.12），**与 E8-1/E8-3/E8-4 同源**（计划期未把「计划自身入库」的副作用算进去）⇒ **此后所有批次的计划编制：凡写计数器期望值，一律写「时点 + 该时点之后的已知 Δ」**。
 > 🔴 **⑦ 的 1 条红（W1）的处理纪律**：按 **R-FLAKE** 三条（≥3 次重复 + 与可观测量相关 + 该文件不在写集内）**缺一 ⇒ 只写「未判定」**；**不得**在报告里写「全绿」。
 
 ### 七、提交纪律（🔴 **承 §C18.2：共享文件走 blob 构造，不走暂存区**）
@@ -197,7 +197,7 @@
 10. **`git archive` 取不到未跟踪文件**，解包树里没有 `.git`；**必须** `git -c core.autocrlf=false archive -o <tmp>/x.tar <commit>`（**先落盘再解包**，P-29）。
 11. **`--no-build` 在导出树必失败**（`dist` 不入库）⇒ 导出树内要跑预算守卫必须先在树内 build。
 12. **`--outputFile` 按 cwd 解析**（P-27）；**`--outputFile` 异步写盘**（P-31）⇒ **读任何 `--outputFile` 产物前先查 mtime**；🔴 **`numTotalTestFiles` 字段不存在**（文件数读 `testResults.length`）。
-13. **Node 24 拒绝 `spawn('npx.cmd')`**（`EINVAL`）⇒ 跑 vitest 用 **`node node_modules/vitest/vitest.mjs run`（cwd = `app/`）**；含空格/中文的路径**不能经 `shell:true`**。
+13. **Node 24 拒绝 `spawn('npx.cmd')`**（`EINVAL`）⇒ 跑 vitest 用 **`node node_modules/vitest/vitest.mjs run`（cwd = `app/`）**；含空格/中文的路径**不能经 `shell:true`**。🔻 **E8-13 口径实测（2026-09-13，E8 探针 11）**：🔴 **本条的适用域 = 「从 Node 子进程 spawn `npx`」，不是「在 shell 里敲 `npx`」** —— 实测三态：① **PowerShell 直接跑 `npx tsc --noEmit`（cwd = `app/`）⇒ exit 0**（10.9 s；`npx --no -- commitlint --version` 也 **exit 0** ⇒ 19.8.0）② Node 24 `spawnSync('npx', …)` ⇒ **ENOENT**、`spawnSync('npx.cmd', …)` ⇒ **EINVAL**（P4 复现）③ `spawnSync('npx.cmd', …, {shell:true})` ⇒ **exit 0**（11.16.0）。⇒ 🔴 **本计划里 16 处 `npx`（T3/T4/T5/T6/T8/T9/T10/T11/T16/T20/T22/T27 的 Step 与 Verification）一律不是勘误**（它们都是「给操作者在 PowerShell 里粘贴的一行」）⇒ **不得**一律改成 `node node_modules/...` 直调；只有**写进 `.mjs` / Node 脚本**的调用才必须用直调形态。
 14. **jsdom 无 `Element.prototype.scrollTo`**（`window.scrollTo` 是 function 但**静默不动**）⇒ 断言一律用 `vi.spyOn` 数调用。
 15. 🔴 **`motion/engine.guard.test.ts` 的图遍历读原始文本、不剥注释**（P-12）⇒ 在任何首屏文件（`App.tsx` / `main.tsx` / `shell/**`）里写注释时，**不得**出现 `import ... from "..."` 形态的示例代码。
 16. 🔴 **一切 `ref` 操作走 node 脚本 + 断言退出码 + 回读 `rev-parse`**（P-33）；**不得在 PowerShell 一行内传参做 ref 操作**。
@@ -208,7 +208,7 @@
 
 1. **变异体实验一律在导出副本里做**；**绝不许在 `app/src/**` 上「改→跑→还原」**（正解 = **每个变异新解一棵树**）。
 2. **CONTROL 必须在冻结提交树上取**；**harness 必须把「跑到了断言（用例数 >0）」与「跑红了」分开判**。
-3. 🔴 **禁 `--reporter=basic`**（Vitest 4 已移除 ⇒ 「伪装的红」= 假证明）；用 `--reporter=json --outputFile=…`。
+3. 🔴 **禁 `--reporter=basic`**（Vitest 4 已移除 ⇒ 「伪装的红」= 假证明）；用 `--reporter=json --outputFile=…`。🔻 **E8-14 实测（2026-09-13，E8 探针 11，Vitest 4.1.11）**：① ✅ **`--reporter=json` 可用** —— `node node_modules/vitest/vitest.mjs run src/ui/zIndex.test.ts --reporter=json --outputFile=<绝对路径>` ⇒ **exit 0**（721 ms），产物落盘、`testResults.length = 1` · `numTotalTests = 7` · `success = true`；🔴 **`numTotalTestFiles` 字段确认不存在**（与 §3.8 逐字一致）、文件数只能读 `testResults.length`；② ✅ **负控**：`--reporter=basic` ⇒ **exit 1** + `Startup Error · Failed to load custom Reporter from basic`（**启动期**报错，不是用例失败 ⇒ 正是「伪装的红」的机理）；③ ⚠️ **P-27 / P-31 仍适用**：`--outputFile` 必须**绝对路径**（相对路径按 cwd 解析，会把产物写到仓外）、读前**先查 mtime**。
 4. **变异体实验不得与全量测试并发**（P9）。
 5. 🔴 **本批的变异体必须「真的改变行为」**：**不得**用等价变异体；**期望比对要红在具名断言上**（`ran > 0` 只是旁证）；**注入必须自证「恰 1 次」**。
 6. **反例守卫（必须绿的反向变异）与必红的变异体分开列**；**新造的每个守卫/棘轮必须给「防真空阳性对照」**；**基线常量不可手工改宽**。
@@ -246,7 +246,7 @@
 |---|---|---|---|
 | 1 | `node scripts/line-limits.mjs --full` | **0** | `✅ line-limits（--full · 数值一致）：>600 硬限 0（棘轮内）· 301–600 档 121 · 登记条目 121` |
 | 2 | `node scripts/check-command-registry.mjs` | **0** | `✅ 命令注册一致：定义 311 / 注册 311 / 重复 0` |
-| 3 | `node scripts/docs-check.mjs` | **0** | `docs-check: 扫描 281 个 Markdown 文件（检查 181 个，archive 快照与豁免清单除外）` + 五条 ✅ |
+| 3 | `node scripts/docs-check.mjs` | **0** | `docs-check: 扫描 281 个 Markdown 文件（检查 181 个，archive 快照与豁免清单除外）` + 五条 ✅（🔻 **E8-12 时点更正：现读数 = 扫描 282 / 检查 182**） |
 | 4 | `cd app; npx tsc --noEmit` | **0** | （无输出 = 0 错） |
 | 5 | `node scripts/check-bundle-budget.mjs --no-build` | **0** | 首屏 **105.95 kB**（原始 332,301 B；余 94.05 kB）· 懒侧 **37 个 / 637,501 B** ⇒ `⏭ 未判` |
 | 6 | `node scripts/bundle-eager-graph.mjs` | **0** | `首屏静态可达应用源文件：111` · `首屏拉入的 npm 包：7`（`@gsap/react` · `@tauri-apps/api` · `@tauri-apps/plugin-dialog` · `gsap` · `react` · `react-dom` · `views`） |
@@ -340,7 +340,7 @@
 
 > **5 条新发现**（侦察 A）在本表的落位：#3（`markdownLine.ts` 的 6 hex 无守卫）· #5（七条展示面零同名测试）· #7（**掉地项**）· #10（圆角三档无棘轮）· 以及「批 7 T22 收口件不在盘上」——🔴 **最后一条已被控制方 §A.6 驳回**（时序假警报：扫描时 T22 正在飞行中；本计划者实测 **`task-22-report.md` 现已落盘**，378 行）⇒ **不作为批 8 的输入**（登记为 `## 诚实边界 §三` 的措辞纪律）。
 
-### 表 5 · 锚的实测与漂移登记（**P-36 的落地表**；本计划全文的锚以此为准）
+### 表 5 · 锚的实测与漂移登记（**P-36 的落地表**；本计划全文的锚以此为准）🔻 **E8 复测（2026-09-13）**：本表读数采集于 `711ad639`；此后 T3 的三个提交使 `design.md` 由 **1035 → 1053 行（+18）**，本表的**全部规格锚已再次漂移** —— 🔴 **当前真值见文末 `### 表 5b`**（规格锚 +2 ~ +18；`:241` 与 §4.3 段未漂）；`git ls-files` 域也已由 **1,614 → 1,616**（+本计划 +T1 的 `scripts/lib/lineScan.mjs`）
 
 | # | 控制方/侦察给的锚 | **本计划者实测锚** | 差 | 依据 |
 |---|---|---|---|---|
@@ -527,7 +527,7 @@
 
 **Interfaces:**
 - Consumes：无（本任务是地基）
-- Produces：`scripts/lib/lineScan.mjs` 的 `countLines(absPath)` · `scanTree()` · `parseExemptionRows()`（**签名与语义逐字不变**）；`scripts/line-limits.mjs` **继续导出 `countLines`**（re-export，供 `check-exemption-prose.mjs` 与判据件使用）—— 🔴 **这是本任务唯一的对外契约**，破了会让 T2/后续全部行数读数失真
+- Produces：`scripts/lib/lineScan.mjs` 的 `countLines(absPath)` · `scanTree()` · `parseExemptionRows()`（**签名与语义逐字不变**）；`scripts/line-limits.mjs` **保持模块导出面与拆件前逐字相同（7 名）**（re-export）—— 🔴 **这是本任务唯一的对外契约**，破了会让 T2/后续全部行数读数失真。🔻 **E8-2 勘误（2026-09-13，T1 实测，树 `547ffa1f`）**：原写「**继续导出 `countLines`**（re-export，**供 `check-exemption-prose.mjs` 与判据件使用**）」—— 🔴 **两处都不准确**：① 只导 `countLines` 会**静默收窄另外 6 名** ⇒ 必须 7 名全导（见 `Step 3`）；② `scripts/check-exemption-prose.mjs` **不经主件取口径**（它在自己的 `:26-27` 有 `countLines` 的私有副本 `countLinesText`，本批 **P-41**）⇒ 该脚本**不是**本契约的消费者（E8 复测：`git ls-files` 1,616 文件中 `countLines` 的**真 importer = 0** ⇒ 这是**潜在契约**，不是现存契约）
 
 - [ ] **Step 0: 先量基线（三件套）**
   ```powershell
@@ -545,7 +545,7 @@
   逐字搬 `countLines` / `scanTree` / `HARD_LIMIT` / `SOFT_LIMIT` / `FROZEN_OVER_LIMIT`（**真实值，不许改数**）/ 豁免表行解析；新件头加 `@ai-context: 自 scripts/line-limits.mjs 拆出（批 8 T1，控制方 §2 G1）；口径与语义逐字不变 —— countLines 仍是全仓行数的唯一实现。`
   🔴 **不改任何一个字符**（尤其 `countLines` 的两行实现与它的注释边界说明）。
 - [ ] **Step 3: 主件改成 import + re-export**
-  `export { countLines } from "./lib/lineScan.mjs";`（**保住既有 import 路径** —— 先例：批 7 T15 的 `mdLineHtml` 迁出时保留 re-export）。
+  🔴 **保持 `scripts/line-limits.mjs` 的模块导出面与拆件前逐字相同（7 名）**：`export { countLines, scanTree, parseTable, FROZEN_OVER_LIMIT, HARD_LIMIT, SOFT_LIMIT, TABLE_PATH } from "./lib/lineScan.mjs";`（**保住既有 import 路径** —— 先例：批 7 T15 的 `mdLineHtml` 迁出时保留 re-export）。🔻 **E8-2 勘误（2026-09-13，T1 实测，树 `547ffa1f`）**：原写「只点名 re-export `countLines`」⇒ 照做会**静默收窄另外 6 个导出名**（T1 实测 `scanTree` / `parseTable` / `FROZEN_OVER_LIMIT` / `HARD_LIMIT` / `SOFT_LIMIT` / `TABLE_PATH` 一度全部 `undefined`）⇒ 更正为**逐字保持 7 名**；🔴 并补记「`countLines` 的 re-export **全仓 0 个 importer**（域 = `git ls-files`）⇒ 它是**潜在契约**，不是现存契约」（E8 复测精确口径：真 importer 0；含该字样 3 文件 = `check-exemption-prose.mjs:27` 与 `app/src/ui/primitives/dialogMigration.a1.test.ts:61` 的**各自私有同名副本** + `app/src/views/session/SessionCardFlowView.tsx:41` 的**注释引用**）。
 - [ ] **Step 4: 三条读数逐字对拍**
   `node scripts/line-limits.mjs --full` ⇒ **exit 0 且输出串逐字相同**；`node scripts/check-exemption-prose.mjs` ⇒ **exit 0**（它经主件取口径 ⇒ 同时证明 re-export 生效）。
 - [ ] **Step 5: 纯搬迁的机械等价证据（§C14.7 / §C26.4）**
@@ -565,8 +565,8 @@
 | # | 判据 | 变异体（专属，翻回旧行为 ⇒ 必须红） | 期望 |
 |---|---|---|---|
 | **V1** | `node scripts/line-limits.mjs --full` **exit 0** 且输出串与 `### 表 1` 第 1 行**逐字相同**（`>600 硬限 0（棘轮内）· 301–600 档 121 · 登记条目 121`） | **M1**：把 `lib/lineScan.mjs` 的 `FROZEN_OVER_LIMIT` 从真实值改成 `[]`（若原为空则改成塞入一条假路径） | **M1 后期望**：`--full` 的 `(c)` 判据在**具名输出**上红（`❌ line-limits（--full）：N 处问题` + 逐条问题行）⇒ `exit 1` |
-| **V2** | **搬迁的机械等价**：`lib/lineScan.mjs` 的正文与 `git show HEAD:scripts/line-limits.mjs` 对应区间**逐字节相同**（归一换行；差异只允许 `import`/`export` 行） | **M2**：把 `countLines` 的 `- (s.endsWith("\n") ? 1 : 0)` 删掉 | **M2 后期望**：逐字节比较报差异；且 `check-exemption-prose.mjs` 的 `App.tsx 登记 549 == countLines 549` 变红（**具名行**）⇒ `exit 1` |
-| **V3** | **re-export 契约**：`node -e "import('./scripts/line-limits.mjs').then(m=>console.log(typeof m.countLines))"` ⇒ `function`；且 `check-exemption-prose.mjs` **exit 0** | **M3**：删掉主件的 `export { countLines }` 行 | **M3 后期望**：`check-exemption-prose.mjs` 报模块导出缺失 ⇒ **该进程非零退出**（**这是本任务最危险的失效模式**，必须有牙） |
+| **V2** | **搬迁的机械等价**：`lib/lineScan.mjs` 的正文与 `git show HEAD:scripts/line-limits.mjs` 对应区间**逐字节相同**（归一换行；差异只允许 `import`/`export` 行） | **M2**：把 `countLines` 的 `- (s.endsWith("\n") ? 1 : 0)` 删掉 | **M2 后期望（🔻 E8-1 勘误后的真红点，2026-09-13 由 T1 在导出树实跑，树 `547ffa1f`；日志 `.superpowers/sdd/2026-09-13-frontend-redesign-batch8/tmp/t1/log-mutants.txt` 的 M2a/M2c）**：① **V2 的逐字节对拍报差异** —— 具名断言「**✗ ⑤ 逐字节对拍：未声明差异 = 1 处**」，差异锚 = **`原 :51`**（`旧\|   return s.split('\n').length - (s.endsWith('\n') ? 1 : 0);` → `新\|   return s.split('\n').length;`）② **`--full` 由 exit 0 变 exit 1**，首行 **`❌ line-limits（--full）：123 处问题`**，首个问题行 **`· (c) 超过 300 行但未登记：app/src/components/KnowledgeDetailPanel.tsx（301 行）→ 运行 --write 补登并填写豁免理由`**（注：`301` = 变异后读数，基线该文件为 **300**）。🔻 **E8-1 勘误（控制方 §5，T1 实测）**：**原写「`check-exemption-prose.mjs` 的 `App.tsx 登记 549 == countLines 549` 变红（具名行）⇒ exit 1」—— 🔴 该期望不成立**：该脚本**不 import `scripts/line-limits.mjs`**（它在自己的 `:26-27` 有私有副本 `countLinesText`，**P-41**）⇒ M2 实测它 **exit 0 全绿**（`tmp/t1/log-mutants.txt` M2b = 「绿 ❌ 牙口未证」）。**「牙长在哪条具名断言上」必须由变异体裁定，不由推理裁定**（§九.8 / §C17.3） |
+| **V3** | **re-export 契约**：`node -e "import('./scripts/line-limits.mjs').then(m=>console.log(typeof m.countLines))"` ⇒ `function`；且 `check-exemption-prose.mjs` **exit 0** | **M3**：删掉主件的 `export { countLines }` 行 | **M3 后期望（🔻 E8-1 勘误后的真红点，2026-09-13 由 T1 在导出树实跑，树 `547ffa1f`；日志 `tmp/t1/log-mutants.txt` 的 M3a/M3c）**：① **V3 的 import 探针** `typeof m.countLines` 由 `function` → **`undefined`**（**7 名全部** `undefined`：`scanTree` / `parseTable` / `FROZEN_OVER_LIMIT` / `HARD_LIMIT` / `SOFT_LIMIT` / `TABLE_PATH` 同时消失），**探针进程 exit 1** ② **`--full` 仍 exit 0**（主件不再 import `countLines`，它只用于 re-export ⇒ 门禁读数不受影响）。🔻 **E8-1 勘误（控制方 §5，T1 实测）**：**原写「`check-exemption-prose.mjs` 报模块导出缺失 ⇒ 该进程非零退出」—— 🔴 该期望不成立**（同 V2 的 P-41 机理）⇒ M3 实测它 **exit 0**（M3b = 「绿 ❌ 牙口未证」） |
 | **V4** | `node scripts/check-command-registry.mjs` **exit 0 · 311/311/0**（无关读数不动） | — | 逐字读数 |
 | **V5** | **行数**：`scripts/line-limits.mjs` ≤ **190** 且 `scripts/lib/lineScan.mjs` ≤ **150**（口径 = `countLines()`；**`.mjs` 在行数门禁视野外 ⇒ 本判据由任务报告手工给读数**） | — | 逐字读数 + 🔴 报告须写明「**这是任务自持预算，不是门禁判据**」 |
 
@@ -610,7 +610,7 @@
   ⚠️ **探针必须用 `readFileSync(p)` 取 Buffer 判 `b[b.length-1] !== 0x0a`**（**不许**用文本 + `endsWith` —— 那会把 `\r\n` 与 `\n` 混谈）。
 - [ ] **Step 1: 归一 10 个文件（各 +1 字节）**
   🔴 **用 node `fs` 追加**（`writeFileSync(p, s + "\n")` 会**重写整文件** ⇒ 必须逐字节保留原内容：**读 Buffer + `Buffer.concat([buf, Buffer.from([0x0a])])` + `writeFileSync(p, buf)`**）。
-  🔴 **逐文件对拍**：补前 / 补后 `countLines()` **必须相等**；文件字节数 **必须 +1**；`git diff --stat` **必须是 `1 insertion(+)` 且 0 deletion**（**承 §C61.2：纯空白行删除 = 0**）。
+  🔴 **逐文件对拍**：补前 / 补后 `countLines()` **必须相等**；文件字节数 **必须 +1**；🔻 **E8-4 勘误（2026-09-13，T2 干跑 + 真跑实测，证据 `.superpowers/sdd/2026-09-13-frontend-redesign-batch8/tmp/t2/diff-audit.json`）**：`git diff --cached --numstat` **必然是 `1 1`（每文件 1 增 1 删）**，**不是**「1 insertion / 0 deletion」—— 给「末尾无换行」的文件补末尾换行时 git **必须重写末行**（旧侧带 `\ No newline at end of file`）⇒ 🔴 **任何正确实现都拿不到 `−0`**（详见 §E8.5 的适用域规则）；正确判据见 **V1**（**语义等价证明**，非 `−` 列计数）。
 - [ ] **Step 2: 加 (f) 判据（写在拆后的主件里）**
   在 `check()` 的既有 `(a)–(e)` 之后追加 `(f)`（**只加不改**）：对 `scanTree()` 的域内文件逐个判 `末尾恰有 1 个 0x0A`；**空文件跳过**；命中即 `problems.push(\`(f) 末尾无换行：${path}\`)`。
   🔴 **口径写进头注**：本判据**只判末尾 `0x0A`**，**不判行尾风格**（CRLF 是本仓常态：`commands_video.rs` 实测 **355 个 `0x0D` / 355 个 `0x0A`** ⇒ 写成「必须 LF 行尾」会让**整仓 RED**）。
@@ -618,9 +618,9 @@
   ① **归一侧**：`--full` ⇒ **exit 0**（无 (f) 问题）；② **违规侧**：在**导出副本**里删掉任一文件的末尾换行 ⇒ **exit 1** 且输出含该路径。
 - [ ] **Step 4: 提交（两次原子提交）**
   ```powershell
-  # 提交 1：纯空白归一（10 个文件，+10 行 / −0 行）
+  # 提交 1：纯空白归一（10 个文件，+10 行 / −10 行 ⇒ numstat 每文件 `1 1`；🔻 E8-4 勘误：原写「−0 行」）
   git add -- app/src/components/NoteEditView.tsx app/src/components/RefineWorkbench.tsx app/src/components/useNoteAttention.ts app/src/pages/NotesPage.tsx app/src/ui/primitives/emptyStateRatchet.test.ts app/src-tauri/src/ai_provider.rs app/src-tauri/src/ai_provider_tests.rs app/src-tauri/src/asr_pass2.rs app/src-tauri/src/commands_knowledge_cards.rs app/src-tauri/src/commands_video.rs
-  git diff --cached --stat          # 期望 10 files changed, 10 insertions(+), 0 deletions(-)
+  git diff --cached --stat          # 期望 10 files changed, 10 insertions(+), 10 deletions(-)（🔻 E8-4 勘误：原写 0 deletions(-)；`--numstat` 每文件 1 1）
   git commit -m "style(repo): 补 10 个源文件的末尾换行"
   # 提交 2：判据
   git add -- scripts/line-limits.mjs
@@ -632,11 +632,11 @@
 
 | # | 判据 | 变异体（专属） | 期望 |
 |---|---|---|---|
-| **V1** | **归一不改行数**：10 个文件的 `countLines()` **补前 == 补后**；字节数**各 +1**；`git show --stat` 的 `−` 列为 **0**；🔴 **纯空白行删除 = 0**（§C61.2 的第二道判据） | **M1**：把某个文件的末尾**多加一个**换行（`\n\n`） | **M1 后期望**：该文件 `countLines()` **+1** ⇒ `(e)` 判据红（`(e) 行数不一致：<path> 声明 N / 实测 N+1 → 运行 --write`）⇒ **具名输出**（这条同时证明「一个没换行不可见、两个才可见」的机理） |
+| **V1** | 🔻 **E8-4 勘误后的实质判据（2026-09-13；原判据「`−` 列为 0 + 纯空白行删除 = 0」在 EOL 修正型上数学不可达）**：**判据形态 = 语义等价证明，四条全答**：① **`git diff -w --numstat` 输出为空**（空白无关差异 = 0）② 10 个文件的 `countLines()` **补前 == 补后**（逐文件）+ **`git show HEAD:<p>` 的 `countLines()` 也相等** ③ **纯空白行删除 = 0** 且 **空白行 Δ = 0**（逐文件，§C61.2 的第二道判据）④ **逐文件字节证明**：**`工作树(归一后) == git show HEAD:<p> + 恰好一个 0x0A`**（同时给出「字节数各 +1」与 **`numstat` 每文件 `1 1`**；🔴 **`−` 列 = 10，不是 0** —— 见 §E8.5） | **M1**：把某个文件的末尾**多加一个**换行（`\n\n`） | **M1 后期望**：该文件 `countLines()` **+1** ⇒ `(e)` 判据红（`(e) 行数不一致：<path> 声明 N / 实测 N+1 → 运行 --write`）⇒ **具名输出**（这条同时证明「一个没换行不可见、两个才可见」的机理） |
 | **V2** | **豁免表不动**：`git status --porcelain -- docs/standards/line-limit-exemptions.md` **空**；`--full` **exit 0**（`(e)` 全绿） | — | 逐字读数 |
 | **V3** | **判据有牙**：在**导出副本**里删掉 `app/src/pages/NotesPage.tsx` 的末尾换行 ⇒ `--full` **exit 1** | **M3**（即上述注入；**注入自证：该文件的最后一个字节由 `0x0a` 变为 `0x3b`（`;`），改动了恰 1 处**） | **M3 后期望**：`exit 1` + 输出含 `(f) 末尾无换行：app/src/pages/NotesPage.tsx`（**具名**） |
 | **V4** | **CRLF 不被误杀**：`app/src-tauri/src/commands_video.rs`（全 CRLF）与任一 LF 文件**都判绿** | **M4**：把判据改成「最后两字节必须是 `0x0d 0x0a`」 | **M4 后期望**：全部 LF 文件（如 `scripts/line-limits.mjs` 自身若在域内…**不在域内** ⇒ 改用域内任一 LF 文件）红 ⇒ **证明判据不是「CRLF 专用」**（这是一条**反向守卫**：必须绿的反向变异在 M4 下**必须红**，从而证明原判据不偏袒任一风格） |
-| **V5** | `check-command-registry` **311/311/0** · `docs-check` **exit 0（281/181）** | — | 逐字读数 |
+| **V5** | `check-command-registry` **311/311/0** · `docs-check` **exit 0（282/182；🔻 E8-12 时点更正：原写 281/181）** | — | 逐字读数 |
 
 **提交信息**：① `style(repo): 补 10 个源文件的末尾换行`（**subject 20 字**）② `feat(scripts): line-limits 新增末尾换行判据`（**subject 26 字**）
 
@@ -662,7 +662,7 @@
 | `FROZEN_FONT_OOB_TOTAL` / `_FILES` / `ANCHOR_FONT_OOB` | **551 / 123 / `{count:19, files:123}`**（`textBaseline.ts:38/:41/:49`；表 Σ = **551**、键数 **123** ✅） | 双向钉死 | 🔴 **不动常数、不动逐文件表、不动锚** —— **只改两行散文里的数字** | **否**（V3 逐字：常数与表的前后 `git diff` **零 hunk**） |
 | `textBaseline.ts` 行数 | **299**（余 1） | 300 | 🔴 **净增 = 0**（就地改写两行） | ⚠️ **是（若加行）** ⇒ V4 |
 | 其余五族的逐文件表 | 见 `### 表 2` | 只许降 | **不触碰** | **否** |
-| `docs-check` 扫描 / 检查 | **281 / 181**（实跑） | 只许持平或更好 | 规格加注会**增加行数但不增加文件数** ⇒ 计数**不变** | **否**（V5 逐字对拍） |
+| `docs-check` 扫描 / 检查 | 🔻 **E8-12 时点更正（2026-09-13）＝ 282 / 182**（原写 281 / 181 —— 那是**本计划文件入库之前**的读数；口径见 `## E8` §E8.12）（实跑） | 只许持平或更好 | 规格加注会**增加行数但不增加文件数** ⇒ 计数**不变** | **否**（V5 逐字对拍） |
 | §C9.12 的三道回写判据（§3.4） | — | — | ① `−` 列 = 0 ② **纯空白行删除 = 0** ③ **标题 / 锚子序列对拍**（被删 / 被改 = 0） | **否**（V1/V2） |
 
 **Files:**
@@ -678,7 +678,7 @@
 - [ ] **Step 0: 先量基线**
   ```powershell
   node scripts/check-exemption-prose.mjs   # 期望 exit 0
-  node scripts/docs-check.mjs              # 期望 exit 0 · 扫描 281 / 检查 181
+  node scripts/docs-check.mjs              # 期望 exit 0 · 扫描 282 / 检查 182（🔻 E8-12 时点更正：原写 281/181）
   node .superpowers/sdd/2026-09-13-frontend-redesign-batch8/tmp/plan-writer/p3-frozenkeys.mjs  # 复核两处散文的真身行号
   ```
   🔴 **动手前必须自己重测 5 处锚**（规格的锚在批 7 收尾后**整体 +2**，见 `### 表 5` D-1～D-11）；**与本计划不符 ⇒ 按实测走**并在报告里逐字给出旧锚 / 新锚。
@@ -686,7 +686,7 @@
   逐处**只加注、不改历史原文**（形态照 T21 在 `:905-906` 的做法：`> - 🔻 **口径更正（2026-09-13 · 批 8 T3；上一行的…，原文保留）**：…`）。
   🔴 **三道回写判据（§3.4）**：`git diff` 的 **`−` 列 = 0** · **纯空白行删除 = 0** · **标题 / 锚子序列对拍**（既有标题与既有锚串**被删 / 被改 = 0**）。
 - [ ] **Step 2: `textBaseline.ts` 两处散文（1 个提交，净增 0）**
-  `:19`：`551/122` → `551/123`（并保留它现有的历史箭头链，**只改最后一个数**）；`:174`：`551/120 不变` → `551/123 不变`。
+  `:19`：`551/122` → `551/123`（并保留它现有的历史箭头链，**只改最后一个数**）；`:174`：`551/120 不变` → `551/123 不变`。🔻 **E8-6 时点注（2026-09-13，E8 复测）**：**本 Step 已被 T3 执行完毕**（提交 `c5b5a8ec`，`+2/−2`，净增 0）；现盘上真值 = `:19` 逐字含 `**604/124 → 576/122 → 551/123**` · `:174` 逐字含 `551/123 不变` ⇒ 🔴 **后续读者请勿再「改一遍」**（这是 §1 的「已修却仍被当成待办」同族）；本卡保留原文以便追溯「要求什么」。
   🔴 改完**必须** `wc`/`countLines` 复测 = **299**，并跑 `cd app; npx tsc --noEmit`（**P22/P23：改注释散文必须真跑一次 `tsc`**）。
 - [ ] **Step 3: 提交（2 次）**
   ```powershell
@@ -708,8 +708,8 @@
 | # | 判据 | 变异体（专属） | 期望 |
 |---|---|---|---|
 | **V1** | **回写三判据**：规格那个提交的 `git show --numstat` ⇒ `−` 列 **0**；**纯空白行删除 = 0**（自造脚本逐行对拍「剥注释后去纯空白行」的规范形 D3，承 §C55.2）；**既有标题 / 锚子序列对拍 ⇒ 被删 = 0 / 被改 = 0** | **M1**：把 `### 7.4` 的标题行整行删掉（模拟「改历史原文」） | **M1 后期望**：标题子序列对拍报 1 处缺失 ⇒ 判据红（**证明这三道判据不是空真**） |
-| **V2** | **`docs-check` 不变**：`node scripts/docs-check.mjs` **exit 0** · 扫描 **281** / 检查 **181** | — | 逐字读数 |
-| **V3** | **常数与逐文件表零改动**：`git diff HEAD~1 -- app/src/ui/primitives/textBaseline.ts` 的 hunk **只含 `:19` 与 `:174` 两行**（逐字给 hunk 头）；`FROZEN_FONT_OOB_TOTAL=551` · `_FILES=123` · `ANCHOR_FONT_OOB` 三处**逐字节未动** | **M3**：把 `FROZEN_FONT_OOB_FILES` 改成 `122`（让散文「自洽」） | **M3 后期望**：`textRatchet.test.ts:239` 的 `expect(ANCHOR_FONT_OOB.files).toBe(FROZEN_FONT_OOB_FILES)` 与 `:236` 的键数断言**同时红**（**具名断言**）—— 证明「改散文就能自洽」这条路**不存在** |
+| **V2** | **`docs-check` 不变**：`node scripts/docs-check.mjs` **exit 0** · 扫描 **282** / 检查 **182**（🔻 E8-12：原写 281 / 181） | — | 逐字读数 |
+| **V3** | **常数与逐文件表零改动**：`git diff HEAD~1 -- app/src/ui/primitives/textBaseline.ts` 的 hunk **只含 `:19` 与 `:174` 两行**（逐字给 hunk 头）；`FROZEN_FONT_OOB_TOTAL=551` · `_FILES=123` · `ANCHOR_FONT_OOB` 三处**逐字节未动** | **M3**：把 `FROZEN_FONT_OOB_FILES` 改成 `122`（让散文「自洽」） | **M3 后期望（🔻 E8-3 勘误后的真锚，2026-09-13 由 T3 用变异体实跑）**：红在 **`textRatchet.test.ts:232`**（`expect(Object.keys(FROZEN_FONT_OOB_BY_FILE)).toHaveLength(FROZEN_FONT_OOB_FILES);` —— **键数断言**）与 **`:239`**（`expect(ANCHOR_FONT_OOB.files).toBe(FROZEN_FONT_OOB_FILES);`）两条**具名断言**上 —— 证明「改散文就能自洽」这条路**不存在**。🔻 **E8-3 勘误（控制方 §10，T3 实测）**：**原写「`:239` … 与 `:236` 的键数断言同时红」—— 🔴 卡锚偏 4 行**：`:236` 实为 `expect(Object.keys(FROZEN_FONT_OOB_BY_FILE).length).toBe(ANCHOR_FONT_OOB.files);`（断的是 **vs `ANCHOR_FONT_OOB`**，把常数 `123→122` **不会**让它红）⇒ 更正为 **`:232`**（**保留** `:239`）。**锚点由变异体裁定，不由推理裁定**（§九.8 / §C17.3） |
 | **V4** | `textBaseline.ts` 实测 **299 行**（净增 0）且 `cd app; npx tsc --noEmit` **exit 0** | — | 逐字读数 |
 | **V5** | `check-exemption-prose.mjs` **exit 0**（`App.tsx 549 == 549` 仍成立） | — | 逐字读数 |
 
@@ -730,7 +730,7 @@
 | 冻结键 | 现值 | 上限 | 本任务动作 | 是否变红 |
 |---|---|---|---|---|
 | **全部六棘轮 / `FROZEN_*`** | 见 `### 表 2` | 只许降或持平 | 🔴 **一个都不触碰**（本任务只改 `.md`） | **否**（核账：`docs/**` 不在任何棘轮域内） |
-| `docs-check` 扫描 / 检查 | **281 / 181** | 只许持平或更好 | 改**既有文件** ⇒ 两个计数**都不变** | **否**（V2） |
+| `docs-check` 扫描 / 检查 | 🔻 **E8-12 时点更正（2026-09-13）＝ 282 / 182**（原写 281 / 181 —— 那是**本计划文件入库之前**的读数；口径见 `## E8` §E8.12） | 只许持平或更好 | 改**既有文件** ⇒ 两个计数**都不变** | **否**（V2） |
 | `line-limits` 读数 | **0 / 121 / 121** | 持平 | `.md` 不在扫描域 ⇒ 不变 | **否** |
 | `check-exemption-prose` | **exit 0** | — | 不动豁免表 | **否** |
 | `docs/standards/testing.md` 行数 | **229** | 无门禁（`.md` 无行数门禁） | **+≤18 行**（三小段） | **否**（但报告须给前后行数） |
@@ -744,7 +744,7 @@
 - Consumes：`rulings.md` §C24.2 / §C24.3 / §C6.1 与 §C45.3（**逐字要点见抽取件 `tmp/plan-writer/sub-rulings-extract.md` §2**）
 - Produces：`docs/standards/testing.md` 的 `### 第九部分`（T12 追加 `### 第十部分` 时必须在它**之后**）
 
-- [ ] **Step 0: 先量基线**：`node scripts/docs-check.mjs`（281/181）· `countLines("docs/standards/testing.md")`（229）· 抄 `### 第八部分` 与 `## 检查清单` 的**真身行号**（本计划者实测 `:177` / `:190`；**动手前自己重测**）。
+- [ ] **Step 0: 先量基线**：`node scripts/docs-check.mjs`（282/182；🔻 E8-12 时点更正：原写 281/181）· `countLines("docs/standards/testing.md")`（229）· 抄 `### 第八部分` 与 `## 检查清单` 的**真身行号**（本计划者实测 `:177` / `:190`；**动手前自己重测**）。
 - [ ] **Step 1: 写 `### 第九部分`（三小段，逐字带出处）**
   ```md
   ### 第九部分：门禁执行与稳定性纪律（批 8 立项）
@@ -772,7 +772,7 @@
 | # | 判据 | 变异体（专属） | 期望 |
 |---|---|---|---|
 | **V1** | **只加不改**：`docs/standards/testing.md` 的 diff **只有 `+` 列**（`−` 列 = 0）、**纯空白行删除 = 0**、**既有标题子序列对拍被删 = 0** | **M1**：把 `### 第八部分` 的标题行改写一个字符 | **M1 后期望**：标题子序列对拍报「被改 = 1」⇒ 判据红 |
-| **V2** | `node scripts/docs-check.mjs` **exit 0** · 扫描 **281** / 检查 **181**（**两个计数都不变** —— 证明「改既有文件不增计数」） | — | 逐字读数 |
+| **V2** | `node scripts/docs-check.mjs` **exit 0** · 扫描 **282** / 检查 **182**（🔻 E8-12：原写 281 / 181）（**两个计数都不变** —— 证明「改既有文件不增计数」） | — | 逐字读数 |
 | **V3** | **纪律与出处可对拍**：报告给出「第九部分每句 ↔ `rulings.md` 行号」对照表，**逐句可指** | **M3**：把 R-FLAKE 的「三者缺一 ⇒ 不得判为 flake」改成「缺一也可判」 | **M3 后期望**：**判据红在「报告的对拍表」上**（本任务的「判据」是文档一致性 ⇒ 它的牙 = **评审者按行号逐句核对**，见 `## 陷阱` 的「牙口未证」纪律）⚠️ **本条登记为「牙口未证」**（无机器断言） |
 | **V4** | `node scripts/line-limits.mjs --full` **exit 0 · 0/121/121**（`.md` 不入域） | — | 逐字读数 |
 
@@ -802,7 +802,7 @@
   ```powershell
   node scripts/line-limits.mjs --full          # exit 0 · 0/121/121
   node scripts/check-command-registry.mjs      # exit 0 · 311/311/0
-  node scripts/docs-check.mjs                  # exit 0 · 281/181
+  node scripts/docs-check.mjs                  # exit 0 · 282/182（🔻 E8-12 时点更正：原写 281/181）
   node scripts/check-bundle-budget.mjs --no-build   # exit 0 · 首屏 105.95 kB · 懒侧 ⏭ 未判
   node scripts/bundle-eager-graph.mjs          # exit 0 · 111 / 7
   node scripts/check-exemption-prose.mjs       # exit 0
@@ -885,7 +885,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
   ```powershell
   node scripts/line-limits.mjs --full          # exit 0 · 0/121/121
   cd app; npx tsc --noEmit                     # exit 0
-  node scripts/docs-check.mjs                  # exit 0 · 281/181
+  node scripts/docs-check.mjs                  # exit 0 · 282/182（🔻 E8-12 时点更正：原写 281/181）
   ```
   🔴 **并复测三处针法**（`NoteEvidenceTrack` / `data-evidence-for` / `data-evidence-id` 在 **`git ls-files` 入库域**的命中）：本计划者实测 = **`app/src/**` 0 处 / 0 文件**；`app/src` 之外 = RAW 16 行 / 剥注释 6 行 / 3 文件（**全在 `docs/**`，含规格自身的加注**）⇒ 🔴 **报告不得写「全仓 0 命中」**（**自我指涉假命题**，见 `### 表 5` D-11 与控制方 §4 第 1 条）。
 - [ ] **Step 1: 定容差（**先定值，再写实现**）**
@@ -1073,7 +1073,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 - 新建 `app/src/shell/proofreadMode.ts`（预算 ≤80 行）
 - 新建 `app/src/ui/proofread.css`（预算 ≤40 行；**`.css` 不在行数门禁视野**）
 - 改 **`app/src/App.tsx`（549 → ≤561）** —— 第三条 keydown + `useProofreadMode` 调用
-- 改 `app/src/main.tsx`（**13 行**）—— 加一行 `import "./ui/proofread.css";`（🔴 **必须在 `:4` 的 token CSS 之后**）
+- 改 `app/src/main.tsx`（**13 行**）—— 加一行 `import "./ui/proofread.css";`（🔴 **必须在 token CSS 之后**；🔻 **E8-8 锚勘误（2026-09-13，E8 复测）**：token CSS 的 import 在 **`:5`**（`:4` 是它的注释行）⇒ 原写「`:4` 的 token CSS」**错 1 行**；判据仍以 **V3 的 `indexOf` 逐序**为准，本锚只是指路）
 - 新建 `app/src/shell/proofreadMode.test.ts`（node 环境）· `app/src/shell/proofreadMode.dom.test.tsx`（`// @vitest-environment jsdom`）
 - 改 `app/src/ui/contrast.test.ts`（169，**只增**）
 - 🔴 **`NON_MIGRATED_14`**：以上文件都不在其中
@@ -1211,7 +1211,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 | `buttonMigration` `MIGRATED` / `MIGRATED_SITES` | **35 文件 / 99** | 只按守恒 | 🔴 `shell/TopBar.tsx` **不在** 35 名单内 ⇒ **加 `<Button>` 不进普查**（报告须给「不在名单」的证据） | **否**（V4） |
 | `shell/TopBar.test.tsx` 行数 | T7 后 **≤275** | 300 | 加判据（预算 ≤ +25） | **是（若超）** ⇒ V1 |
 | `docs/product/ui-ux-system.md` 行数 | **282** | 无门禁（`.md`） | 加「审校模式」节（**§10 面 ⇒ 报告点名**） | **否** |
-| `docs-check` 扫描 / 检查 | **281 / 181** | 持平或更好 | 改**既有文件** ⇒ 两个计数不变 | **否**（V6） |
+| `docs-check` 扫描 / 检查 | 🔻 **E8-12 时点更正（2026-09-13）＝ 282 / 182**（原写 281 / 181 —— 那是**本计划文件入库之前**的读数；口径见 `## E8` §E8.12） | 持平或更好 | 改**既有文件** ⇒ 两个计数不变 | **否**（V6） |
 
 **Files:**
 - 改 **`app/src/shell/TopBar.tsx`（117）** —— `right` 插槽加入口按钮（`Button` 原语；`App.tsx:336-339` 已有两个常驻状态件先例）
@@ -1253,7 +1253,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 | **V3** | **样式字面量零增**：`shell/TopBar.tsx` 的 border/radius/shadow 键**仍无键**；`FROZEN_BTN_STYLE_CONST_LINES` **56** 不变 | **M3**：在 `TopBar.tsx` 里写 `const iconBtnStyle = {...}` | **M3 后期望**：`FROZEN_BTN_STYLE_CONST_LINES` 判据红（**具名**） |
 | **V4** | **不在 35 名单**：报告给出 `buttonMigration.test.ts` 的 `MIGRATED` 名单**不含 `shell/TopBar.tsx`** 的逐字证据（`MIGRATED_SITES` **99** 不变） | — | 逐字读数 |
 | **V5** | **三出口合流**：按钮 / 快捷键 / `Esc` 三条**都能出**，且退出后属性被摘掉 | **M5**：让按钮点击只 `apply("on")` 不切换 | **M5 后期望**：`再点必须能退出` 用例红（**具名**） |
-| **V6** | `docs-check` **exit 0** · 扫描 **281** / 检查 **181**（不变）· `tsc` **0 错** · `line-limits --full` **0/121/121** | — | 逐字读数 |
+| **V6** | `docs-check` **exit 0** · 扫描 **282** / 检查 **182**（🔻 E8-12：原写 281 / 181）（不变）· `tsc` **0 错** · `line-limits --full` **0/121/121** | — | 逐字读数 |
 | **V7** | **回写三判据（§3.4）**：`docs/product/ui-ux-system.md` 与规格那两个 hunk 的 `−` 列 = **0** · 纯空白行删除 = **0** · 标题/锚子序列对拍被删/被改 = **0** | **M7**：把规格 §4.3 的既有加注行删掉 | **M7 后期望**：子序列对拍报「被删 = 1」⇒ 红 |
 
 **提交信息**：① `feat(shell): 顶栏新增审校模式入口按钮`（**subject 17 字**）② `docs(product): 回写审校模式并加注落点与命名`（**subject 20 字**）
@@ -1281,7 +1281,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 |---|---|---|---|---|
 | **全部六棘轮 / `FROZEN_*`** | 见 `### 表 2` | 只许降或持平 | 🔴 **一个都不触碰**（新增的 `.mjs` **不在**行数门禁域、也不在棘轮域 —— 棘轮域 = `app/src/**` 的 `.ts/.tsx`） | **否**（核账：`scripts/**` 在全部六族的域外，逐字给证据） |
 | `line-limits` 读数 / 豁免表 | **0 / 121 / 121** · 表 **262 行** | 持平 | 🔴 `.mjs` 入 `scripts/` **不改任何读数**（`SCAN_DIRS` 只含 `app/src` 与 `app/src-tauri/src`） | **否**（V3） |
-| `docs-check` 扫描 / 检查 | **281 / 181** | 持平或更好 | 改**既有文件** `testing.md` ⇒ 计数不变 | **否**（V4） |
+| `docs-check` 扫描 / 检查 | 🔻 **E8-12 时点更正（2026-09-13）＝ 282 / 182**（原写 281 / 181 —— 那是**本计划文件入库之前**的读数；口径见 `## E8` §E8.12） | 持平或更好 | 改**既有文件** `testing.md` ⇒ 计数不变 | **否**（V4） |
 | `lazyBudget.json` / 首屏 | 37 / 637,501 B · 105.95 kB | 只许降 | 🔴 本任务**只读**产物（**不跑真构建**） | **否** |
 | 仓内文件数（**卫生判据**） | `git status --porcelain` = 仅 `?? docs/tech-debt/` | **跑完必须仍是这一行** | 🔴 profile 落 `$env:TEMP`；**跑完删** | **是（若落仓内）** ⇒ V1（**批 3 陷阱 #19 的复现判据**） |
 
@@ -1337,7 +1337,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 | **V1** | 🔴 **卫生（批 3 陷阱 #19）**：跑完 `git status --porcelain` **仍只有** `?? docs/tech-debt/`；`$env:TEMP` 下**无残留** profile 目录 | **M1**：把 profile 目录改回仓内（`join(ROOT, "tmp/edgeprofile")`） | **M1 后期望**：`git status --porcelain` 出现新目录 ⇒ **判据红**（这条**就是**侦察阶段踩过的坑：**1,241 文件 / 32.4 MB**） |
 | **V2** | **仪器自检有牙**：阴性对照（**现造随机串**）⇒ **0 命中**；阳性对照 ⇒ **>0 命中**；视口 / dpr / 定块 / 哨兵四项**全过** | **M2**：把 `--width` 传给页面但**不**调 `Emulation.setDeviceMetricsOverride`（用 `--window-size` 代替） | **M2 后期望**：仪器的 `innerWidth === width` 自检**红**（实测：`--window-size=800` ⇒ `innerWidth=776`）⇒ **证明自检不是装饰** |
 | **V3** | **门禁读数逐字持平**：`line-limits --full` **0/121/121** · `check-command-registry` **311/311/0** · `line-limit-exemptions.md` **零改动** | — | 逐字读数 |
-| **V4** | `docs-check` **exit 0** · 扫描 **281** / 检查 **181**（不变） | — | 逐字读数 |
+| **V4** | `docs-check` **exit 0** · 扫描 **282** / 检查 **182**（🔻 E8-12：原写 281 / 181）（不变） | — | 逐字读数 |
 | **V5** | **参数化真的能读解算值**：`--probe` 读出的 `var()` 已解算（如 `--ed-radius-panel` ⇒ **`8px`**）、几何非 0（如某元素 `120x60` 级） | **M5**：把 `Runtime.evaluate` 换成读 `element.style`（内联样式） | **M5 后期望**：对**走类规则**的元素读数变成空串 ⇒ 判据红（**具名**：`解算值必须来自 getComputedStyle`） |
 | **V6** | **盲区五条在头注里逐字在**（文本级断言可放 `testing.md` 或探针自检里） | **M6**：删掉「验的是 WebView2 引擎而不是 IPC/窗口层」那一条 | **M6 后期望**：⚠️ **牙口未证**（文本存在性可判，但「是否写全」需评审）⇒ **报告须标「牙口未证」**（§3.6） |
 
@@ -1421,7 +1421,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 | **V1** | **三条读数的口径完整**：18/38 · +203 B · 容差 64 B · `shift-` 212 B **逐字**；且给出**复现命令**（`--no-build --dist app/dist --json` + 自算脚本） | **M1**：把「+203 B」写成「18 族各超 203 B」 | **M1 后期望**：评审按**逐族表**核对 ⇒ 红；⚠️ **本条登记为「牙口未证」**（无机器断言） |
 | **V2** | **只加不改**：`performance.md` 的 diff `−` 列 = 0 · 纯空白行删除 = 0 · 既有小标题子序列被删/被改 = 0 | **M2**：把 `:41` 的「最后一次重冻已落地」那段删掉 | **M2 后期望**：子序列对拍报「被删 = 1」⇒ 红 |
 | **V3** | `lazyBudget.json` **零 hunk**；`check-bundle-budget`（真构建口径）读数不变 | — | 逐字读数 |
-| **V4** | `node scripts/docs-check.mjs` **exit 0** · **281 / 181** | — | 逐字读数 |
+| **V4** | `node scripts/docs-check.mjs` **exit 0** · **282 / 182**（🔻 E8-12 时点更正：原写 281 / 181） | — | 逐字读数 |
 
 **提交信息**：`docs(standards): 登记懒侧逐族陈旧度与 dist 假绿`（**subject 21 字**）
 
@@ -1514,7 +1514,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 | **V3** | **三处措辞收窄逐字在**：`motionHarness.ts:50` / `motion.md` / 批 7 计划 `:2560` **三处都能指到「jsdom 做级联、不可得的是几何与 `var()`」** | **M3**：只改两处、漏掉批 7 计划 | **M3 后期望**：三处对拍红（**具名：三处缺一**） |
 | **V4** | **登记表不变量**：`SHADOW_RESIDUAL` 的条目数 / 逐条 `file`+`kind`+`count` **逐字节未变**；`AiConversationDock.tsx` **零 hunk** | — | 逐字读数 + 逐键 diff |
 | **V5** | **剥注释口径下零影响**：六棘轮的 Σ **逐字不变**（63 / 551 / 201 / 254 / 24 / 392）；`cd app; npx tsc --noEmit` **exit 0** | **M5**：在注释里写一行 `fontSize: 11` | **M5 后期望**：`textRatchet.test.ts` **仍绿**（因为**先剥注释**）⇒ 🔴 **这条「绿」是预期的**；**同时**必须跑 `tsc` —— 若注释写法触发 P22（`**/`）⇒ **`tsc` 红**（**这才是本任务真正的牙**） |
-| **V6** | `line-limits --full` **0/121/121** · `docs-check` **exit 0 · 281/181** | — | 逐字读数 |
+| **V6** | `line-limits --full` **0/121/121** · `docs-check` **exit 0 · 282/182（🔻 E8-12 时点更正：原写 281/181）** | — | 逐字读数 |
 
 **提交信息**：① `docs(standards): 收窄 jsdom 级联措辞并认领掉地项`（**subject 23 字**）② `docs(ui): 登记未守住则色字面量与圆角三档`（**subject 19 字**）
 
@@ -1598,7 +1598,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 |---|---|---|---|---|
 | **全部六棘轮 + 门禁** | 见 `### 表 1`/`### 表 2` | — | 🔴 **零改动**（`.mjs` 在行数门禁域外；棘轮域 = `app/src/**`） | **否**（V3） |
 | `line-limits` 读数 / 豁免表 | **0 / 121 / 121** · 262 行 | 持平 | 🔴 `scripts/validate-all.mjs` **不在豁免表里**（它是 `.mjs`）⇒ **表不动** | **否**（V3 逐字） |
-| `docs-check` 扫描 / 检查 | **281 / 181** | 持平 | 本任务**不改 `docs/**`**（`CHANGELOG.md` / `v0.22.md` / `performance.md` 里的历史提及**一律不改** —— **历史记录不改**，§C10.6） | **否** |
+| `docs-check` 扫描 / 检查 | 🔻 **E8-12 时点更正（2026-09-13）＝ 282 / 182**（原写 281 / 181 —— 那是**本计划文件入库之前**的读数；口径见 `## E8` §E8.12） | 持平 | 本任务**不改 `docs/**`**（`CHANGELOG.md` / `v0.22.md` / `performance.md` 里的历史提及**一律不改** —— **历史记录不改**，§C10.6） | **否** |
 
 **Files:**
 - **删 `scripts/validate-all.mjs`（62 行）**
@@ -1626,7 +1626,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 |---|---|---|---|
 | **V1** | **零悬空引用**：`git ls-files` 域内，`validate-all` 的**非历史文档**引用 = **0**（扫描域 = `scripts/**` + `package.json` + `.husky/**` + `.github/**` + `app/**`；**历史文档单独列出并声明「不改」**） | **M1**：在 `scripts/` 里留一处 `execFileSync("...validate-all.mjs")` | **M1 后期望**：判据红（**具名**：`scripts/** 不得再引用已删脚本`） |
 | **V2** | **路由指向真实物**：`ROUTING_RULES` 里**没有任何** `path` 指向不存在的文件（逐条 `fs.existsSync`） | **M2**：把 owner 改成指向另一个不存在的路径 | **M2 后期望**：判据红（**具名**：`owner.path 必须存在或为 null`）⇒ 这条判据**同时**防住「换成另一个化石」 |
-| **V3** | `line-limits --full` **0/121/121** · `docs-check` **exit 0 · 281/181** · `check-command-registry` **311/311/0** | — | 逐字读数 |
+| **V3** | `line-limits --full` **0/121/121** · `docs-check` **exit 0 · 282/182（🔻 E8-12 时点更正：原写 281/181）** · `check-command-registry` **311/311/0** | — | 逐字读数 |
 | **V4** | **历史文档零改动**：`git diff --stat` 只含两个路径（1 删 1 改） | — | 逐字读数 |
 
 **提交信息**：`chore(scripts): 删除化石 validate-all 并改路由`（**subject 20 字**）
@@ -1715,7 +1715,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 - 改 **`commitlint.config.js`（22 → 23）** —— `rules` 里加一行（**共享文件 ⇒ blob 构造**）
 - 🔴 **不得**改 `.husky/commit-msg`（**执行者已就位**）· **不得**改 `.releaserc.json`
 
-- [ ] **Step 0: 先量基线**：`node -e "console.log(require('@commitlint/config-conventional').rules['header-max-length'])"`（**期望 `[2,'always',100]`** —— 证明「今天只按 100 判」）+ 抄 `commitlint.config.js` 的现状。
+- [ ] **Step 0: 先量基线**：`node -e "console.log(require('@commitlint/config-conventional').default.rules['header-max-length'])"`（**期望 `[2,'always',100]`** —— 证明「今天只按 100 判」）+ 抄 `commitlint.config.js` 的现状。🔻 **E8-9 勘误（2026-09-13，E8 复跑）**：**原写 `require('@commitlint/config-conventional').rules[...]`（无 `.default`）—— 🔴 该命令当场抛 `TypeError: Cannot read properties of undefined (reading 'header-max-length')`**（该 preset 是 ESM：`package.json` 的 `"type":"module"` ⇒ `require()` 得到 `{__esModule, default}`）⇒ 已更正为 **`.default.rules`**（实测返回 `[2,"always",100]`）；🔴 附带实测：**`subject-max-length` 不在 preset 的 rules 里**（`.default.rules['subject-max-length']` = `undefined`），但**规则实现存在**（`node_modules/@commitlint/rules/lib/subject-max-length.js` 在盘）⇒ T20 的「零接线成本」结论**仍成立**，只是**必须显式加规则行**。
 - [ ] **Step 1: 加一行规则**
 - [ ] **Step 2: 三向验证（**必须真跑**）**
   ```powershell
@@ -1741,7 +1741,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 
 **提交信息**：`ci(commitlint): 给提交主题装上五十字上限`（**subject 19 字**）
 
-**诚实边界**：① 计数是 `String.length`（UTF-16 单元）⇒ 中日韩字符算 1、**emoji 算 2** ⇒ 「50 字」对中文成立、对 emoji **偏严**；② 本任务**不改**任何既有提交（历史不追溯）；③ **对 `docs(versions): …` 系长句是真牙**（历史上有 4 条 subject > 50，最长 56 —— **引用读数**，未独立复跑）；④ **本条生效后，本批余下所有提交都受它约束**（T20 之后的任务必须自己数）。
+**诚实边界**：① 计数是 `String.length`（UTF-16 单元）⇒ 中日韩字符算 1、**emoji 算 2** ⇒ 「50 字」对中文成立、对 emoji **偏严**；② 本任务**不改**任何既有提交（历史不追溯）；③ **对 `docs(versions): …` 系长句是真牙**（🔻 **E8-10 勘误（2026-09-13，E8 独立复跑：`git log --format=%s` 全史 1,357 条，subject 一律**去掉 `type(scope): ` 前缀后**再数）**：**原写「历史上有 4 条 subject > 50，最长 56」—— 🔴 实测不成立**：真值 = **70 条 subject > 50 字，最长 94**（例：`53 字 | 批 5 文档行数纠偏（NotesPage 571/GroupSidebar 444/App 439 实测）`、`56 字 | v0.20.10 批 5 交付记录——复习域页独立（…）`）；🔴 **而「最近 400 条」窗口内 = 0 条**（与 V4 的引用读数逐字一致，V4 因此**已核实**）⇒ 更正后**两条不再自相矛盾**）；④ **本条生效后，本批余下所有提交都受它约束**（T20 之后的任务必须自己数）。
 
 ---
 ## 段 8e · 收口（T21–T23）
@@ -1759,7 +1759,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 | 冻结键 | 现值 | 上限 | 本任务动作 | 是否变红 |
 |---|---|---|---|---|
 | **全部六棘轮 + 八闸** | 见 `### 表 1`/`### 表 2` | — | 🔴 **零改动**（只改 `.md`） | **否**（V3） |
-| `docs-check` 扫描 / 检查 | **281 / 181** | 持平或更好 | 改既有文件 ⇒ 计数不变 | **否**（V2） |
+| `docs-check` 扫描 / 检查 | 🔻 **E8-12 时点更正（2026-09-13）＝ 282 / 182**（原写 281 / 181 —— 那是**本计划文件入库之前**的读数；口径见 `## E8` §E8.12） | 持平或更好 | 改既有文件 ⇒ 计数不变 | **否**（V2） |
 | 规格写者队列 | **T3 → T6 → T11 → T21** | — | 🔴 **本任务是最后一个写者** | **否**（V2 逐字） |
 
 **Files:**
@@ -1782,7 +1782,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 | # | 判据 | 变异体（专属） | 期望 |
 |---|---|---|---|
 | **V1** | **回写三判据（§3.4）**：两个文件的 diff `−` 列 = **0** · 纯空白行删除 = **0** · 标题/锚子序列对拍被删/被改 = **0** | **M1**：把 `v0.22` 里批 7 节的某个标题改写 | **M1 后期望**：子序列对拍红（**具名**） |
-| **V2** | `docs-check` **exit 0** · 扫描 **281** / 检查 **181** | — | 逐字读数 |
+| **V2** | `docs-check` **exit 0** · 扫描 **282** / 检查 **182**（🔻 E8-12：原写 281 / 181） | — | 逐字读数 |
 | **V3** | **零代码改动**：`git diff --stat` 只含两个 `.md` | — | 逐字读数 |
 | **V4** | **数字带口径与时点**：批 8 节里每个数字都有「命令 / 口径 / 时点」；🔴 **集合差主张必须列交集与差集**（承 §C58.4/C63.3） | **M4**：把「24 → 11」式的集合差只写计数 | **M4 后期望**：评审按「必须列交集与差集」判红 ⇒ ⚠️ **牙口未证**（无机器断言） |
 
@@ -1971,7 +1971,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 
 **🔴 本任务的两条实测关键（控制方已给，**实施者必须复核**）**
 - 🔴 **`docs/tech-debt/review-2026-09-11.md` 是未跟踪文件**（`git ls-files` 不含、**191,980 B**）⇒ **它没有 git 历史可保留** ⇒ **`git mv` 不适用**；实施形态 = **`git add` 到新路径**，并在报告里**逐字说明「无历史可保留」**（否则会被读成「没用 `git mv`」的违规）。
-- 🔴 **`docs-check` 的精确影响**（`scripts/docs-check.mjs:108-110`）：`if (INCLUDE_ARCHIVE) return true;` ⇒ 归档后该文件**进 `files`（扫描）但不进 `activeFiles`（检查）** ⇒ **预测 = 扫描 281 → 282 · 检查 181 → 181**。🔴 **必须实测确认**（不符 ⇒ 报告给旧值 / 新值 + **归因**）。
+- 🔴 **`docs-check` 的精确影响**（`scripts/docs-check.mjs:108-110`）：`if (INCLUDE_ARCHIVE) return true;` ⇒ 归档后该文件**进 `files`（扫描）但不进 `activeFiles`（检查）** ⇒ 🔻 **E8-11 预测更正（2026-09-13，E8 复测：基线已由 281/181 变为 282/182；`activeFiles` 的排除口径是「路径**段** = `archive`」而非子串）+ 结构算术**：`files` 282 **−1**（`docs/tech-debt/` 里的那份移走）**+3**（`docs/archive/<执行日>/` 下 README + tech-debt + 移入的审查报告）**= 284**；`activeFiles` 182 **−1**（移入 archive 的那份不再算活跃）**+0**（新增两份都在 archive 内）**= 181** ⇒ **修正预测 = 扫描 284 / 检查 181**（**原写 281 → 282 / 181 → 181 是旧基线下的推断**）。🔴 **仍必须实测确认**（不符 ⇒ 报告给旧值 / 新值 + **归因**）。
 - 🔴 **归档日期 = 实际执行日**（机制 = `YYYY-MM-DD` 子夹名）⇒ **不要**用 `review-2026-09-11.md` 文件名里的 **09-11**（那是**审查日期**）。🔴 **若实施者认为机制有歧义 ⇒ 在报告里单列并说明**，**不要自己拍板**。
 - 🔴 **空白日不建夹**（`README.md:53` 逐字）⇒ **09-10 ~ 09-12 没有夹是正常的，不要补**。
 - 🔴 **只读约束**（`:47-53`）：**除最新一日外禁止修改既有归档文件** ⇒ 本任务**只许**新建今日夹 + 改 `docs/archive/README.md`（索引）。
@@ -1981,7 +1981,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 
 | 冻结键 | 现值（**本计划者实测**） | 上限 | 本任务动作 | 是否变红 |
 |---|---|---|---|---|
-| `docs-check` **扫描 / 检查** | **281 / 181**（工作树，**含未跟踪的 `docs/tech-debt/`**） | 只许**如实登记变化** | 🔴 **预期变为 282 / 181**（**必须实测**）；**这一步是本任务唯一的「读数变化」** | ⚠️ **是（读数会变）** ⇒ V1 给旧值 / 新值 + 归因 |
+| `docs-check` **扫描 / 检查** | 🔻 **E8-11 复测（2026-09-13）现基线 = 282 / 182**（工作树；含未跟踪的 `docs/tech-debt/review-2026-09-11.md`；原写 281 / 181 —— 那是**本计划文件入库之前**的读数） | 只许**如实登记变化** | 🔴 **预期变为 284 / 181**（结构算术见 Files 节；**必须实测**）；**这一步是本任务唯一的「读数变化」** | ⚠️ **是（读数会变）** ⇒ V1 给旧值 / 新值 + 归因 |
 | `git status --porcelain` | **仅 `?? docs/tech-debt/` 一行** | — | 🔴 归档后**应为空**（`docs/tech-debt/` 消失；新文件已入库） | ⚠️ **是（预期行为）** ⇒ V2 |
 | `docs/archive/**` | **19 个日期夹**（最新 `2026-09-09`） | 🔴 **除最新一日外禁止修改** | **只新建今日夹 + 改索引** | **是（若改了旧夹）** ⇒ V4 |
 | `docs/archive/2026-09-09/tech-debt.md` | **最新一日**（**权威清单来源**） | 可读；**可改？** ⚠️ 滚动规则逐字要求「无新增债务的归档日**仍须继承**昨日清单」⇒ 继承**写进今日夹**，**不改昨日夹** | 🔴 **只读**（继承 = 抄进今日夹） | **是（若改它）** ⇒ V4 |
@@ -1997,7 +1997,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 
 - [ ] **Step 0: 先量基线（三条，**必测**）**
   ```powershell
-  node scripts/docs-check.mjs                     # 期望：exit 0 · 扫描 281 / 检查 181
+  node scripts/docs-check.mjs                     # 期望：exit 0 · 扫描 282 / 检查 182（🔻 E8-12 时点更正：原写 281/181）
   node -e "const{execFileSync}=require('child_process');console.log(execFileSync('git',['status','--porcelain'],{encoding:'utf8'}))"
   node -e "const fs=require('fs');console.log(Buffer.byteLength(fs.readFileSync('docs/tech-debt/review-2026-09-11.md')))"   # 期望 191980
   node -e "console.log(require('fs').readdirSync('docs/archive'))"                                                          # 期望含 2026-09-09，无 09-10~09-12
@@ -2006,7 +2006,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 - [ ] **Step 2: 建今日夹 + 三件文件**（README / tech-debt / 搬入的审查报告）—— 🔴 **审查报告内容零改动**（`Buffer` 逐字节对拍）。
 - [ ] **Step 3: 更新索引**（`docs/archive/README.md`）。
 - [ ] **Step 4: 移除 `docs/tech-debt/`**（🔴 用 `git add` 新路径 + 删旧目录；**不得**用 `git mv` 声称保留历史 —— **该文件无历史**）。
-- [ ] **Step 5: 复测 `docs-check`**（**实测结论写进报告**；与预测 282/181 不符 ⇒ 给旧值/新值 + 归因）。
+- [ ] **Step 5: 复测 `docs-check`**（**实测结论写进报告**；与预测 284/181 不符（🔻 E8-11/E8-12：基线 282/182）⇒ 给旧值/新值 + 归因）。
 - [ ] **Step 6: 原子提交（1 次）**
   ```powershell
   git add -- docs/archive/<执行日>/README.md docs/archive/<执行日>/tech-debt.md docs/archive/<执行日>/review-2026-09-11.md docs/archive/README.md
@@ -2020,7 +2020,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 
 | # | 判据 | 变异体（专属） | 期望 |
 |---|---|---|---|
-| **V1** | 🔴 **`docs-check` 的读数变化实测归因**：归档后**逐字**给出「扫描 N / 检查 M」；**与预测（282 / 181）不符 ⇒ 给旧值 / 新值 + 归因** | **M1**：把归档文件放进 `docs/archive/` **之外**（如 `docs/` 根） | **M1 后期望**：**扫描与检查都 +1** ⇒ 与预测不同 ⇒ **证明 `INCLUDE_ARCHIVE` 分支真的是「只进扫描」** |
+| **V1** | 🔴 **`docs-check` 的读数变化实测归因**：归档后**逐字**给出「扫描 N / 检查 M」；**与预测（🔻 E8-11/E8-12：284 / 181，基线 282 / 182）不符 ⇒ 给旧值 / 新值 + 归因** | **M1**：把归档文件放进 `docs/archive/` **之外**（如 `docs/` 根） | **M1 后期望**：**扫描与检查都 +1** ⇒ 与预测不同 ⇒ **证明 `INCLUDE_ARCHIVE` 分支真的是「只进扫描」** |
 | **V2** | **工作树终态**：`git status --porcelain` = **空**（`docs/tech-debt/` 消失、新文件已入库） | — | 逐字读数（**空输出就是判据**） |
 | **V3** | 🔴 **归档内容零改动**：`review-2026-09-11.md` 的字节数与 sha256 **归档前后逐字相同**（**191,980 B**） | **M3**：把该文件的标题行改一个字符 | **M3 后期望**：字节/sha256 对拍红（**具名**） |
 | **V4** | **归档纪律**：`git diff` **只含**今日夹的 3 个新文件 + `docs/archive/README.md`；**既有 19 个日期夹零 hunk** | **M4**：顺手改 `2026-09-09/tech-debt.md` | **M4 后期望**：判据红（**具名**：`除最新一日外禁止修改归档文件`） |
@@ -2154,7 +2154,7 @@ export function coverageOf(lines: readonly EvidenceLine[], matches: readonly Evi
 |---|---|---|---|
 | **U1** | 🔴 **a = 都修** | **T27**（音频配置通道：假开关 → 真通道）· **T28**（删会话连音频 + 失败/部分删除边界）—— **拆成 2 个单元** | ① 「跨重启保持」是**机器代替品**（重新载入同一文件），**不得**写成真机确认；② 「音频已删」是**临时目录级单测**，**不得**写成真机验证；③ 「部分删除」是**允许的终态** |
 | **U2** | 🔴 **c = 删除** | **T25**（**只移除「`"default"` 作为合法槽位的读写路径」**；🔴 **不物理抹除**已存密钥） | ① ⚠️ **「仅有 `default` 槽的真机用户凭据会失效（需重填）」本环境测不了**（真机跳过）；② 「删除」的读法**仅指代码路径** |
-| **U3** | 🔴 **a = 归档到 `docs/archive/`** | **T26**（**6 步 SOP**：当日夹 + 继承滚动清单 + 当日 README + 索引 + 扫描数归因） | ① 该文件**无 git 历史可保留**（从未入库）；② 归档**不追认其结论**；③ 归档后 **`git status` 应为空**、**`docs-check` 读数会变**（预测 282/181，**必须实测**） |
+| **U3** | 🔴 **a = 归档到 `docs/archive/`** | **T26**（**6 步 SOP**：当日夹 + 继承滚动清单 + 当日 README + 索引 + 扫描数归因） | ① 该文件**无 git 历史可保留**（从未入库）；② 归档**不追认其结论**；③ 归档后 **`git status` 应为空**、**`docs-check` 读数会变**（🔻 **E8-11/E8-12 更正**：原写「预测 282/181」⇒ 基线已由 281/181 变为 **282/182**，故预测 = **284 / 181**，**必须实测**） |
 | **U4** | 🔴 **d = 入库 + 按需入口 + 写死触发条件** | **T12**（入库 / 参数化 / 卫生 / 盲区）+ **T24**（`npm run check:visual` + 触发条件 + **不进 husky / 不进 CI**） | ① **「有正式入口」≠「会被执行」**（无人自动跑）；② 真跑成本 = **真实构建 + 串行** |
 | **U5** | **沿用「跳过」**（控制方按建议默认） | **不排单元** | 🔴 7 条真机类（真机 / WebView2 冒烟 · 1280×800 与最小 1024×640 · 真实帧率 · Flip 几何位移 · 暗档实际生效 · 音频对齐量级 · 跨窗口相位同步）**继续登记、不假装完成**；**T22 的验收表述逐字写「未覆盖 IPC 壳 / WebView2」** |
 
