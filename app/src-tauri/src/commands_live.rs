@@ -74,6 +74,11 @@ pub async fn start_live_session(
         trimmed.chars().take(100).collect()
     };
 
+    // 批 7 T19（R-11/§C51.4）：记忆键必须在**净化去重之前**取——键空间是「课程/窗口标识」，
+    // 而 `dedupe_title` 的产物是**逐会话唯一**的展示标题（同源第二次会话即带 "(2)" 后缀）
+    // ⇒ 一旦去重后缀进键，跨会话记忆**必读不回**（R-11 实测的失效路径）。
+    let memory_title = memory_key_for_start(source_window.as_deref(), &title);
+
     // REQ-282（v0.19.6）：标题内容化 A 层——来源名净化（剥「 - 抖音」等固定
     // 平台尾缀）+ 近 90 天同源去重（抖音 #2）。查询失败不阻断采集（降级原标题）。
     let title = match state.db.recent_session_titles(90) {
@@ -87,9 +92,7 @@ pub async fn start_live_session(
     };
 
     // 批 7 T19（§11-8「档位选完真生效 / 跨会话记住」）：档位解析 = 显式入参 > 记忆体
-    // （键用**窗口标题**——与检测卡写记忆时同一个键；会话标题已过同源去重/平台尾缀
-    // 净化，不能当记忆键）> None（不覆写 ⇒ 既有默认档行为逐字不变）。
-    let memory_title = source_window.clone().unwrap_or_else(|| title.clone());
+    // （键见上一段的 `memory_title`）> None（不覆写 ⇒ 既有默认档行为逐字不变）。
     let resolved_tier = {
         let memory = state
             .profile_memory
@@ -169,6 +172,19 @@ fn seed_initial_tier(
         ..Default::default()
     });
     true
+}
+
+/// 会话启动的**记忆键**（批 7 T19 · R-11/§C51.4；纯函数，可离线单测）。
+///
+/// @ai-context: 键空间 = **课程/窗口标识**（检测卡写记忆时用的同一个键）。窗口标题优先；
+///              未选窗口（全屏）时用**净化去重之前**的会话标题——去重后缀（"(2)" 等）是
+///              逐会话派生的展示标题，不是稳定标识，一旦进键则记忆必读不回。
+/// @ai-context: 未选窗口路径的语义（如实登记）：该路径无窗口级身份，键是前端传入的占位
+///              标题（`ClassroomPage` 传常量「实时课堂」）；且检测卡在该路径不渲染
+///              （`ProfileDetector` 无 windowTitle 即 return null）⇒ UI 无写入口，
+///              本路径的记忆只在**同一占位标题**下自洽（跨标题不迁移，符合"没有身份"）。
+fn memory_key_for_start(source_window: Option<&str>, session_title: &str) -> String {
+    source_window.unwrap_or(session_title).to_string()
 }
 
 /// 会话启动档位解析（批 7 T19 · 规格 §11-8 的单一裁决点；纯函数，可离线单测）。

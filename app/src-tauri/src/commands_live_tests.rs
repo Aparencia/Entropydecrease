@@ -93,3 +93,61 @@ fn start_path_seeds_tier_into_override_slot() {
     // 且 starter 内部确实先解析档位（防"接了空值"）
     assert!(code.contains("resolve_start_tier(tier.as_deref()"), "档位解析未接入 start 路径");
 }
+
+/// 批 7 T19（R-11/§C51.4）记忆键规则：窗口标题优先；未选窗口用会话标题原文。
+#[test]
+fn memory_key_prefers_window_title() {
+    assert_eq!(memory_key_for_start(Some("零基础化妆教程"), "实时课堂"), "零基础化妆教程");
+    assert_eq!(memory_key_for_start(None, "实时课堂"), "实时课堂");
+}
+
+/// 🔴 批 7 T19（R-11/§C51.4）**未选窗口路径的跨会话判据**：写入 → 重新 load → 读回同一档；
+/// 负控：无记忆 ⇒ None（不覆写 ⇒ 既有默认档行为）。
+#[test]
+fn none_window_path_tier_roundtrip_across_reload() {
+    // Arrange：未选窗口（全屏）——键 = 前端传入的占位标题（净化去重之前）
+    let key = memory_key_for_start(None, "实时课堂");
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("profile_memory.json");
+    let mut memory = ProfileMemory::default();
+    memory.remember_tier(&key, VisualTier::Rich);
+    memory.save(&path).unwrap();
+    // Act：**重新 load**（= 新进程/新会话）→ 走 start 的档位解析
+    let reopened = ProfileMemory::load(&path);
+    // Assert：新会话读到的档 == 写入的档
+    assert_eq!(
+        resolve_start_tier(None, &reopened, &key),
+        Some(VisualTier::Rich),
+        "未选窗口路径的跨会话记忆必须成立（R-11 缺陷点）"
+    );
+    // 负控：无记忆 ⇒ None（不覆写）
+    assert_eq!(resolve_start_tier(None, &ProfileMemory::default(), &key), None);
+}
+
+/// 🔴 批 7 T19（R-11/§C51.4）**根因判据**：记忆键必须在 `dedupe_title` **之前**取，且**恰一处**。
+///
+/// @ai-context: 去重后缀（"(2)" 等）由 `dedupe_title` 逐会话派生 ⇒ 一旦它进键，同源第二次
+///              会话就换了键，跨会话记忆必读不回。此判据按**源码顺序**钉住该不变式，并数
+///              「`let memory_title` 绑定数 == 1」——防在 dedupe 之后再绑一次同名键把前置键
+///              **遮蔽**（R-11 的缺陷形态正是"键取自去重后"）。注释已剥（注释里写一句不算）。
+#[test]
+fn memory_key_taken_before_dedupe() {
+    let code: String = include_str!("commands_live.rs")
+        .lines()
+        .map(|l| if l.contains("://") { l } else { l.split("//").next().unwrap_or("") })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!(
+        code.matches("let memory_title").count(),
+        1,
+        "记忆键绑定必须恰一处（多于一处 ⇒ 可被后置键遮蔽，R-11 缺陷形态）"
+    );
+    let key_pos = code.find("let memory_title = memory_key_for_start(").expect("记忆键取值点缺失");
+    let dedupe_pos = code.find("dedupe_title(").expect("去重调用点缺失");
+    let resolve_pos = code.find("resolve_start_tier(").expect("档位解析调用点缺失");
+    assert!(
+        key_pos < dedupe_pos,
+        "记忆键必须在 dedupe_title 之前取（去重后缀进键 ⇒ 跨会话记忆必读不回，R-11 根因）"
+    );
+    assert!(dedupe_pos < resolve_pos, "档位解析必须在键确定之后（用同一把键）");
+}
