@@ -20,7 +20,9 @@ import type { ObjectType } from "./registry";
 import { VIEW_MEMORY_PREFIX, readViewMemory, useViewMemory, viewMemoryKey, writeViewMemory } from "./useViewMemory";
 
 const SESSION_KEYS = ["raw", "tritrack", "proof", "cardflow", "preview"] as const;
-const NOTE_KEYS = ["raw", "cardflow"] as const;
+// 与注册表真源 `registry.ts` 的 `FROZEN_VIEW_KEYS.note` **逐字同步**（`evidence` = 批 8 T8 新增的
+// 「带证据三轨」视图键）；漏掉它 ⇒ 该视图的记忆持久化路径在本件下**零覆盖**（批 8 T31 补）。
+const NOTE_KEYS = ["raw", "cardflow", "evidence"] as const;
 
 /** 记录键集合的内存 `Storage` 桩（M5 要「全程键集合」这个观测面）。 */
 function memoryStorage(seed: Record<string, string> = {}): { storage: Storage; keys: () => string[] } {
@@ -119,6 +121,28 @@ describe("M1 初始值取记忆（有则取之、无则默认）；写后重挂�
     writeViewMemory("session", "tritrack", s.storage);
     expect(shownKey(sessionProbe(s.storage))).toBe("tritrack");
     expect(s.storage.getItem("view:default:session")).toBe("tritrack");
+  });
+});
+
+describe("M1 补 · 笔记第三视图键 `evidence`（批 8 T8 新增）的记忆路径", () => {
+  it("`evidence` 是合法存值：读接受 → 挂载取回 → 写后重挂载恢复原键", () => {
+    // 反向对照：夹具若漏了这个键，`readViewMemory` 会把它当垃圾值 ⇒ 头一条断言当场红
+    const seeded = memoryStorage({ "view:default:note": "evidence" });
+    expect(readViewMemory("note", NOTE_KEYS, seeded.storage), "`evidence` 必须被 `NOTE_KEYS` 接受").toBe("evidence");
+    expect(shownKey(noteProbe(seeded.storage))).toBe("evidence");
+
+    // 写入那半段 = hook 的 setter 调用的同一个 `writeViewMemory`（见文件头「诚实边界」）
+    const written = memoryStorage();
+    writeViewMemory("note", "evidence", written.storage);
+    expect(shownKey(noteProbe(written.storage))).toBe("evidence");
+    expect(written.storage.getItem("view:default:note")).toBe("evidence");
+
+    // 夹具口径守卫：三键与注册表真源逐字相同（`evidence` 必须在场）
+    expect(NOTE_KEYS, "`NOTE_KEYS` 必须与 `FROZEN_VIEW_KEYS.note` 逐字相同（含批 8 T8 新增的 `evidence`）").toEqual([
+      "raw",
+      "cardflow",
+      "evidence",
+    ]);
   });
 });
 
