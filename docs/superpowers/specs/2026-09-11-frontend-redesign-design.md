@@ -558,6 +558,7 @@
 > - 🔴 **实测该处是 `BlockRefs`**（`app/src-tauri/src/artifact.rs:60-69`：`:62` `pub struct BlockRefs {`，字段 `:64` `segment_id: Option<i64>` · `:66` `ocr_block_id: Option<i64>` · `:68` `frame_ms: Option<u64>`）—— 它是**产物块引用结构**（`ArtifactBlock.refs: BlockRefs`，同文件 `:127`），维度是 **session 而非 note**，且 **0 个 `#[tauri::command]` 返回该类型**（**0 IPC 出口**；域 = 入库 `app/src-tauri/**/*.rs`，实测 `BlockRefs` 只出现在**结构定义 / 字段 / 内部构造 / 测试**四类位置）。
 > - ⚠️ **照字面读会误判成「必须新开 command」**（这正是本章 §D3 的由来）⇒ 🔴 **实际不需要**：**证据 id 的定义处** = `app/src/types/session.ts` 的 `SessionSegment.id`（`:22-23`）与 `SessionOcrBlock.id`（`:33-34`），及表 `session_segments`（`app/src-tauri/src/db_migrations.rs:45`）/ `session_ocr_blocks`（同文件 `:56`）；**前端取数走既有 `get_session_detail`**（`app/src-tauri/src/commands_session.rs:137` → `:164`；`:146` `list_segments(id)` · `:147` `list_ocr_blocks(id)`，`:164` 一并返回）⇒ **零新 IPC / 零 schema**（控制方 §2 **A1**）。
 > - ⇒ **E2 行的技术结论不变**（`ms` 在类型上无法与 `id` 逐字一致）；**变的只是出处** —— 支撑该结论的是 `session.ts` 的类型 + `get_session_detail`，**不是** `artifact.rs:62-69`。
+> - 🔻 **批 8 T6 就地加注（2026-09-13；上一行原文保留）—— 「三轨」的实现口径（控制方 §2 A3）**：**笔记段落轨（`data-evidence-for` 挂在其上）+ 转写段轨（`session_segments.id`）+ OCR 块轨（`session_ocr_blocks.id`）**。🔴 规格原文**未逐字给这三条** ⇒ 以本注为准；证据本体是 **id**、段落锚点只有 **ms** ⇒ E2 的「降级为 ms 最近邻」是**类型上的必然**，不是实现偷懒。
 
 #### §B 无锚点四类 + 各一份 fixture（**关闭开关的用例必须有**）
 
