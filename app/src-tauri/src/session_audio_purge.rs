@@ -110,3 +110,8 @@ pub fn purge_session_audio(data_dir: &Path, ids: &[i64]) -> AudioPurgeSummary {
     }
     summary
 }
+
+/// 单测独立文件（保持本文件 ≤300 行，AGENTS.md §3）。
+#[cfg(test)]
+#[path = "session_audio_purge_tests.rs"]
+mod tests;
