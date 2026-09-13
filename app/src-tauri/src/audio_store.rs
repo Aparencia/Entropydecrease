@@ -28,37 +28,19 @@ use std::path::{Path, PathBuf};
 #[path = "audio_align.rs"]
 pub(crate) mod audio_align;
 
-/// 默认保留期（天）。
-pub const DEFAULT_RETENTION_DAYS: u64 = 30;
-/// 默认磁盘预算（字节；1 小时 ≈ 115MB，预算 4GB ≈ 35 小时会话）。
-pub const DEFAULT_DISK_BUDGET_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+/// 落盘策略配置的持久化通道（T27 抽件；`#[path]` 由父模块自己声明 ⇒ `lib.rs` 一行未动）。
+#[path = "audio_store_config.rs"]
+pub(crate) mod audio_store_config;
+
+/// 配置面的公共 API 仍从本模块再导出（既有调用点 `crate::audio_store::AudioStoreConfig` 零改动）。
+pub use audio_store_config::{AudioStoreConfig, DEFAULT_DISK_BUDGET_BYTES, DEFAULT_RETENTION_DAYS};
+
 /// WAV 头长度（RIFF 12 + fmt 24 + data 8）。
 const WAV_HEADER_LEN: usize = 44;
 /// 采样率（与捕获链路契约一致：16kHz）。
 const SAMPLE_RATE: u32 = 16_000;
 /// 声道数（单声道）。
 const CHANNELS: u16 = 1;
-
-/// 落盘策略配置。
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct AudioStoreConfig {
-    /// 总开关（默认开；关闭=现状行为零开销）
-    pub enabled: bool,
-    /// 保留期（天；超期文件清理）
-    pub retention_days: u64,
-    /// 磁盘预算（字节；总大小超限删最旧）
-    pub disk_budget_bytes: u64,
-}
-
-impl Default for AudioStoreConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            retention_days: DEFAULT_RETENTION_DAYS,
-            disk_budget_bytes: DEFAULT_DISK_BUDGET_BYTES,
-        }
-    }
-}
 
 /// 清理结果摘要（命令层/日志消费）。
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
