@@ -114,9 +114,9 @@
 | 输出物 | 格式 | 存放位置 |
 |--------|------|---------|
 | 技术债务清单（滚动权威） | Markdown | docs/archive/<最新归档日>/tech-debt.md |
-| 债务登记入口 | Markdown/Issue | docs/tech-debt.md 或 GitHub Issues |
+| 债务登记入口 | Markdown/Issue | docs/archive/<最新归档日>/tech-debt.md 或 GitHub Issues |
 | 偿还计划 | 迭代 backlog | 项目管理工具 |
-| 债务盘点报告 | 文档 | docs/tech-debt/review-YYYY-MM.md |
+| 债务盘点报告 | 文档 | docs/archive/<归档日>/review-YYYY-MM-DD.md |
 
 ## 常见误区
 
