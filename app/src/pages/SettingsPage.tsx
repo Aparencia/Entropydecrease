@@ -38,9 +38,9 @@ import { MotionIntensityControl } from "../components/MotionIntensityControl";
 // 批 3（规格 §6.2「设置 主列：现 720 左对齐 → 改居中（860）」）：阅读舒适宽取自注册表。
 // ⚠️ 本列**不走** useColumnLayout——注册表它的 min=max=0（不参与拖拽），
 //    clamp(860, 0, 0) 会得到 0 ⇒ 只取规格的 default 值
+import { Surface } from "../ui/primitives";
 import { columnSpec } from "../shell/columnRegistry";
 
-const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
 const groupTitle: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 600,
@@ -69,7 +69,7 @@ export default function SettingsPage({ active = true }: Props) {
 
         {/* ── 模型（下载/磁盘/OCR 设备） ── */}
         <GroupTitle>模型</GroupTitle>
-        <div style={{ ...panel, marginBottom: 4 }}>
+        <Surface level="none" radius="panel" padded style={{ marginBottom: 4 }}>
           <ModelManagementPanel />
           <div style={{ marginTop: 8 }}>
             <ModelDiskPanel />
@@ -77,20 +77,20 @@ export default function SettingsPage({ active = true }: Props) {
           <div style={{ marginTop: 8 }}>
             <OcrDeviceSetting />
           </div>
-        </div>
+        </Surface>
 
         {/* ── 音频（预处理链/落盘管理） ── */}
         <GroupTitle>音频</GroupTitle>
-        <div style={{ ...panel, marginBottom: 4 }}>
+        <Surface level="none" radius="panel" padded style={{ marginBottom: 4 }}>
           <AudioPreprocSetting />
           <div style={{ marginTop: 8 }}>
             <AudioStoragePanel />
           </div>
-        </div>
+        </Surface>
 
         {/* ── AI 服务（Provider/开关授权/任务中心） ── */}
         <GroupTitle>AI 服务</GroupTitle>
-        <div style={{ ...panel, marginBottom: 4 }}>
+        <Surface level="none" radius="panel" padded style={{ marginBottom: 4 }}>
           <AiProviderSettings />
           <div style={{ marginTop: 8 }}>
             <AiServicePanel />
@@ -106,52 +106,52 @@ export default function SettingsPage({ active = true }: Props) {
           <div style={{ marginTop: 8 }}>
             <AiTaskPanel />
           </div>
-        </div>
+        </Surface>
 
         {/* v0.19（REQ-258/260）：学习库（检索与发现层——引擎/生成/索引重建） */}
         <GroupTitle>学习库</GroupTitle>
-        <div style={{ ...panel, marginBottom: 4 }}>
+        <Surface level="none" radius="panel" padded style={{ marginBottom: 4 }}>
           <LearningLibraryPanel active={active} />
-        </div>
+        </Surface>
 
         {/* ── 数据（备份/恢复） ── */}
         <GroupTitle>数据</GroupTitle>
-        <div style={{ ...panel, marginBottom: 4 }}>
+        <Surface level="none" radius="panel" padded style={{ marginBottom: 4 }}>
           <BackupPanel />
-        </div>
+        </Surface>
 
         {/* ── 词表（热词/替换词闭环）── */}
         <GroupTitle>词表</GroupTitle>
-        <div style={{ ...panel, marginBottom: 4 }}>
+        <Surface level="none" radius="panel" padded style={{ marginBottom: 4 }}>
           <VocabManager />
-        </div>
+        </Surface>
 
         {/* v0.20.2（REQ-269）：ASR 同音混淆闭环（画像候选/确认制/规则管理） */}
         <GroupTitle>ASR 纠错</GroupTitle>
-        <div style={{ ...panel, marginBottom: 4 }}>
+        <Surface level="none" radius="panel" padded style={{ marginBottom: 4 }}>
           <AsrConfusionPanel />
-        </div>
+        </Surface>
 
         {/* v0.20.4（REQ-304）：web 采集（URL 采集在课堂助手动线；本组=扩展收件） */}
         <GroupTitle>web 采集</GroupTitle>
-        <div style={{ ...panel, marginBottom: 4 }}>
+        <Surface level="none" radius="panel" padded style={{ marginBottom: 4 }}>
           <WebInboxPanel />
-        </div>
+        </Surface>
       
         {/* 批 6 T7（R3.3 / §8.5）：外观组——今天只此一项；完整外观/主题设置页属批 7/8 */}
         <GroupTitle>外观</GroupTitle>
-        <div style={{ ...panel, marginBottom: 4 }}>
+        <Surface level="none" radius="panel" padded style={{ marginBottom: 4 }}>
           <MotionIntensityControl />
-        </div>
+        </Surface>
 
         {/* ── 功能预览（默认关的新能力开关，v4 §11.3）── */}
         <GroupTitle>功能预览</GroupTitle>
-        <div style={{ ...panel, marginBottom: 4 }}>
+        <Surface level="none" radius="panel" padded style={{ marginBottom: 4 }}>
           <SealToggle />
           <div style={{ marginTop: 8 }}>
             <FeatureFlagSetting />
           </div>
-        </div>
+        </Surface>
       </div>
     </div>
   );

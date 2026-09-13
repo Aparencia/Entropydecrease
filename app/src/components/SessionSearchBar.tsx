@@ -9,7 +9,7 @@
  *              检索按钮已走 `Button` 原语（选中态 = `primary`，未选 = `ghost`）。
  */
 import type { SearchMode } from "../hooks/useSessionSearch";
-import { Button } from "../ui/primitives";
+import { Button, Surface } from "../ui/primitives";
 
 interface Props {
   searchMode: SearchMode;
@@ -31,11 +31,11 @@ export default function SessionSearchBar({
 }: Props) {
   return (
     <div style={{ padding: 10, display: "flex", gap: 6 }}>
-      <div style={{ display: "flex", border: "1px solid #e5e7eb", borderRadius: 6, overflow: "hidden", flexShrink: 0 }}>
+      <Surface level="none" radius="panel" style={{ display: "flex", overflow: "hidden", flexShrink: 0 }}>
         <Button variant={searchMode === "title" ? "primary" : "ghost"} size="sm" onClick={() => onSelectMode("title")}>标题</Button>
         <Button variant={searchMode === "content" ? "primary" : "ghost"} size="sm" onClick={() => onSelectMode("content")}>内容</Button>
         <Button variant={searchMode === "ocr" ? "primary" : "ghost"} size="sm" onClick={() => onSelectMode("ocr")}>画面</Button>
-      </div>
+      </Surface>
       {searchMode === "title" ? (
         <input
           value={keyword}

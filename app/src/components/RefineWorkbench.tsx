@@ -19,7 +19,7 @@
  *              两栏的**独立滚动 + 同步滚动**保留（见 `PANE_MAX_H` 的 Why）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EmptyState, Loading, Modal, Skeleton, StatusLine, Text } from "../ui/primitives";
+import { EmptyState, Loading, Modal, Skeleton, StatusLine, Surface, Text } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiRefineResult, DiffOp, MarkdownDiffOps, RefineStrategyInfo, RefineStrategyMeta, WorkbenchData } from "../types";
 import { escapeHtml } from "../utils/html";
@@ -437,9 +437,11 @@ export default function RefineWorkbench({
             <span>灰 = 两版共有</span>
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
-            <div
-              style={{ border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff", padding: 6, fontSize: 11, fontFamily: "monospace", lineHeight: 1.7 }}
-              dangerouslySetInnerHTML={{ __html: diffHtml }}
+            <Surface
+              level="surface"
+              radius="panel"
+              html={diffHtml}
+              style={{ padding: 6, fontSize: 11, fontFamily: "monospace", lineHeight: 1.7 }}
             />
           </div>
         </div>

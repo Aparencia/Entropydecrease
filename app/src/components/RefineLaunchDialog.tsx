@@ -14,7 +14,7 @@
  *              的 `kind` 分支）⇒ `open` 恒为 `true`，本组件每次由父层条件挂载。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, Loading, Modal, Skeleton, StatusLine } from "../ui/primitives";
+import { Button, Loading, Modal, Skeleton, StatusLine, Surface } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiSettingsView, BalanceView, RefineEstimateView, RefineStrategyMeta } from "../types";
 import {
@@ -234,7 +234,7 @@ export default function RefineLaunchDialog({
           显示；笔记级精修（纯文本语境）隐藏。checkbox 初值=全局；勾选变化=本次
           覆写；「设为默认」显式写回全局（单向同步，不双向自动）。 */}
       {!isNote && (
-        <div style={{ marginTop: 8, border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+        <Surface level="none" radius="panel" style={{ marginTop: 8, padding: "6px 10px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
             <input
               data-testid="vision-refine-toggle"
@@ -266,7 +266,7 @@ export default function RefineLaunchDialog({
               <StatusLine kind={visionSavedNote.startsWith("已") ? "ok" : "error"} testId="vision-saved-note">{visionSavedNote}</StatusLine>
             </div>
           )}
-        </div>
+        </Surface>
       )}
 
       {/* 成本确认行 */}

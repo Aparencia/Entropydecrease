@@ -11,7 +11,7 @@
  *              （`ActionCenterPanel` 的条件挂载）⇒ `open` 恒为 `true`，160ms 退场相位不触发。
  */
 import { useCallback, useEffect, useState } from "react";
-import { Button, EmptyState, Modal, Text } from "../ui/primitives";
+import { Button, EmptyState, Modal, Surface, Text } from "../ui/primitives";
 import { invoke } from "@tauri-apps/api/core";
 
 /** 响应结构（PracticeItem/QuestionItem 均 serde camelCase——字段须 camel 读取） */
@@ -112,7 +112,7 @@ export function PracticeOverlay({ onClose }: { onClose: () => void }) {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {items.map((it) => (
-            <div key={it.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px", display: "flex", gap: 6, alignItems: "center" }}>
+            <Surface key={it.id} level="none" radius="panel" style={{ padding: "6px 10px", display: "flex", gap: 6, alignItems: "center" }}>
               <span style={{ fontSize: 12.5, flex: 1 }}>{it.text}</span>
               <Text tone="ink-3" style={{ fontSize: 10.5 }}>
                 {it.frequency === "daily" ? "每日" : "手动"}
@@ -120,7 +120,7 @@ export function PracticeOverlay({ onClose }: { onClose: () => void }) {
                 {it.nextDue != null ? ` · 下次 ${new Date(it.nextDue * 1000).toLocaleDateString()}` : ""}
               </Text>
               <Button variant="primary" size="md" onClick={() => void tick(it)}>🎯 打点</Button>
-            </div>
+            </Surface>
           ))}
         </div>
       )}
@@ -196,7 +196,7 @@ export function QuestionsOverlay({ onClose }: { onClose: () => void }) {
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {open.map((q) => (
-          <div key={q.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }}>
+          <Surface key={q.id} level="none" radius="panel" style={{ padding: "6px 10px" }}>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <span style={{ fontSize: 12.5, flex: 1 }}>❓ {q.text}</span>
               <Button variant="secondary" size="md" onClick={() => setAnswerFor(answerFor === q.id ? null : q.id)}>已答</Button>
@@ -208,7 +208,7 @@ export function QuestionsOverlay({ onClose }: { onClose: () => void }) {
                 <Button variant="primary" size="md" onClick={() => void answer(q)}>确认</Button>
               </div>
             )}
-          </div>
+          </Surface>
         ))}
         {open.length === 0 && answered.length === 0 && (
           <EmptyState title="暂无问题——" description="学习中的疑问随手记下，答沉淀后归档（可转复习卡出口规划中）" />

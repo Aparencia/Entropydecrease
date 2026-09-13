@@ -6,8 +6,9 @@
  *
  * ★ 语义（**别把本表当"所有剩余命中"的清单**）：登记的只是**本单元逐处裁定过、决定不迁**的落点；
  *   剩余命中的大头是**类别级**裁定 —— 控件形态（按钮/输入框/下拉/文本域/药丸/徽标，归批 5/7）、
- *   单向分隔线（57 处，`Surface.bordered` 只出整圈）、透明边框容器（`Surface` 基类必出底色）、
- *   切片外余量（backlog）—— 逐文件登记它们会造出上百条同因条目，那是登记噪音不是判据。
+ *   单向分隔线（57 处，`Surface.bordered` 只出整圈）、切片外余量（backlog）—— 逐文件登记它们会造出上百条
+ *   同因条目，那是登记噪音不是判据。★ **批 7 T7 已把「透明边框容器」这一类收口**：`Surface` 加了 `level="none"`
+ *   （只出边框、不出底色）⇒ 实测 21 处里 19 处迁入原语，余 2 处在 legacy 登记面内（见 `legacy-registry-frozen`）。
  *
  * ★ 防僵尸判据（`surfaceRatchet.test.ts` ⑩）：每条声明的文件**此刻仍须命中** ≥ `count` ——
  *   一处被迁走却仍挂在豁免表里 ⇒ 红（下一个人会以为它还在）。
@@ -17,14 +18,20 @@
  */
 
 /** 残留分类（两族共用；每类都有**非空理由**，见 `SURFACE_RESIDUAL_WHY`） */
-export type SurfaceResidualKind = "b1-non-migrated" | "anchored-menu" | "no-passthrough-html" | "no-passthrough-id" | "conditional-color" | "html-string";
+export type SurfaceResidualKind =
+  | "b1-non-migrated"
+  | "anchored-menu"
+  | "conditional-color"
+  | "html-string"
+  | "legacy-registry-frozen";
 
 /** 逐类理由（判据要求非空且 ≥ 12 字；条目侧只带 `file/kind/count`，避免上百条同因长句） */
 export const SURFACE_RESIDUAL_WHY: Readonly<Record<SurfaceResidualKind, string>> = {
   "b1-non-migrated": "B1/B2 的 `NON_MIGRATED_14` 成员：`dialogMigration.e.test.ts` ② 硬判据禁止该文件源码出现 `ui/primitives` ⇒ 迁 `Surface` 会顶红 ⇒ 回退 + 登记（控制方 B21：守卫不改窄）",
   "anchored-menu": "锚定菜单 / 浮层（`position: absolute|fixed` + `zIndex(\"popover\")` + `boxShadow`）⇒ 与 `SHADOW_RESIDUAL` 同向：不迁原语；本单元只把阴影字面量换成 token、圆角按映射表就地 6 → 8",
-  "no-passthrough-html": "落点是 markdown 阅读面，靠 `dangerouslySetInnerHTML` 灌内容，而 `SurfaceProps` 无该属性透传 ⇒ 结构上迁不进去（原语补透传是批 5/6 的活）",
-  "no-passthrough-id": "落点带 `id`（供锚点跳转），`SurfaceProps` 无 `id` / DOM 属性透传 ⇒ 迁过去会丢锚点（同 `no-passthrough-html` 的结构缺口）",
+  // ★ 批 7 T7 退役 `no-passthrough-html` / `no-passthrough-id`：受控槽 `html` / `domId` 已落进 `SurfaceProps`
+  //   （C9.4），原先被它们挡住的落点已全部迁入 ⇒ 这两个类别**此刻 0 条登记**，词条随之退役（留着就是过期散文）。
+  "legacy-registry-frozen": "该文件是 `SURFACE_TAG_REGISTRY` 的 **legacy 行**（`≤` 上限只许降），而本文件又有一处透明边框容器 ⇒ 迁它会顶红牙 1，而抬高 legacy 面（`SURFACE_TAG_FROZEN_LEGACY_COUNT`）属 §C9.5 明令禁止 ⇒ 留在原地并登记；控制方若授权抬高该面，这两处即可迁",
   "conditional-color": "三元条件边框色（`cond ? \"1px solid <状态色>\" : \"1px solid #e5e7eb\"`）：`Surface.interactive` 只给 hover 的边框墨度推进，给不出任意状态色 ⇒ 不迁（选中/激活态属批 5/7）",
   "html-string": "HTML 字符串里的 `border:1px solid #e5e7eb`（markdown 内嵌 img 的 style 串）：不是 JSX 元素 ⇒ `Surface` 表达不了（口径边界，登记）",
 };
@@ -41,26 +48,25 @@ export const BORDER_RESIDUAL: readonly { file: string; kind: SurfaceResidualKind
   { file: "components/KnowledgeGraphView.tsx", kind: "conditional-color", count: 1 },
   { file: "components/KnowledgeSystemWizard.tsx", kind: "conditional-color", count: 1 },
   { file: "components/LiveImageStrip.tsx", kind: "conditional-color", count: 1 },
+  { file: "components/LiveImageStrip.tsx", kind: "legacy-registry-frozen", count: 1 },
   { file: "components/NoteEditView.tsx", kind: "b1-non-migrated", count: 4 },
   { file: "components/NoteHeaderActions.tsx", kind: "anchored-menu", count: 1 },
   { file: "components/NoteLinkToSystem.tsx", kind: "b1-non-migrated", count: 2 },
   { file: "components/NoteListBatchMenu.tsx", kind: "b1-non-migrated", count: 2 },
   { file: "components/NoteMoveToGroupMenu.tsx", kind: "b1-non-migrated", count: 1 },
-  { file: "components/NotePreviewView.tsx", kind: "no-passthrough-html", count: 4 },
   { file: "components/NoteRowContextMenu.tsx", kind: "b1-non-migrated", count: 1 },
   { file: "components/RefineStrategyPicker.tsx", kind: "conditional-color", count: 1 },
-  { file: "components/RefineWorkbench.tsx", kind: "no-passthrough-html", count: 1 },
   { file: "components/RichEditorView.tsx", kind: "b1-non-migrated", count: 4 },
   { file: "components/RouteInfoPopover.tsx", kind: "b1-non-migrated", count: 5 },
   { file: "components/ScreenSelectOverlay.tsx", kind: "b1-non-migrated", count: 3 },
   { file: "components/SessionListPanel.tsx", kind: "conditional-color", count: 1 },
   { file: "components/SessionRowContextMenu.tsx", kind: "b1-non-migrated", count: 1 },
   { file: "components/SystemStatusBadge.tsx", kind: "anchored-menu", count: 1 },
+  { file: "components/VersionPanel.tsx", kind: "legacy-registry-frozen", count: 1 },
   { file: "components/WindowSelectCard.tsx", kind: "anchored-menu", count: 1 },
   { file: "components/action-center/ActionCenterPanel.tsx", kind: "conditional-color", count: 1 },
   { file: "components/chat/ChatLaunchMenu.tsx", kind: "b1-non-migrated", count: 1 },
   { file: "components/note-selection/SelectionActionMenu.tsx", kind: "b1-non-migrated", count: 1 },
-  { file: "components/session-detail/SessionScreenCards.tsx", kind: "no-passthrough-id", count: 2 },
 ];
 
 /** 圆角族同上；**控件形态**按类别整体裁定，不逐文件登记（理由见文件头「★ 语义」） */
@@ -170,15 +176,35 @@ export interface SurfaceTagRegistryEntry {
  * （`legacy: true` 是那 9 行的**唯一**标记 —— 判据据此把它们与新登记行分开；总数由常数另行核验。）
  */
 export const SURFACE_TAG_REGISTRY: readonly SurfaceTagRegistryEntry[] = [
-  // ── legacy（T17-B 迁移面 · 2026-09-12 实测快照 · 只许降）──
+  // ⚠️ 全表按键**字典序**（判据 ⑪ 牙 5a）⇒ 新行插在字典序位置，不是追加在尾部。
+  // `legacy: true` = T17-B 迁移快照的 9 行（`≤` 上限、只许降、其和锁在 `SURFACE_TAG_FROZEN_LEGACY_COUNT`）；
+  // 不带 `legacy` = 批 5/7 的新登记行（`count` **恰等于实测**）。新增 = 加行 + 抬总数 + 同步锚（三处同批）。
+  { file: "components/AiProviderSettings.tsx", count: 1, reason: "Provider 卡片容器（整圈边框 + 圆角 + 无底色）：批 7 T7 迁入，走 `level=\"none\"` 只出边框不出底" },
+  { file: "components/AiServicePanel.tsx", count: 1, reason: "调用记录滚动容器（无底色 + 整圈边框）：批 7 T7 迁入 `level=\"none\"`，滚动口是布局口、仍走 `style`" },
+  { file: "components/AiTaskPanel.tsx", count: 1, reason: "任务记录滚动容器（无底色 + 整圈边框）：批 7 T7 迁入 `level=\"none\"`，形态同 `AiServicePanel`" },
   { file: "components/ChatMessageList.tsx", count: 2, legacy: true, reason: "T17-B 第 2 批迁移：聊天消息流的两处卡片容器（`Surface` 出面 + 调用点只留排布）⇒ 属迁移面，非本批新增" },
+  { file: "components/ClassroomCapturePanel.tsx", count: 1, reason: "实时捕获卡片容器（原 `const panel` 共享样式）：批 7 T7 把常量换成原语 `level=\"none\" radius=\"panel\" padded`" },
+  { file: "components/ClassroomRightPane.tsx", count: 1, reason: "右栏「当前配置」卡（原 `const panel` + spread）：批 7 T7 换成原语，布局口（marginTop/字色）留在 `style`" },
   { file: "components/EnrichPanel.tsx", count: 2, legacy: true, reason: "T17-B 第 2 批迁移：增强面板的两处卡片容器（整圈 `1px solid #e5e7eb` + 底色 + 非交互）⇒ 属迁移面" },
   { file: "components/FeedFragmentList.tsx", count: 1, legacy: true, reason: "T17-B 第 2 批迁移：信息流片段的卡片容器 ⇒ 属迁移面" },
   { file: "components/GoalAiSection.tsx", count: 1, legacy: true, reason: "T17-B 第 2 批迁移：目标页 AI 区块的卡片容器 ⇒ 属迁移面" },
   { file: "components/KnowledgeSampleView.tsx", count: 1, legacy: true, reason: "T17-B 第 2 批迁移：知识样例视图的阅读面 ⇒ 属迁移面" },
   { file: "components/LiveImageStrip.tsx", count: 1, legacy: true, reason: "T17-B 第 2 批迁移：实时图像条的容器面 ⇒ 属迁移面" },
+  { file: "components/MaterialInputPanel.tsx", count: 1, reason: "学习素材卡容器（原 `const panel` 共享样式）：批 7 T7 换成原语 `level=\"none\" radius=\"panel\" padded`" },
+  { file: "components/NotePreviewView.tsx", count: 2, reason: "AI 精修版 / 规则版预览的 markdown 阅读面（两处 `dangerouslySetInnerHTML`）：批 7 T7 用受控槽 `html` 迁入" },
+  { file: "components/PhotoCapturePanel.tsx", count: 1, reason: "图文采集卡容器（原 `const panel` 共享样式）：批 7 T7 换成原语 `level=\"none\" radius=\"panel\" padded`" },
+  { file: "components/PracticeQuestionsOverlays.tsx", count: 2, reason: "练习条目行容器（整圈边框 + 无底色，两处）：批 7 T7 迁入 `level=\"none\"`，行内排布留在 `style`" },
+  { file: "components/ProfileDetector.tsx", count: 1, reason: "视频档案卡容器（整圈边框 + 无底色）：批 7 T7 迁入 `level=\"none\" radius=\"panel\" padded`" },
+  { file: "components/ReadyCheckCard.tsx", count: 1, reason: "就绪检查卡容器（整圈边框 + 无底色）：批 7 T7 迁入 `level=\"none\" radius=\"panel\" padded`" },
+  { file: "components/RefineLaunchDialog.tsx", count: 1, reason: "画面理解开关行容器（整圈边框 + 无底色）：批 7 T7 迁入 `level=\"none\"`，flex 排布留在 `style`" },
+  { file: "components/RefineStrategyPicker.tsx", count: 1, reason: "「高级微调」旋钮层容器（整圈边框 + 无底色）：批 7 T7 迁入 `level=\"none\"`" },
+  { file: "components/RefineWorkbench.tsx", count: 1, reason: "差异单列视图的 diff 阅读面（`dangerouslySetInnerHTML`）：批 7 T7 用受控槽 `html` 迁入" },
+  { file: "components/SessionSearchBar.tsx", count: 1, reason: "标题/内容/画面三档分组按钮的容器（整圈边框 + 无底色）：批 7 T7 迁入 `level=\"none\"`" },
   { file: "components/TaskConversationView.tsx", count: 3, legacy: true, reason: "T17-B 第 2 批迁移：任务对话视图的 3 处面（**同时是登记制的锚文件**，值 3 不许动）⇒ 属迁移面" },
   { file: "components/VersionPanel.tsx", count: 2, legacy: true, reason: "T17-B 第 2 批迁移：版本面板的两处卡片容器 ⇒ 属迁移面" },
+  { file: "components/VideoImportPanel.tsx", count: 1, reason: "视频导入卡容器（整圈边框 + 无底色）：批 7 T7 迁入 `level=\"none\" radius=\"panel\" padded`" },
   { file: "components/WeekContractCard.tsx", count: 1, legacy: true, reason: "T17-B 第 2 批迁移：周契约卡片的面 ⇒ 属迁移面" },
-  // ── 批 5 新增登记（**本批至今 0 条**；新条目**不带 `legacy`**，按字典序插在上面这段之后，并同步总数与锚）──
+  { file: "components/action-center/ActionCenterPanel.tsx", count: 3, reason: "待提炼行 / SOP 模板区 / 模板行三个容器（整圈边框 + 无底色）：批 7 T7 迁入 `level=\"none\"`" },
+  { file: "components/session-detail/SessionScreenCards.tsx", count: 1, reason: "OCR 屏卡容器（带锚点 `id` + 近白底）：批 7 T7 用受控槽 `domId` 迁入，`level=\"canvas\"`" },
+  { file: "pages/SettingsPage.tsx", count: 10, reason: "设置页 10 个面板容器（原 `const panel` + spread）：批 7 T7 换成原语 `level=\"none\" radius=\"panel\" padded`" },
 ];

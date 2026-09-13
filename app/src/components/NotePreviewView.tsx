@@ -15,7 +15,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import type { Note, NoteFilterResult, TextFilterDecision, TextFilterReview, TextFilterStatus } from "../types";
 import { escapeHtml, renderTimestampAnchors } from "../utils/html";
 import AiRefineCard from "./AiRefineCard";
-import { ConfirmDialog, Loading, Text } from "../ui/primitives";
+import { ConfirmDialog, Loading, Surface, Text } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 
@@ -290,15 +290,21 @@ export default function NotePreviewView({
               回到规则版预览
             </button>
           </div>
-          <div
-            style={{ fontSize: 13, lineHeight: 1.6, background: "#fff", border: "1px solid #d1fae5", borderRadius: 6, padding: 12 }}
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(adopted.content, baseUrl, dataDir) }}
+          <Surface
+            level="surface"
+            radius="panel"
+            padded
+            html={renderMarkdown(adopted.content, baseUrl, dataDir)}
+            style={{ fontSize: 13, lineHeight: 1.6 }}
           />
         </div>
       ) : (
-        <div
-          style={{ fontSize: 13, lineHeight: 1.6, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(preview.markdown, baseUrl, dataDir) }}
+        <Surface
+          level="surface"
+          radius="panel"
+          padded
+          html={renderMarkdown(preview.markdown, baseUrl, dataDir)}
+          style={{ fontSize: 13, lineHeight: 1.6 }}
         />
       )}
 

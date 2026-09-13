@@ -29,7 +29,7 @@ import BoxSelectOverlay from "../BoxSelectOverlay";
 import SessionScreenCard from "./SessionScreenCard";
 import type { SessionOcrBlock, SessionScreen } from "../../types";
 import { fmtMs } from "../../utils/fmt";
-import { Text } from "../../ui/primitives";
+import { Surface, Text } from "../../ui/primitives";
 
 /** 通用小按钮基础样式（拆分前 SessionDetailPanel 的 `btn`——本文件仅「框选截取」展开复用） */
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
@@ -91,16 +91,12 @@ export default function SessionScreenCards({
         // 块级明细（原料复查）：预构建分组直取（M7：替代逐屏 O(n×m) filter）
         const raw = ocrBlocksByScreen.get(s.first_seen_ms) ?? [];
         return (
-          <div
+          <Surface
             key={s.first_seen_ms}
-            id={`ocr-${sessionId}-${s.first_seen_ms}`}
-            style={{
-              border: "1px solid #e5e7eb",
-              borderRadius: 8,
-              padding: "8px 10px",
-              marginBottom: 8,
-              background: "#fafafa",
-            }}
+            domId={`ocr-${sessionId}-${s.first_seen_ms}`}
+            level="canvas"
+            radius="panel"
+            style={{ padding: "8px 10px", marginBottom: 8 }}
           >
             <div style={{ fontSize: 11, color: "#0f766e", fontWeight: 600, marginBottom: 4 }}>
               📄 屏 {s.screen_id ?? i + 1} · {fmtMs(s.first_seen_ms)} – {fmtMs(s.last_seen_ms)}
@@ -185,7 +181,7 @@ export default function SessionScreenCards({
                 ))}
               </details>
             )}
-          </div>
+          </Surface>
         );
       })}
     </>

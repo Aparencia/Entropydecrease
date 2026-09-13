@@ -12,10 +12,10 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { Surface } from "../ui/primitives";
 import ScreenSelectOverlay from "./ScreenSelectOverlay";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
-const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
 
 interface Props {
   onOpenSessions?: (sessionId: number) => void;
@@ -151,7 +151,7 @@ export default function PhotoCapturePanel({ onOpenSessions, onStatus }: Props) {
 
   return (
     <>
-      <div style={panel}>
+      <Surface level="none" radius="panel" padded>
         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>图文采集（截屏导入图文内容）</div>
         {phase === "idle" && (
           <button
@@ -212,7 +212,7 @@ export default function PhotoCapturePanel({ onOpenSessions, onStatus }: Props) {
             </button>
           </>
         )}
-      </div>
+      </Surface>
       {snapshot && (
         <ScreenSelectOverlay
           src={snapshot.src}

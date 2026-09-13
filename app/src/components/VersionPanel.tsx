@@ -132,6 +132,9 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
       {open && (
         <div style={{ marginTop: 8 }}>
           {/* 版本列表（时间/source 徽标/费用/合并摘要 + 回滚） */}
+          {/* ⚠️ 批 7 T7：本处是「透明边框容器」的候选，但本文件是 `SURFACE_TAG_REGISTRY` 的 **legacy 行**
+              （`≤` 上限只许降）⇒ 迁它会顶红牙 1；抬高 legacy 面属 §C9.5 禁止 ⇒ 留在原地并登记
+              （见 `surfaceResidual.ts` 的 `legacy-registry-frozen`）。 */}
           <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 6 }}>
             {versions.map((v, i) => {
               const badge = SOURCE_BADGE[v.source] ?? SOURCE_BADGE.rule;

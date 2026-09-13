@@ -23,7 +23,7 @@ import {
   matchIntent,
   type StrategyDraft,
 } from "../utils/refineStrategy";
-import { Button, Loading, Text } from "../ui/primitives";
+import { Button, Loading, Surface, Text } from "../ui/primitives";
 
 const optBtn = (active: boolean): React.CSSProperties => ({
   padding: "2px 8px", cursor: "pointer", fontSize: 11, borderRadius: 6,
@@ -153,7 +153,7 @@ export default function RefineStrategyPicker({
       </div>
 
       {/* 旋钮层：高级微调 */}
-      <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 8 }}>
+      <Surface level="none" radius="panel" style={{ padding: 8 }}>
         <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>高级微调</div>
         {meta?.strategyDims.map((dim) => (
           <div key={dim.key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
@@ -174,7 +174,7 @@ export default function RefineStrategyPicker({
           </div>
         ))}
         {!meta && <Loading label="策略声明加载中…" />}
-      </div>
+      </Surface>
     </div>
   );
 }

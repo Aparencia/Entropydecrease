@@ -20,7 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import SopRunOverlay from "../SopRunOverlay";
 import { PracticeOverlay, QuestionsOverlay } from "../PracticeQuestionsOverlays";
-import { Button, EmptyState, StatusLine, Text } from "../../ui/primitives";
+import { Button, EmptyState, StatusLine, Surface, Text } from "../../ui/primitives";
 
 /** 响应结构（SopTemplate/ActionQueueRow/CompletionEvent 均 serde camelCase——字段须 camel 读取） */
 interface SopTemplateView {
@@ -447,11 +447,11 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
             <h4 style={{ fontSize: 12.5, margin: "10px 0 4px", color: "#7c3aed" }}>待提炼（{unrefined.length} · 产物遗留 ☑️ 行）</h4>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {unrefined.length === 0 ? empty("无待提炼产物行") : unrefined.map((r) => (
-                <div key={r.id} style={{ border: "1px solid #e5e7eb", borderRadius: 6, padding: "6px 8px", display: "flex", gap: 6, alignItems: "center" }}>
+                <Surface key={r.id} level="none" radius="panel" style={{ padding: "6px 8px", display: "flex", gap: 6, alignItems: "center" }}>
                   <span style={{ fontSize: 12.5, flex: 1 }}>☑️ {r.text}</span>
                   <Text tone="ink-3" style={{ fontSize: 10.5 }}>@{r.noteTitle}</Text>
                   <button style={{ ...okBtn, fontSize: 11 }} onClick={() => void refineUnrefined(r.id)}>提炼为任务行</button>
-                </div>
+                </Surface>
               ))}
             </div>
           </>
@@ -475,7 +475,7 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
               <b>SOP 模板（{templates.length}）</b>{" "}
               <Text tone="ink-3" style={{ fontSize: 11 }}>模板=笔记段落行范围引用（编辑正文即编辑模板，无双写）；执行=步骤快照跑 run</Text>
             </div>
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 8, marginBottom: 10 }}>
+            <Surface level="none" radius="panel" style={{ padding: 8, marginBottom: 10 }}>
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
                 <span style={{ fontSize: 11, color: "#6b7280" }}>新建：</span>
                 <select value={sopNoteId ?? undefined} onChange={(e) => setSopNoteId(Number(e.target.value))} style={{ fontSize: 12, maxWidth: 180 }}>
@@ -491,13 +491,13 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
               <Text as="div" tone="ink-3" style={{ fontSize: 11, marginTop: 4 }}>
                 行号 0 起（标题=0）；空行自动跳过；超 50 步拒绝。编辑器内选中段落生成入口在笔记工具栏接线（同款命令）。
               </Text>
-            </div>
+            </Surface>
             {templates.length === 0 ? (
               <EmptyState title="暂无 SOP 模板——" description="选中笔记步骤段落（行范围）即可创建" compact />
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {templates.map((t) => (
-                  <div key={t.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }}>
+                  <Surface key={t.id} level="none" radius="panel" style={{ padding: "6px 10px" }}>
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                       <span style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{t.name}</span>
                       <Text tone="ink-3" style={{ fontSize: 11 }}>@{t.noteTitle} · 行 {t.startLine}–{t.endLine} · {t.mode === "confirm" ? "总览核对" : "逐步引导"}</Text>
@@ -512,7 +512,7 @@ export default function ActionCenterPanel({ refreshToken = 0 }: Props) {
                         {suggestions[t.id].map((s, i) => <div key={i}>💡 {s}</div>)}
                       </div>
                     )}
-                  </div>
+                  </Surface>
                 ))}
               </div>
             )}

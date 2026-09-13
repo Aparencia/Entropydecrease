@@ -15,7 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AiEnrichResult, AiRefineResult, AiTaskRecord } from "../types";
 // 低5（审查）：类别词经 entityLabel.kindWord 单一来源（不带 id 的语义词）
 import { kindWord } from "../utils/entityLabel";
-import { Button, EmptyState, StatusLine, Text } from "../ui/primitives";
+import { Button, EmptyState, StatusLine, Surface, Text } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "3px 8px", fontSize: 11, borderRadius: 5, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" };
 
@@ -154,7 +154,7 @@ export default function AiTaskPanel() {
       {tasks.length === 0 ? (
         <EmptyState title="暂无任务记录" description="精修/补充完成后自动记录" compact />
       ) : (
-        <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 6 }}>
+        <Surface level="none" radius="panel" style={{ maxHeight: 200, overflowY: "auto" }}>
           {tasks.map((t) => {
             const badge = stateBadge(t.state);
             return (
@@ -188,7 +188,7 @@ export default function AiTaskPanel() {
               </div>
             );
           })}
-        </div>
+        </Surface>
       )}
 
       {/* 结果摘要 + 采纳（防重复采纳：采纳后任务标记 adopted，历史中不再可恢复） */}

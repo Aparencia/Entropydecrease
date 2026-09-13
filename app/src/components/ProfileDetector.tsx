@@ -22,7 +22,7 @@ import type {
 // 审查修复（领域枚举漂移）：共享常量替换本地定义——与 Rust ALL_DOMAINS 20 类
 // 同口径（新建组/改判共用），本地重复定义删除
 import { DOMAIN_OPTIONS } from "../utils/domainOptions";
-import { StatusLine, Text } from "../ui/primitives";
+import { StatusLine, Surface, Text } from "../ui/primitives";
 
 /** 形态标签映射（Rust ContentForm::label 同源） */
 export const FORM_LABELS: Record<ContentForm, string> = {
@@ -231,7 +231,7 @@ export default function ProfileDetector({
   const conflictKind = result?.memory_conflict ?? null;
 
   return (
-    <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
+    <Surface level="none" radius="panel" padded>
       <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
         视频档案（三维一体 · v0.9.0）
       </div>
@@ -366,7 +366,7 @@ export default function ProfileDetector({
           {error && <StatusLine kind="error">{error}</StatusLine>}
         </div>
       )}
-    </div>
+    </Surface>
   );
 }
 

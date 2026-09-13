@@ -107,6 +107,9 @@ export default function LiveImageStrip({ sessionId }: { sessionId: number | null
       {/* 点击放大的大图预览（full 原图） */}
       {expanded && baseUrl && (
         <div style={{ marginBottom: 6, position: "relative", border: "1px solid #e5e7eb", borderRadius: 6, overflow: "hidden" }}>
+          {/* ⚠️ 批 7 T7：本处是「透明边框容器」的候选，但本文件是 `SURFACE_TAG_REGISTRY` 的 **legacy 行**
+              （`≤` 上限只许降）⇒ 迁它会顶红牙 1；抬高 legacy 面属 §C9.5 禁止 ⇒ 留在原地并登记
+              （见 `surfaceResidual.ts` 的 `legacy-registry-frozen`）。 */}
           <img
             src={convertFileSrc(`${baseUrl}/${expanded}`)}
             alt="关键帧原图"

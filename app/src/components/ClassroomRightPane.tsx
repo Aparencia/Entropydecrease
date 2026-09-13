@@ -13,11 +13,11 @@
  */
 import LiveActivityPanel from "./LiveActivityPanel";
 import ProfileDetector from "./ProfileDetector";
+import { Surface } from "../ui/primitives";
 import { columnSpec } from "../shell/columnRegistry";
 import type { Note, ProfileKind, WindowInfo } from "../types";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
-const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
 
 /**
  * 非采集态内容区的**唯一**宽度上限（规格 §6.2：右面板是 flex 列，「统一 wrapper」）。
@@ -135,14 +135,14 @@ export default function ClassroomRightPane({
                   <li><strong>添加学习素材</strong>：音频文件（WAV，本地 SenseVoice 转写）与图片（本地 PP-OCRv6 识别）</li>
                   <li><strong>一键提取</strong>：转写 + OCR → 本地拼接为 Markdown 笔记 → 自动保存</li>
                 </ol>
-                <div style={{ ...panel, marginTop: 16, fontSize: 12, color: "#6b7280", lineHeight: 1.9 }}>
+                <Surface level="none" radius="panel" padded style={{ marginTop: 16, fontSize: 12, color: "#6b7280", lineHeight: 1.9 }}>
                   <div><strong>当前配置</strong></div>
                   <div>目标窗口：{selectedWindow ? `${selectedWindow.title}（${selectedWindow.processName || "未知进程"}）` : "未选择（实时捕获将抓全屏）"}</div>
                   <div>流式转写：sherpa-onnx Zipformer（实时字幕，需模型就绪）</div>
                   <div>转写引擎：sherpa-onnx SenseVoice（本地，已就绪）</div>
                   <div>OCR 引擎：oar-ocr PP-OCRv6（本地，首次使用自动下载模型）</div>
                   <div>数据主权：全部本地处理，内容不出本机</div>
-                </div>
+                </Surface>
               </div>
             )}
           </div>

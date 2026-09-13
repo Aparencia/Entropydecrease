@@ -13,10 +13,9 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { Note } from "../types";
 // Low 清扫：标题截断长度单一定义源（与 ClassroomPage 共享）
 import { NOTE_TITLE_MAX_LEN } from "../utils/constants";
-import { Button, Text } from "../ui/primitives";
+import { Button, Surface, Text } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
-const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
 
 interface Props {
   /** 标题来源：选定窗口标题（无窗口 → 默认名） */
@@ -63,7 +62,7 @@ export default function MaterialInputPanel({ windowTitle, onNote, onStatus }: Pr
   return (
     <>
       {/* 素材输入（v0.1.0：文件流水线） */}
-      <div style={panel}>
+      <Surface level="none" radius="panel" padded>
         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>学习素材（文件）</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <Button variant="secondary" size="lg" busy={processing} onClick={pickAudio}>选音频 WAV</Button>
@@ -71,7 +70,7 @@ export default function MaterialInputPanel({ windowTitle, onNote, onStatus }: Pr
         </div>
         {audioPath && <p style={{ fontSize: 11, color: "#374151", marginTop: 6, wordBreak: "break-all" }}>🎵 {audioPath}</p>}
         {imagePaths.length > 0 && <p style={{ fontSize: 11, color: "#374151", marginTop: 4 }}>🖼 已选 {imagePaths.length} 张图片</p>}
-      </div>
+      </Surface>
 
       {/* 底部启动按钮（参考原项目"开始回声定位"位置） */}
       <div style={{ padding: 12, borderTop: "1px solid #e5e7eb" }}>

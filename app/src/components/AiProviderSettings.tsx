@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AiProviderInput, AiProviderView } from "../types";
-import { ConfirmDialog, Button, EmptyState, StatusLine } from "../ui/primitives";
+import { ConfirmDialog, Button, EmptyState, StatusLine, Surface } from "../ui/primitives";
 
 const btn: React.CSSProperties = {
   padding: "5px 10px",
@@ -160,7 +160,7 @@ export default function AiProviderSettings() {
       )}
 
       {providers.map((p) => (
-        <div key={p.id} style={{ border: "1px solid #e5e7eb", borderRadius: 6, padding: 8, marginBottom: 8 }}>
+        <Surface key={p.id} level="none" radius="panel" style={{ padding: 8, marginBottom: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <span style={{ fontWeight: 600 }}>{p.name}</span>
             {p.isDefault && <span style={{ color: "#0d9488", fontWeight: 600 }}>● 默认</span>}
@@ -218,7 +218,7 @@ export default function AiProviderSettings() {
               </Button>
             </div>
           )}
-        </div>
+        </Surface>
       ))}
 
       {showAdd && (

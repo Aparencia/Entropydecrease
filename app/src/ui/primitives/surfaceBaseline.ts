@@ -70,6 +70,11 @@
  *   圆角键 `NoteMarkdown.tsx` **2 → 删** / 新键 `noteMarkdownComponents.tsx` **2**。
  *   ⇒ **总量（223 / 260 / 24）与条目数（107 / 108 / 24）逐字不变**，故三条 `FROZEN_*_TOTAL`
  *   与两条锚**一字未改**（这是**搬家**不是放宽：源键减少、新键增加、两侧之和守恒）。
+ * ★ **批 7 T14 的键随代码走**（§C9.19 第 2 条；`components/ChatMessageMarkdown.tsx` 整件并入
+ *   `components/NoteMarkdown.tsx` 后删除，聊天渲染件的 `borderRadius: 6` 随之搬入）：
+ *   圆角键 `ChatMessageMarkdown.tsx` **1 → 删** / 新键 `NoteMarkdown.tsx` **1**。
+ *   ⇒ **总量（223 / 260 / 24）与条目数（107 / 108 / 24）逐字不变**，三条 `FROZEN_*_TOTAL` 与两条锚
+ *   一字未改（同样是**搬家**：一删一增、两侧之和守恒）。边框 / 阴影两族本件零命中、零键变动。
  *
  * ★ 副作用：无（纯数据）。边界：`BORDER_RESIDUAL` / `RADIUS_RESIDUAL` **只登记"本单元逐处裁定过、决定不迁"
  *   的落点**（键 = `文件|类别`，`count` = 该文件该类别的处数），**不是**"所有剩余命中"的清单：剩余的大头
@@ -78,97 +83,99 @@
  */
 
 /** 棘轮一 · 卡片边框 `1px solid #e5e7eb`（含复合写法）的冻结总数（只许降；T17-B 收紧：240 → 226） */
-export const FROZEN_BORDER_TOTAL = 223;
+export const FROZEN_BORDER_TOTAL = 201;
 
 /** 相对 `app/src` 的路径 → 该文件允许的边框字面量**处数上限**（只许降；未登记文件命中即红） */
 export const FROZEN_BORDER_BY_FILE: Readonly<Record<string, number>> = {
-  "components/AiConversationDock.tsx": 3, "components/AiProviderSettings.tsx": 1,
-  "components/AiServicePanel.tsx": 1, "components/AiTaskPanel.tsx": 1, "components/AppErrorBoundary.tsx": 1,
+  "components/AiConversationDock.tsx": 3, "components/AppErrorBoundary.tsx": 1,
   "components/AsrConfusionPanel.tsx": 1, "components/AudioStoragePanel.tsx": 1,
   "components/BoxSelectOverlay.tsx": 3, "components/BrowserChrome.tsx": 1,
   "components/CanvasNodeConcept.tsx": 1, "components/CanvasNodeModel.tsx": 2,
   "components/CaptureFloatPanel.tsx": 4, "components/ChatComposer.tsx": 1,
-  "components/ChatSaveNoteDialog.tsx": 2, "components/ChatSidebar.tsx": 1, "components/CitationChips.tsx": 1,
-  "components/ClassroomCapturePanel.tsx": 2, "components/ClassroomRightPane.tsx": 3,
-  "components/ClassroomSourceColumn.tsx": 2, "components/ColumnBar.tsx": 1,
-  "components/ColumnResizer.tsx": 1, "components/FeedFragmentList.tsx": 5, "components/GoalAiSection.tsx": 1,
-  "components/GoalCard.tsx": 1, "components/GoalDetail.tsx": 1, "components/GoalPlanApprovalDialog.tsx": 2,
-  "components/GroupRowContextMenu.tsx": 1, "components/GroupSidebar.tsx": 4,
-  "components/GroupSidebarRow.tsx": 1, "components/ImageGallery.tsx": 1,
-  "components/ImagePreviewOverlay.tsx": 1, "components/InterviewDialog.tsx": 1,
-  "components/InterviewSteps.tsx": 5, "components/KnowledgeCanvasView.tsx": 1,
-  "components/KnowledgeConceptDialog.tsx": 1, "components/KnowledgeDecisionForm.tsx": 4,
-  "components/KnowledgeDetailPanel.tsx": 6, "components/KnowledgeGraphView.tsx": 2,
-  "components/KnowledgeLinkSection.tsx": 4, "components/KnowledgeModelDialog.tsx": 1,
-  "components/KnowledgeSystemWizard.tsx": 5, "components/KnowledgeTreeView.tsx": 6,
-  "components/LearningLibraryPanel.tsx": 1, "components/LiveActivityPanel.tsx": 2,
-  "components/LiveImageStrip.tsx": 2, "components/LiveProfileStrip.tsx": 2,
-  "components/MaterialInputPanel.tsx": 2, "components/ModelCardCreateDialog.tsx": 1,
-  "components/ModelCardFromNoteDialog.tsx": 2, "components/ModelDiskPanel.tsx": 1,
-  "components/NoteAiDialog.tsx": 1, "components/NoteEditView.tsx": 4, "components/NoteHeaderActions.tsx": 1,
-  "components/NoteImage.tsx": 1, "components/NoteLinkToSystem.tsx": 2, "components/NoteListBatchMenu.tsx": 2,
-  "components/NoteListToolbar.tsx": 3, "components/NoteListView.tsx": 1,
-  "components/NoteMoveToGroupMenu.tsx": 1, "components/NotePreviewView.tsx": 4,
-  "components/NoteReadingView.tsx": 2, "components/NoteRowContextMenu.tsx": 1,
-  "components/OcrDeviceSetting.tsx": 2, "components/PhotoCapturePanel.tsx": 4,
-  "components/PracticeQuestionsOverlays.tsx": 6, "components/ProfileDetector.tsx": 1,
+  "components/ChatSaveNoteDialog.tsx": 2, "components/ChatSidebar.tsx": 1,
+  "components/CitationChips.tsx": 1, "components/ClassroomCapturePanel.tsx": 1,
+  "components/ClassroomRightPane.tsx": 2, "components/ClassroomSourceColumn.tsx": 2,
+  "components/ColumnBar.tsx": 1, "components/ColumnResizer.tsx": 1,
+  "components/FeedFragmentList.tsx": 5, "components/GoalAiSection.tsx": 1,
+  "components/GoalCard.tsx": 1, "components/GoalDetail.tsx": 1,
+  "components/GoalPlanApprovalDialog.tsx": 2, "components/GroupRowContextMenu.tsx": 1,
+  "components/GroupSidebar.tsx": 4, "components/GroupSidebarRow.tsx": 1,
+  "components/ImageGallery.tsx": 1, "components/ImagePreviewOverlay.tsx": 1,
+  "components/InterviewDialog.tsx": 1, "components/InterviewSteps.tsx": 5,
+  "components/KnowledgeCanvasView.tsx": 1, "components/KnowledgeConceptDialog.tsx": 1,
+  "components/KnowledgeDecisionForm.tsx": 4, "components/KnowledgeDetailPanel.tsx": 6,
+  "components/KnowledgeGraphView.tsx": 2, "components/KnowledgeLinkSection.tsx": 4,
+  "components/KnowledgeModelDialog.tsx": 1, "components/KnowledgeSystemWizard.tsx": 5,
+  "components/KnowledgeTreeView.tsx": 6, "components/LearningLibraryPanel.tsx": 1,
+  "components/LiveActivityPanel.tsx": 2, "components/LiveImageStrip.tsx": 2,
+  "components/LiveProfileStrip.tsx": 2, "components/MaterialInputPanel.tsx": 1,
+  "components/ModelCardCreateDialog.tsx": 1, "components/ModelCardFromNoteDialog.tsx": 2,
+  "components/ModelDiskPanel.tsx": 1, "components/NoteAiDialog.tsx": 1,
+  "components/NoteEditView.tsx": 4, "components/NoteHeaderActions.tsx": 1,
+  "components/NoteImage.tsx": 1, "components/NoteLinkToSystem.tsx": 2,
+  "components/NoteListBatchMenu.tsx": 2, "components/NoteListToolbar.tsx": 3,
+  "components/NoteListView.tsx": 1, "components/NoteMarkdown.tsx": 1, "components/NoteMoveToGroupMenu.tsx": 1,
+  "components/NotePreviewView.tsx": 3, "components/NoteReadingView.tsx": 2,
+  "components/NoteRowContextMenu.tsx": 1, "components/OcrDeviceSetting.tsx": 2,
+  "components/PhotoCapturePanel.tsx": 3, "components/PracticeQuestionsOverlays.tsx": 4,
   "components/PromoteCardButton.tsx": 1, "components/ProofreadPanel.tsx": 2,
-  "components/ProofreadToggle.tsx": 1, "components/ReadyCheckCard.tsx": 1,
-  "components/RefineLaunchDialog.tsx": 2, "components/RefineStrategyPicker.tsx": 2,
-  "components/RefineWorkbench.tsx": 6, "components/RichEditorView.tsx": 4,
-  "components/RouteInfoPopover.tsx": 5, "components/ScreenSelectOverlay.tsx": 3,
-  "components/SecondPassPanel.tsx": 2,
+  "components/ProofreadToggle.tsx": 1, "components/RefineLaunchDialog.tsx": 1,
+  "components/RefineStrategyPicker.tsx": 1, "components/RefineWorkbench.tsx": 5,
+  "components/RichEditorView.tsx": 4, "components/RouteInfoPopover.tsx": 5,
+  "components/ScreenSelectOverlay.tsx": 3, "components/SecondPassPanel.tsx": 2,
   "components/SessionListBody.tsx": 1, "components/SessionListPanel.tsx": 4,
-  "components/SessionRowContextMenu.tsx": 1, "components/SessionSearchBar.tsx": 1,
-  "components/SessionSelectionToolbar.tsx": 1, "components/SopRunOverlay.tsx": 4,
-  "components/StructureImageSection.tsx": 1, "components/StructureModelSetting.tsx": 1,
-  "components/SystemStatusBadge.tsx": 1, "components/TaskConversationView.tsx": 1,
-  "components/TaskLaunchDialog.tsx": 1, "components/TaskThreadCard.tsx": 1, "components/VersionPanel.tsx": 1,
-  "components/VideoImportPanel.tsx": 1, "components/VocabManager.tsx": 4, "components/WebImportPanel.tsx": 2,
+  "components/SessionRowContextMenu.tsx": 1, "components/SessionSelectionToolbar.tsx": 1,
+  "components/SopRunOverlay.tsx": 4, "components/StructureImageSection.tsx": 1,
+  "components/StructureModelSetting.tsx": 1, "components/SystemStatusBadge.tsx": 1,
+  "components/TaskConversationView.tsx": 1, "components/TaskLaunchDialog.tsx": 1,
+  "components/TaskThreadCard.tsx": 1, "components/VersionPanel.tsx": 1,
+  "components/VocabManager.tsx": 4, "components/WebImportPanel.tsx": 2,
   "components/WebInboxPanel.tsx": 1, "components/WeekContractCard.tsx": 2,
-  "components/WindowSelectCard.tsx": 1, "components/action-center/ActionCenterPanel.tsx": 11,
+  "components/WindowSelectCard.tsx": 1, "components/action-center/ActionCenterPanel.tsx": 8,
   "components/chat/ChatLaunchMenu.tsx": 1, "components/note-selection/SelectionActionMenu.tsx": 1,
-  "components/noteMarkdownComponents.tsx": 1,
-  "components/review/ReviewSessionPanel.tsx": 1, "components/session-detail/SessionScreenCards.tsx": 2,
-  "pages/ChatPage.tsx": 1, "pages/GoalsPage.tsx": 3, "pages/KnowledgePage.tsx": 4, "pages/ReviewPage.tsx": 1,
-  "pages/SettingsPage.tsx": 1,
+  "components/noteMarkdownComponents.tsx": 1, "components/review/ReviewSessionPanel.tsx": 1,
+  "components/session-detail/SessionScreenCards.tsx": 1, "pages/ChatPage.tsx": 1,
+  "pages/GoalsPage.tsx": 3, "pages/KnowledgePage.tsx": 4,
+  "pages/ReviewPage.tsx": 1,
 };
 
 /** 棘轮二 · 越界圆角 `6|12|14|999|2` 的冻结总数（`3/4/5/8/10` 与 `0` 按映射表处理，不入棘轮；T17-B 收紧：270 → 261） */
-export const FROZEN_RADIUS_OUTLIER_TOTAL = 260;
+export const FROZEN_RADIUS_OUTLIER_TOTAL = 254;
 
 /** 相对 `app/src` 的路径 → 越界圆角的**处数上限**（只许降；迁移时换成 `radius="…"` 档位） */
 export const FROZEN_RADIUS_OUTLIER_BY_FILE: Readonly<Record<string, number>> = {
-  "App.tsx": 1, "components/AiConversationDock.tsx": 1, "components/AiProviderSettings.tsx": 4,
-  "components/AiRefineCard.tsx": 3, "components/AiServicePanel.tsx": 3, "components/AiTaskPanel.tsx": 2,
+  "App.tsx": 1, "components/AiConversationDock.tsx": 1,
+  "components/AiProviderSettings.tsx": 3, "components/AiRefineCard.tsx": 3,
+  "components/AiServicePanel.tsx": 2, "components/AiTaskPanel.tsx": 1,
   "components/AppErrorBoundary.tsx": 2, "components/AsrConfusionPanel.tsx": 2,
   "components/AudioLevelMeter.tsx": 1, "components/AudioStoragePanel.tsx": 2,
-  "components/BackupPanel.tsx": 2, "components/BoxSelectOverlay.tsx": 3, "components/BrowserChrome.tsx": 1,
-  "components/CaptureFloatPanel.tsx": 1, "components/CaptureOverlayPanel.tsx": 2,
-  "components/ChatMessageList.tsx": 1, "components/ChatMessageMarkdown.tsx": 1,
-  "components/ChatSaveNoteDialog.tsx": 3, "components/ChatSidebar.tsx": 1,
-  "components/ClassroomCapturePanel.tsx": 7, "components/ClassroomRightPane.tsx": 2,
-  "components/ConceptCardRow.tsx": 1, "components/DiscoverySuggestSection.tsx": 2,
-  "components/EnrichPanel.tsx": 2, "components/GoalDetail.tsx": 3,
-  "components/GoalPlanApprovalDialog.tsx": 2, "components/GraduateDialog.tsx": 1,
-  "components/GroupCreateDialog.tsx": 2, "components/GroupDeleteConfirm.tsx": 2,
-  "components/GroupRowContextMenu.tsx": 1, "components/GroupSidebar.tsx": 4,
-  "components/GroupSidebarRow.tsx": 1, "components/ImageGallery.tsx": 1,
-  "components/ImagePreviewOverlay.tsx": 2, "components/InterviewDialog.tsx": 2,
-  "components/InterviewSteps.tsx": 6, "components/KnowledgeCanvasView.tsx": 4,
-  "components/KnowledgeConceptDialog.tsx": 3, "components/KnowledgeDecisionForm.tsx": 5,
-  "components/KnowledgeDecisionLog.tsx": 1, "components/KnowledgeDetailPanel.tsx": 4,
-  "components/KnowledgeGraphView.tsx": 1, "components/KnowledgeLinkSection.tsx": 2,
-  "components/KnowledgeModelDialog.tsx": 3, "components/KnowledgeSampleView.tsx": 3,
-  "components/KnowledgeSystemWizard.tsx": 9, "components/KnowledgeTreeView.tsx": 2,
-  "components/LearningLibraryEngineSection.tsx": 2, "components/LearningLibraryPanel.tsx": 2,
-  "components/LinkEntityPicker.tsx": 2, "components/LiveActivityPanel.tsx": 1,
-  "components/LiveImageStrip.tsx": 2, "components/LiveProfileStrip.tsx": 1,
-  "components/ModelCardCreateDialog.tsx": 2, "components/ModelDiskPanel.tsx": 1,
-  "components/NoteAiDialog.tsx": 4, "components/NoteEditView.tsx": 1, "components/NoteHeaderActions.tsx": 2,
-  "components/NoteImage.tsx": 2, "components/NoteLinkToSystem.tsx": 2, "components/NoteListToolbar.tsx": 2,
-  "components/NoteMoveToGroupMenu.tsx": 1,
-  "components/NotePreviewView.tsx": 5, "components/NoteRowContextMenu.tsx": 1,
+  "components/BackupPanel.tsx": 2, "components/BoxSelectOverlay.tsx": 3,
+  "components/BrowserChrome.tsx": 1, "components/CaptureFloatPanel.tsx": 1,
+  "components/CaptureOverlayPanel.tsx": 2, "components/ChatMessageList.tsx": 1,
+  "components/ChatSaveNoteDialog.tsx": 3,
+  "components/ChatSidebar.tsx": 1, "components/ClassroomCapturePanel.tsx": 7,
+  "components/ClassroomRightPane.tsx": 2, "components/ConceptCardRow.tsx": 1,
+  "components/DiscoverySuggestSection.tsx": 2, "components/EnrichPanel.tsx": 2,
+  "components/GoalDetail.tsx": 3, "components/GoalPlanApprovalDialog.tsx": 2,
+  "components/GraduateDialog.tsx": 1, "components/GroupCreateDialog.tsx": 2,
+  "components/GroupDeleteConfirm.tsx": 2, "components/GroupRowContextMenu.tsx": 1,
+  "components/GroupSidebar.tsx": 4, "components/GroupSidebarRow.tsx": 1,
+  "components/ImageGallery.tsx": 1, "components/ImagePreviewOverlay.tsx": 2,
+  "components/InterviewDialog.tsx": 2, "components/InterviewSteps.tsx": 6,
+  "components/KnowledgeCanvasView.tsx": 4, "components/KnowledgeConceptDialog.tsx": 3,
+  "components/KnowledgeDecisionForm.tsx": 5, "components/KnowledgeDecisionLog.tsx": 1,
+  "components/KnowledgeDetailPanel.tsx": 4, "components/KnowledgeGraphView.tsx": 1,
+  "components/KnowledgeLinkSection.tsx": 2, "components/KnowledgeModelDialog.tsx": 3,
+  "components/KnowledgeSampleView.tsx": 3, "components/KnowledgeSystemWizard.tsx": 9,
+  "components/KnowledgeTreeView.tsx": 2, "components/LearningLibraryEngineSection.tsx": 2,
+  "components/LearningLibraryPanel.tsx": 2, "components/LinkEntityPicker.tsx": 2,
+  "components/LiveActivityPanel.tsx": 1, "components/LiveImageStrip.tsx": 2,
+  "components/LiveProfileStrip.tsx": 1, "components/ModelCardCreateDialog.tsx": 2,
+  "components/ModelDiskPanel.tsx": 1, "components/NoteAiDialog.tsx": 4,
+  "components/NoteEditView.tsx": 1, "components/NoteHeaderActions.tsx": 2,
+  "components/NoteImage.tsx": 2, "components/NoteLinkToSystem.tsx": 2,
+  "components/NoteListToolbar.tsx": 2, "components/NoteMoveToGroupMenu.tsx": 1,
+  "components/NotePreviewView.tsx": 4, "components/NoteRowContextMenu.tsx": 1,
   "components/OcrDeviceSetting.tsx": 3, "components/PhotoCapturePanel.tsx": 7,
   "components/PracticeQuestionsOverlays.tsx": 1, "components/PromoteCardButton.tsx": 3,
   "components/ProofreadPanel.tsx": 2, "components/ProofreadToggle.tsx": 1,
@@ -176,21 +183,21 @@ export const FROZEN_RADIUS_OUTLIER_BY_FILE: Readonly<Record<string, number>> = {
   "components/RefineStrategyPicker.tsx": 3, "components/RefineWorkbench.tsx": 4,
   "components/RichEditorView.tsx": 1, "components/RouteInfoPopover.tsx": 3,
   "components/ScreenSelectOverlay.tsx": 5, "components/SecondPassPanel.tsx": 2,
-  "components/SessionListPanel.tsx": 3,
-  "components/SessionRowContextMenu.tsx": 1, "components/SessionSearchBar.tsx": 1,
+  "components/SessionListPanel.tsx": 3, "components/SessionRowContextMenu.tsx": 1,
   "components/SessionSearchHits.tsx": 1, "components/SessionSelectionToolbar.tsx": 2,
   "components/SopRunOverlay.tsx": 3, "components/SpeakerSwitchCard.tsx": 1,
   "components/StructureImageSection.tsx": 1, "components/StructureModelSetting.tsx": 1,
   "components/TaskConversationView.tsx": 9, "components/TaskLaunchDialog.tsx": 2,
-  "components/TaskThreadCard.tsx": 3, "components/VersionPanel.tsx": 4, "components/VideoImportPanel.tsx": 1,
-  "components/VocabManager.tsx": 4, "components/WebArticleView.tsx": 4, "components/WebImportPanel.tsx": 1,
-  "components/WebInboxPanel.tsx": 1, "components/action-center/ActionCenterPanel.tsx": 7,
+  "components/TaskThreadCard.tsx": 3, "components/VersionPanel.tsx": 4,
+  "components/VideoImportPanel.tsx": 1, "components/VocabManager.tsx": 4,
+  "components/WebArticleView.tsx": 4, "components/WebImportPanel.tsx": 1,
+  "components/WebInboxPanel.tsx": 1, "components/action-center/ActionCenterPanel.tsx": 6,
   "components/chat/ChatLaunchMenu.tsx": 4, "components/note-selection/SelectionActionMenu.tsx": 1,
-  "components/noteMarkdownComponents.tsx": 2,
-  "components/review/ReviewSessionPanel.tsx": 1, "components/session-detail/SessionDetailHeader.tsx": 2,
-  "components/session-detail/SessionRefineSection.tsx": 3,
-  "components/session-detail/SessionScreenCards.tsx": 3, "pages/ChatPage.tsx": 2, "pages/GoalsPage.tsx": 3,
-  "pages/KnowledgePage.tsx": 3, "pages/ReviewPage.tsx": 2,
+  "components/noteMarkdownComponents.tsx": 2, "components/review/ReviewSessionPanel.tsx": 1,
+  "components/session-detail/SessionDetailHeader.tsx": 2, "components/session-detail/SessionRefineSection.tsx": 3,
+  "components/session-detail/SessionScreenCards.tsx": 3, "pages/ChatPage.tsx": 2,
+  "pages/GoalsPage.tsx": 3, "pages/KnowledgePage.tsx": 3,
+  "pages/ReviewPage.tsx": 2,
 };
 
 /** 棘轮三 · 阴影 `boxShadow:` 的冻结总数（规格 §4.1 红线；T17-B 后**处数不变**，变的是值收敛 11 → 6 个） */
@@ -231,21 +238,26 @@ export const FROZEN_SHADOW_BY_FILE: Readonly<Record<string, number>> = {
  *     · 未登记文件的命中仍然 = 0；登记的文件必须**真实存在 ∧ 此刻仍命中**（防僵尸登记）。
  *   登记表 = `surfaceResidual.ts` 的 `SURFACE_TAG_REGISTRY`（理由逐条在表里；放彼处是因为本件
  *   已贴近 300 行硬限，且该件正是「登记为什么」的归处）。
+ * ★ 批 7 T7 同步（**登记制的第一次真实使用**）：`14 → 46`（Σ 登记值 14 → 46，条目 9 → 28；
+ *   legacy 9 行原样不动、其和 14 未变）。来源逐项：① 受控槽 `html`/`domId` 解锁 4 处
+ *   （2 处 `dangerouslySetInnerHTML` 阅读面 + 1 处 diff 阅读面 + 1 处带锚点 `id` 的屏卡）；
+ *   ② 新档 `level="none"`（只出边框不出底）解锁 19 处透明边框容器 —— 🔴 **按实测量登记，不是预测值**。
  */
-export const FROZEN_SURFACE_TAG_TOTAL = 14;
+export const FROZEN_SURFACE_TAG_TOTAL = 46;
 
 /**
  * 锚（三份；判据 ④ 逐条比对）—— `entries` = 基线条目数（防"表被悄悄删条目"）、
  * `file/value` = 一个**具名文件**的冻结值（防"仪器静默失效后所有计数都变 0 而总数判据仍绿"）。
  * T17-B 同步：边框条目 111 → 108 · 圆角条目 112 → 109 · 阴影条目 24（不变）。
  */
-export const BORDER_ANCHOR = { entries: 107, file: "components/action-center/ActionCenterPanel.tsx", value: 11 } as const;
-export const RADIUS_OUTLIER_ANCHOR = { entries: 108, file: "components/KnowledgeSystemWizard.tsx", value: 9 } as const;
+export const BORDER_ANCHOR = { entries: 99, file: "components/action-center/ActionCenterPanel.tsx", value: 8 } as const;
+export const RADIUS_OUTLIER_ANCHOR = { entries: 107, file: "components/KnowledgeSystemWizard.tsx", value: 9 } as const;
 export const SHADOW_ANCHOR = { entries: 24, file: "components/NoteRowContextMenu.tsx", value: 1 } as const;
 
 /**
  * ★ T17-B 迁移面的**冻结上界**（T15a 修正的牙齿）：`SURFACE_TAG_REGISTRY` 里这些文件的登记值之和
- * **必须恒等于** `FROZEN_SURFACE_TAG_TOTAL`（今日 14）。
+ * **必须恒等于** `SURFACE_TAG_FROZEN_LEGACY_COUNT`（今日 **14**；批 7 T7 加 19 条新登记行后**未动** ——
+ * 新增条目只抬 `FROZEN_SURFACE_TAG_TOTAL`，**不许**从这个面里腾地方）。
  *
  * Why 需要它（否则修正会漏出一条自助抬高的通道）：`FROZEN_SURFACE_TAG_TOTAL == Σ 登记值` 这条只会
  *   在**手改总数时不改表**的情况下红。若拿掉本常数，一个够耐心的人可以「把某个既有文件的登记值降 1
@@ -260,7 +272,7 @@ export const SURFACE_TAG_FROZEN_LEGACY_COUNT = 14;
  * 登记制的锚（与三条棘轮的锚同形、独立；`entries` = 登记表条数 · `file/value` = 一个具名登记的
  * 冻结值）——防「登记表被静默清空 / 仪器把它读成 0 而总数判据仍绿」。**新登记 = 手工同步本锚。**
  */
-export const SURFACE_TAG_ANCHOR = { entries: 9, file: "components/TaskConversationView.tsx", value: 3 } as const;
+export const SURFACE_TAG_ANCHOR = { entries: 28, file: "components/TaskConversationView.tsx", value: 3 } as const;
 
 /**
  * ★ 阴影残留的分类与逐文件理由（`ShadowResidualKind` / `SHADOW_RESIDUAL`）**已移到

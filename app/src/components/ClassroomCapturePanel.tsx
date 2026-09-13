@@ -21,10 +21,10 @@ import { AUTO_RESUME_HINTS } from "../hooks/liveCaptureState";
 import type { CaptureActionKind } from "../hooks/useLiveCaptureControl";
 import type { PrepareState } from "../hooks/useClassroomHints";
 import type { FloatSnapshot } from "../hooks/useFloatWindow";
+import { Surface } from "../ui/primitives";
 import type { DownloadProgress, PauseSource, StreamingModelStatus } from "../types";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
-const panel: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
 
 /** 采集卡暂停状态行文案（按 reason 三态；沿用原横幅语义——媒体暂停含"自动继续"
  *  说明，前台切走含"回窗即继续"说明；徽标/右栏/浮窗用短文案 pauseReasonLabel） */
@@ -106,7 +106,7 @@ export default function ClassroomCapturePanel({
     pausedReason === "media" || pausedReason === "foreground" ? AUTO_RESUME_HINTS[pausedReason] : undefined;
 
   return (
-    <div style={panel}>
+    <Surface level="none" radius="panel" padded>
       <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
         实时捕获{active && <span style={{ color: "#dc2626" }}> ● 录制中</span>}
       </div>
@@ -292,6 +292,6 @@ export default function ClassroomCapturePanel({
       {sessionId && !starting && (
         <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0 0" }}>实时捕获中（可到「会话」页查看）</p>
       )}
-    </div>
+    </Surface>
   );
 }

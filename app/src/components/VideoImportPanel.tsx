@@ -10,7 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { ImportProgress } from "../types";
-import { Button, StatusLine } from "../ui/primitives";
+import { Button, StatusLine, Surface } from "../ui/primitives";
 
 const btn: React.CSSProperties = { padding: "6px 12px", cursor: "pointer", fontSize: 13 };
 
@@ -61,7 +61,7 @@ export default function VideoImportPanel({ onOpenSessions }: { onOpenSessions?: 
   };
 
   return (
-    <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
+    <Surface level="none" radius="panel" padded>
       <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
         视频文件导入{importing && <span style={{ color: "#dc2626" }}> ● 处理中</span>}
       </div>
@@ -126,6 +126,6 @@ export default function VideoImportPanel({ onOpenSessions }: { onOpenSessions?: 
           )}
         </p>
       )}
-    </div>
+    </Surface>
   );
 }
