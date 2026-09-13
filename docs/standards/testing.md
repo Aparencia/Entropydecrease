@@ -193,6 +193,42 @@ before-release:
 **WARM-CACHE**：全量 `vitest` **冷 / 热两次**都要跑、两次读数**都**登记；**不得**只贴一次「0 failed」就当全量无红。
 **P9（并行假红）**：**门禁与变异体实验一律串行**；任何并行跑出来的红**不得**当缺陷登记，其签名必须带**测试名 + 超时阈值 + 错误串形态**并注明「串行复跑通过」；Rust 侧与 JS 侧**分开列**。
 
+### 第十部分：观感 / 像素面仪器（批 8 收编）
+
+**仪器**：`scripts/viewport-probe.mjs`。批 8 T12 把批 3 造在 gitignored `tmp/` 里的视口探针**收编入库**（`ADR-034:109` 逐字承认过「这条判据的仪器不入库」—— 本部分补的就是那个洞）。它加载**真实构建产物 `app/dist`**（本地只读静态服务器 + 真 CDP 精密视口），跑「顶栏自然宽 / Tab 越界 / 纵向溢出」三类判据，并按需读**任意选择器的解算样式与几何**（`--probe`，判据参数化）。
+
+**调用形态（CLI 逐字）**：
+
+```text
+node scripts/viewport-probe.mjs --width 1024 --height 640 --dist app/dist [--port 9490] \
+     [--json <out.json>] [--probe '<selector>:<cssProp>'] [--screenshot <out.png>]
+退出码：0 = ②③ 判据与自检全过；1 = 有溢出或自检失败；2 = 产物缺失 / 端口失败 / profile 失败
+```
+
+- 扩展（可选）：`--dpr 1` · `--reduced-motion no-preference|reduce` · `--mode http|file`。`--probe` 可重复；`<cssProp>` 收解算样式属性（含 `--custom-prop`，camelCase 一并收）与几何名 `rect|x|y|w|h`；输出路径按**仓库根**解析（给绝对路径最稳）。
+- 🔴 **正式入口与触发条件（何时必须跑）由 T24 追加** —— 本部分只登记仪器形态与盲区（U4 裁为 d：入库 + 按需入口 + 写死触发条件；**不接 husky、不进 CI**）。
+- 🔴 **解算值必须来自 `getComputedStyle`**：每条 `--probe` 读数自带 `viewport` / `dpr` / `emulatedMedia` 三项元数据（缺 ⇒ **不得当判据**），并附一条**同代码路径的 canary**（`html` 的 `font-size`，恒为 px）；canary 取不到 px ⇒ 仪器报红（防「把解算值换成读内联 `element.style`」这类假读数）。
+
+**前置（三条硬要求）**：
+
+1. 🔴 **必须是真实构建产物**：先 `cd app; npm run build`（`--no-build` 语义**不适用**于本仪器），并在报告里登记 `app/dist/index.html` 的 **mtime**。
+2. 🔴 **独占窗口 + 串行**：与全量测试 / 变异体实验**不得并发**（承 P9）；仪器会起本地 HTTP 服务与 headless Edge，并发会让两侧读数互为假红。
+3. 🔴 **§17 受控对比纪律**：读数**绑定 dist 的时点与树**（stdout 与 `--json` 都带 `dist.entry_mtime` + `tree_head`）⇒ 拿两次读数做差前**必须先证明两侧 dist mtime 与 HEAD 相同**；否则该差**只能作「上界 / 存在性」证据**，并显式声明它是**非受控对比**。
+
+**盲区（五条；引用读数时必须逐条复述）**：
+
+1. 🔴 它验的是 **WebView2 / Chromium 的渲染引擎**，**不是 IPC / 窗口层** ⇒ **不可替代真机冒烟**：无头引擎**不覆盖** Tauri IPC 真链路、窗口装饰、真实字体回退与真机 DPI ⇒ **凡 headless / jsdom 读数一律不得写成「真机验证通过」**（U5 沿用「跳过真机」，7 条真机项继续登记、不假装完成）。
+2. 🔴 headless 默认 `prefers-reduced-motion: reduce` ⇒ 仪器**必须显式**调 `Emulation.setEmulatedMedia`（默认 `no-preference`；`--reduced-motion reduce` 反测降级路径）；不显式设置 ⇒ **动效类读数全部失真**（自检里验「实测值 == 参数」）。
+3. 🔴 headless **滚动条占位 = 0**（与真机不同）⇒ 依赖滚动条宽度的读数**不可用**（姊妹件 `review-t1-t6/scrollbar-cdp.mjs` 4,688 B / 105 行专测此面，**批 8 未收编**，登记为将来收编对象）。
+4. 🔴 必须用 `Emulation.setDeviceMetricsOverride` 定视口：`--window-size=800` 实测 `innerWidth=776`；批 8 T12 的 M2 变异体实测 `--window-size=1024,640` ⇒ `innerWidth=1000` ⇒ 视口自检**红**（这条自检**不是装饰**）。
+5. 🔴 `--dump-dom` 的 stdout **抓不到**（实测 0 字节）⇒ 读数只走 CDP `Runtime.evaluate` 或 `Page.captureScreenshot`；且因无 `window.__TAURI__`，各页 IPC 全失败 ⇒ 「整页无横向滚动」只能是**参考项**。
+
+**profile 卫生（硬要求，非选项）**：browser profile **必须**落 `$env:TEMP`（`mkdtempSync` 造唯一目录）且**跑完删除**（`finally` 里删，异常路径同删）。🔴 落仓内会**一次喷进 1,241 文件 / 32.4 MB**（批 3 陷阱 #19；批 8 侦察阶段又复现过一次 —— 仪器自己警告过的坑）。⚠️ 判据口径：profile 落**未 gitignore** 的仓内路径（如仓根 `tmp/`）时 `git status` 看得见；落在**已 gitignore** 的目录（如 `.superpowers/**`）时 `git status` **看不见** ⇒ 卫生判据**必须**同时给「仓内文件数前后相同 + 全树 profile 名搜索为 0」（T12 的 V1 判据即为此）。
+
+**零安装**：本机 Edge **152.0.4191.66** + WebView2 **152.0.4191.66** + Node 24 内建 `WebSocket` 已够用 ⇒ **不得引入任何新依赖、不得 `npm install`**。为什么不用 tauri-driver / Playwright / vitest browser：**都要装**，且本机**有 TLS 拦截史**（`Cargo.toml:146-148`）⇒ `cargo install` 很可能失败；它们多给的只是 **IPC 真链路 = 真机范畴**（用户已裁跳过真机）。
+
+**判据分层（强度不同，引用时必须带层）**：① `documentElement.scrollWidth <= clientWidth`（整页无横向滚动）—— **仅供参考**；② 顶栏自然宽 `natural_w <= clientWidth` —— **判据**；③ 逐个 Tab `getBoundingClientRect().right <= innerWidth` —— **判据**；④ 仪器自检（视口 `innerWidth === --width` · `dpr === --dpr` · 500px 定块 · 文本哨兵 · **阳性对照**已知 id 必须命中 1 · **阴性对照**每次现造的随机串必须 0 命中 · `emulatedMedia` 实测值 == 参数）—— **判据**。
+
 ## 检查清单
 
 - [ ] 测试金字塔比例合理（单元 > 集成 > E2E）
