@@ -233,3 +233,58 @@ describe("SessionDetailPanel · 批 6 T25 容器接线（音频槽在生产路�
     ).toEqual(["2500"]);
   });
 });
+
+/**
+ * 批 7 T17 —— `[[ts:ms]]` 深链在**面板这一层**的闭合（C27.4 的 M3 · C10.3 的 R9.4 · §C11.2）。
+ *
+ * @ai_context 判据分两半：① **消费** = 播放头落到 ms ∧ 视图切到三轨（不切则「定位到 ms」不可感知）
+ *   ∧ 消费回调恰 1 次；② **不落痕** = `localStorage` 的视图记忆**未被写入 / 未被改变**
+ *   —— §C11.2 逐字要求的那条断言。它的变异体 = 把非持久路径改回 `setViewKey`（持久化）⇒ ② 必红。
+ * @ai_context ③ 是对照：**用户自己点切换器**必须照旧写盘 —— 证明 ② 的观测面看得见写入
+ *   （否则「storage 为空」可能是「仪器根本看不到写入」的空真）。
+ */
+describe("SessionDetailPanel · 批 7 T17 [[ts:ms]] 深链（R9.4 四件闭合 · §C11.2 禁持久化）", () => {
+  const MEMORY = "view:default:session";
+  /** `localStorage` 全量快照（键 + 值逐字）——「未被写入」与「未被改变」两半都判 */
+  const snapshot = (): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const k = localStorage.key(i);
+      if (k !== null) out[k] = localStorage.getItem(k) ?? "";
+    }
+    return out;
+  };
+  const playheads = (c: HTMLElement): (string | null)[] =>
+    [...c.querySelectorAll('[data-testid="session-timerail-playhead"]')].map((el) => el.getAttribute("data-ms"));
+
+  beforeEach(() => {
+    localStorage.clear();
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "session_audio_path"
+        ? Promise.resolve({ path: "C:/tmp/1042.wav", aligned: true, durationMs: 8000 })
+        : Promise.reject(new Error(`invoke not mocked: ${cmd}`)),
+    );
+  });
+
+  it("D1 深链到达：播放头 = ms ∧ 切到三轨 ∧ 消费回调恰 1 次 ∧ 视图记忆逐字未变", async () => {
+    localStorage.setItem(MEMORY, "proof"); // 用户既有记忆：深链**不许**改它
+    const before = snapshot();
+    const onFocusSeekConsumed = vi.fn();
+    const { container } = render(
+      <SessionDetailPanel {...propsOf(detailOf(), { focusSeekMs: { ms: 2500, key: 1 }, onFocusSeekConsumed })} />,
+    );
+    await screen.findByTestId("session-tritrack-view");
+    expect(playheads(container), "深链的 ms 没落到播放头上").toEqual(["2500"]);
+    expect(onFocusSeekConsumed, "消费回调必须恰一次（App 靠它复位焦点，防陈旧 ms 复触发）").toHaveBeenCalledTimes(1);
+    expect(snapshot(), "深链自动切视图改动了 localStorage（§C11.2 逐字禁止）").toEqual(before);
+    expect(localStorage.getItem(MEMORY), "一次深链把用户的默认视图改掉了").toBe("proof");
+  });
+
+  it("D2 对照：用户自己点「三轨对齐」**照旧**写视图记忆（证明 D1 的观测面看得见写入）", async () => {
+    localStorage.setItem(MEMORY, "proof");
+    render(<SessionDetailPanel {...propsOf(detailOf())} />);
+    fireEvent.click(findButton("三轨对齐"));
+    await screen.findByTestId("session-tritrack-view");
+    expect(localStorage.getItem(MEMORY), "切换器的持久化语义变了（既有调用点被破坏）").toBe("tritrack");
+  });
+});

@@ -52,7 +52,7 @@ interface Props {
   onFocusSeekConsumed?: () => void;
 }
 
-export default function SessionsPage({ focusSessionId, onFocusSessionConsumed, focusRefineTaskId, onFocusRefineTaskConsumed, onRefineTaskStarted, active, onOpenNote }: Props) {
+export default function SessionsPage({ focusSessionId, onFocusSessionConsumed, focusRefineTaskId, onFocusRefineTaskConsumed, onRefineTaskStarted, active, onOpenNote, focusSeekMs, onFocusSeekConsumed }: Props) {
   // v0.15：左栏列状态（可拖拽 + 记忆 + 窄窗折叠；规格 §6.2 两列页阈值 1100）
   // 批 3 T8：规格来自 `columnRegistry`，执行仍由 hook 完成
   const listCol = useColumnLayout("sessions-list", columnSpec("sessions-list"));
@@ -146,11 +146,24 @@ export default function SessionsPage({ focusSessionId, onFocusSessionConsumed, f
     [showToast],
   );
 
-  // 2026-08 A4 / 批 5 C6：跨页直达自动打开目标会话详情，消费后回调 App 复位 focusSessionId
-  // （复位才能让**同会话的再次跳转**重新触发：固定值不产生 prop 变化 ⇒ effect 不重跑）
+  // 2026-08 A4 / 批 5 C6 / 批 7 T17（C27.4 的 M3）：跨页直达自动打开目标会话详情，消费后回调 App 复位。
+  // 🔴 T17：ms 载体与**目标会话**在这一刻配对（两者由 `App.goSessions` 同一次状态更新写入）。
+  //   Why 必须配对：`detail` 是异步取回的，面板在它到达前仍显示**上一个**会话 —— 若把 `focusSeekMs`
+  //   无条件下传，ms 会被旧会话的面板消费掉（切到新会话时焦点已被清空）⇒ 深链静默失效。
+  //   `focusSeekMs` 进依赖但函数体先早退 ⇒ `focusSessionId` 被清空那一轮不会误清配对。
+  const [seekFor, setSeekFor] = useState<{ sessionId: number; seek: FocusSeek } | null>(null);
   useEffect(() => {
-    if (focusSessionId) { void openDetail(focusSessionId); onFocusSessionConsumed?.(); }
-  }, [focusSessionId, openDetail, onFocusSessionConsumed]);
+    if (!focusSessionId) return;
+    setSeekFor(focusSeekMs ? { sessionId: focusSessionId, seek: focusSeekMs } : null);
+    void openDetail(focusSessionId);
+    onFocusSessionConsumed?.();
+  }, [focusSessionId, focusSeekMs, openDetail, onFocusSessionConsumed]);
+
+  /** 深链 ms 消费完成（面板调）⇒ 清配对 + 回调 App 复位（复位后同一条时间码可再次触发） */
+  const consumeSeek = () => {
+    setSeekFor(null);
+    onFocusSeekConsumed?.();
+  };
 
   // 融合事件（REQ-031 异步化）+ v0.7.1 会话完成事件驱动列表刷新
   useEffect(() => {
@@ -328,6 +341,9 @@ export default function SessionsPage({ focusSessionId, onFocusSessionConsumed, f
             autoRefineTaskId={focusRefineTaskId}
             onAutoTaskConsumed={onFocusRefineTaskConsumed}
             onRefineTaskStarted={onRefineTaskStarted}
+            // 批 7 T17（C27.4 的 M3）：`[[ts:ms]]` 只交给**目标会话**的面板（配对见上方 effect）
+            focusSeekMs={detail.session.id === seekFor?.sessionId ? seekFor.seek : null}
+            onFocusSeekConsumed={consumeSeek}
           />
         )}
       </div>

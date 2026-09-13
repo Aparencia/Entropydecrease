@@ -50,7 +50,11 @@ import WebArticleView from "../components/WebArticleView";
 import SpeakerSwitchCard from "../components/SpeakerSwitchCard";
 import { useViewMemory } from "../views/useViewMemory";
 import type { SessionViewSlot, ViewSpec } from "../views/registry";
+import type { FocusSeek } from "../shell/focusRouting";
 import type { GlossaryTerm, SessionDetail } from "../types";
+
+/** 「三轨对齐」的视图键（= `views/registry.ts` 的 `SESSION_VIEWS[1]`）—— `[[ts:ms]]` 深链的落点视图。 */
+const TRITRACK_KEY = "tritrack";
 
 /** 术语表 summary 的三种文案（null=加载中 / 0 条 / N 条）——原文案逐字，条件整串注入视图 */
 const glossarySummaryOf = (glossary: GlossaryTerm[] | null): string =>
@@ -74,9 +78,15 @@ interface Props {
   autoRefineTaskId?: number | null;
   onAutoTaskConsumed?: () => void;
   onRefineTaskStarted?: (sessionId: number, taskId: number) => void;
+  /** 批 7 T17（C10.3 的 R9.4）：`[[ts:ms]]` 深链的 **ms 载体**（`null`/缺省 = 不 seek）。
+   *  @ai-context 为什么是 `FocusSeek`（`{ms,key}`）而不是裸 number：裸值 setState 同值不触发 ⇒
+   *  已打开该会话时再点同一条时间码不会重新定位（`key` 是单调判别键，见 `shell/focusRouting`）。 */
+  focusSeekMs?: FocusSeek | null;
+  /** 批 7 T17：`focusSeekMs` **消费完成**回调（`SessionsPage` → App 清空焦点，防陈旧 ms 跨导航复触发） */
+  onFocusSeekConsumed?: () => void;
 }
 
-export default function SessionDetailPanel({ detail, views, fusing, degradedBanner, onToNote, onRemove, onRefreshDetail, autoRefineTaskId, onAutoTaskConsumed, onRefineTaskStarted }: Props) {
+export default function SessionDetailPanel({ detail, views, fusing, degradedBanner, onToNote, onRemove, onRefreshDetail, autoRefineTaskId, onAutoTaskConsumed, onRefineTaskStarted, focusSeekMs, onFocusSeekConsumed }: Props) {
   const sessionId = detail.session.id;
   /** 默认视图键 = 注册表 `views[0].key`（A5①：`registry.ts` 的 `[0]` 就是「原文」） */
   const defaultKey = views.length > 0 ? views[0].key : "";
@@ -109,6 +119,18 @@ export default function SessionDetailPanel({ detail, views, fusing, degradedBann
       onAutoTaskConsumed?.();
     }
   }, [autoRefineTaskId, onAutoTaskConsumed, setDeepTaskId, setViewKey]);
+
+  // 批 7 T17（C10.3 的 R9.4 · §C11.2）：`[[ts:ms]]` 深链到达 ⇒ ① 播放头落到该毫秒 ② 视图切到三轨。
+  // Why 必须同时切视图：不切则「定位到 ms」**不可感知**（C10.3 逐字），等于没接完这条链。
+  // 🔴 视图切换走**非持久**路径（`persist: false`）：§C11.2 明令「必须临时切，禁止写记忆」——
+  //   「一次深链永久改变默认视图」是用户可感知的副作用式行为变更，且本批测不了（真机跳过）。
+  // 消费即回调 ⇒ App 清空焦点（复位后同一条时间码才能再次触发）；`views` 里没有三轨键时只 seek 不切。
+  useEffect(() => {
+    if (focusSeekMs == null) return;
+    setPlayheadMs(focusSeekMs.ms);
+    if (views.some((spec) => spec.key === TRITRACK_KEY)) setViewKey(TRITRACK_KEY, { persist: false });
+    onFocusSeekConsumed?.();
+  }, [focusSeekMs, views, setViewKey, onFocusSeekConsumed]);
 
   // v0.20.4（REQ-303）：web 会话专用详情（文章阅读 + 元数据回链 + 转笔记；
   // 无时间轴/屏卡/精修面——h2 标题即页标题，改名在会话列表进行）

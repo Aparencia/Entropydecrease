@@ -51,18 +51,29 @@ export function writeViewMemory(objectType: ObjectType, key: string, storage: St
   }
 }
 
-/** 视图记忆 hook：返回 `[当前视图键, 选择视图]`。初始值**惰性读取**（不必每次渲染读盘）。 */
+/** 视图记忆 hook：返回 `[当前视图键, 选择视图]`。初始值**惰性读取**（不必每次渲染读盘）。
+ *
+ * 批 7 T17（§C11.2）：选择器多了**可选第二参** `opts.persist` —— `false` ⇒ **只改内存态、不写盘**。
+ * @ai-context 为什么用「可选参数」而不是新增一个返回值 / 新 hook：`[[ts:ms]]` 深链到达后要把视图
+ *   临时切到三轨，而 §C11.2 逐字禁止它写视图记忆（「一次深链永久改变默认视图」是用户可感知的
+ *   副作用式行为变更，且本批测不了 —— 真机跳过）⇒ 需要一条**非持久**切换路径，但**既有调用点
+ *   一字不许改**（`SessionDetailPanel` / `NotesReadingColumn`）。加宽第二个返回值会让两处解构
+ *   与「`setViewKey` 直接交给 `onViewKeyChange`」的形态失真；把选项挂在**同一个选择器**上则
+ *   既有调用（单参）语义逐字不变，深链那一处显式写 `{ persist: false }`。 */
+export type ViewSelect = (key: string, opts?: { readonly persist?: boolean }) => void;
+
 export function useViewMemory(
   objectType: ObjectType,
   defaultKey: string,
   validKeys: readonly string[],
   storage: Storage = globalThis.localStorage,
-): readonly [string, (key: string) => void] {
+): readonly [string, ViewSelect] {
   const [key, setKey] = useState<string>(() => readViewMemory(objectType, validKeys, storage) ?? defaultKey);
-  const select = useCallback(
-    (next: string) => {
+  const select = useCallback<ViewSelect>(
+    (next, opts) => {
       setKey(next);
-      writeViewMemory(objectType, next, storage);
+      // 缺省（含 `persist: true`）= 今天的行为；`persist: false` = 深链的临时切换（§C11.2）
+      if (opts?.persist !== false) writeViewMemory(objectType, next, storage);
     },
     [objectType, storage],
   );
