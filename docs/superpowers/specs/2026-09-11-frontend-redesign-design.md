@@ -738,6 +738,12 @@
 | 46 | `update_fragment_group` | **补 UI（本批）** | REQ-201 **声称已接线但实际无调用方** —— 需同步修正记录 |
 | 47 | `update_knowledge_system` | **补 UI（本批）** | 体系改名 / 核心问题 / 状态 —— 最明确的功能缺口 |
 
+> **🔻 状态更正（2026-09-13）· 指上表 #14 `kb_search` 行**：本行的「补 UI（本批）」**已在批 3 Task 12 交付**（`kbCommands.ts:116` → `useKbPaletteSearch.ts:61` → `CommandPalette.tsx:127`，提交 `b567f0e6`，带 9 条用例）。**原文保留**（本行是规格原文，批 8 对账须能看见「规格写 12、实做 10」的差额来源）。🔴 **T21 实测复核**：`kb_search` 的前端生产调用点 **= 1**（`app/src/shell/kbCommands.ts`，五形态并列探针）⇒ 本行的「已交付」为**实测事实**。
+>
+> **🔻 角色变更登记（2026-09-13，批 7 T19）· 指上表 #30 `video_profile_spec_by_kind` 行**：本行当年删除 `video_profile_spec_by_kind` 的理由是「前端已有 KIND_TO_FORM / KIND_TO_TIER **双写**」。批 7 把读端接到后端 `video_profile_for_spec`（#28）之后，那张前端映射的**角色从「并行真源」变成「离线降级路径」（兜底）** —— **它仍然存在、也仍有生产调用点**（AGENTS.md §3.4 要求本地兜底路径必须留），**不是被删除**。⇒ 本行的删除理由**在"真源"这一层不再成立，在"兜底"这一层仍成立**；原文保留，本注为准。🔴 **实测**：`video_profile_for_spec` 前端生产调用点 **4 处 / 1 文件**（`components/ProfileDetector.tsx`）；`KIND_TO_FORM` / `KIND_TO_TIER` **仍在且仍有生产调用点**（R-11 剥注释实测 **6 处 / 2 处**；T21 未剥注释粗测 7 / 3，差额为注释行）⇒ **两张映射一个字未删**。
+>
+> **🔻 状态更正（2026-09-13）· 指上表 #46 `update_fragment_group` 行**：本行的「需同步修正记录」**已在批 1 完成**（`docs/product/requirements-pool.md:337` 含 2026-09-12 批 1 更正）。**批 7 只做"接线"那一半**（命令本身的生产调用点）。🔴 **但 T21 实测推翻了后半句的兑现**：`update_fragment_group` 在 `app/src/**`（**含测试**）命中 **0 文件 / 0 处**，而它**仍在 registry**（`定义 311 / 注册 311 / 重复 0` 含该条）⇒ **「接线」那一半在本批未做**。**处置**：与 §C9.1 的裁决不冲突（该行被排除出 10 条实做名单的依据是「记录同步已做」，**不是「接线已做」**）⇒ **逐字登记为批 8 输入**，**不得**读成「本批 12 条补 UI 已全部接线」。
+
 **汇总**：删 **22** · 本批补 UI **12** · 登记不排期 **7** · 撤下 IPC **3** · 有意保留 **3** · 待核实 **0** ＝ 47。
 
 > **2026-09-11 改判**：#41 `open_capture_float` 由「待核实」改为「删」（依据见该行说明）⇒ 删除批由 21 条升至 **22** 条。
@@ -745,6 +751,8 @@
 > **两条更正，可单点回退**：#38 `detect_video_domain` 与 #44 `remember_video_profile` 在早期分桶中被列入「A 桶 · 补 UI」，经专项侦察后**更正为删除** —— 前者的上游 OCR 标签通道从未建起来（平台信号不是瓶颈，`infer_platform` 已从标题/URL 自行补标签），后者的功能被 `remember_video_profile_form` 完整覆盖。这两行**独立于其他决策**，若需回退为「补 UI」，只改这两行即可。
 
 **删除的通用影响面**：仅 `lib.rs` 的 `generate_handler!`；`capabilities/*.json` 无自定义命令 ACL；无 bench/集成测试目录；单测全为 `#[cfg(test)]` 内联且不引用这些命令。**唯一例外**是补缝三连的模块级连带死代码。
+
+> **🔻 就地更正（2026-09-13）**：注册清单**已搬到 `app/src-tauri/src/app_commands.rs`**（批 0-C3；`check-command-registry.mjs:22` 的 `DEFAULT_REGISTRY`），`lib.rs` 里已无 `generate_handler!`（`line-limit-exemptions.md:26` 自证）。**本行的"仅 `lib.rs`"按 `app_commands.rs` 读**；原文保留。🔴 **T21 实测复核**：`app_commands.rs` 现含 **311 条** `generate_handler!` 条目（`定义 311 / 注册 311 / 重复 0`）—— 即**本行「删除的通用影响面 = 注册清单一处」这一判断仍然成立**，只是那"一处"换了文件（批 1 删 22 条、批 6 增 1 条、批 7 撤 3 增 1 条，全部落在这一个文件里）。
 
 ---
 
@@ -773,6 +781,13 @@
 | **6 动效系统** | GSAP 接入 + token + 四层 + 三档 + 相变两态 + 6 个签名动效 + `usePresence` | 可中断可反向；三档正确；60fps |
 | ↳ 批 6 的收口（批 6 完成时更新 · 2026-09-13） | **✅ 已落**（`ac504b06^..975b3285`，**77 个提交** = 批 6 计划 1 + 36 个任务中已提交的 34 个（**T15 / T34 各零提交**）+ 微单元；**含左端点**口径见 [v0.22](../../versions/v0.22.md) 批 6 节）**；上格原文一字未改**。**验收面的逐条实际结果**（口径 = R0.1 第 2 条「6 个签名动效 + 相变两态 + 承载面 3 项」，读数出处 `task-34-report.md` §10，T36 出最终表）：**6 个签名动效 6/6 各有 ≥1 生产调用点** —— 唯一缺口 = **#2 的反向 / 重播入口 = 0**（状态机与判据齐备、无生产入口）· **相变两态** = **单一写入方**（`shell/phaseSource.ts:84`）+ **载体 1 处**（`App.tsx:394`）· **承载面 3/3 链路闭合**（采集态 LIVE 仪表/波形 → 到期刻度 → 时间轨/播放头）· **环境层第 3 件（未确认段落墨度）= 1 处（R12.4 要求 ≥2，差 1）** · **列折叠 Flip = 2/8 处**（授权路径 B） · **`[[ts:ms]]` 端到端只通一半**（会话页那一跳未交付 ⇒ 批 7 首要候选）。**上格验收列三项**：**可中断 / 可反向 ✅**（双断言模板 + 逐条专属变异体）· **三档正确 ✅**（机器面 = 档位映射 + DOM 属性 + 源序 + 时长参数）· 🔴 **「60fps」= 未测**（jsdom 无合成器；代理判据 = **未动 layout 属性**）—— **不得读成「60fps 已达成」**。**八门禁终态**（`HEAD = 975b3285` · 真实构建产出 `app/dist` mtime **2026-09-13T05:10:24.838+08:00** · 入口 `index-CBZzLV5U.js` 117,002 B）：`line-limits --full` **0 / 122 / 122**（零新增登记）· `docs-check` exit 0（扫描 **280** / 检查 **180**）· registry **313/313/0** · `tsc --noEmit` **0 错** · vitest **221 文件 / 2132 用例 / 0 失败 / 0 skip**（一次通过、零 flake）· `check-bundle-budget.mjs`（**真实构建**，取锁 `attempt=1`、`finally` 释放）**exit 0 · 首屏 103.60 kB gzip**（原始 326,681 B；余量 96.40 kB；**CSS 4 个 68,778 B 不计入判据、只报告**）· `bundle-eager-graph` **103 文件（源 89 + CSS 14）/ npm 包 7**（**结论口径 = TS-API 真实边：75 源文件 / 4 包**）· 🔴 **`cargo test --test app_lib_tests` 真跑：`running 2335 tests` → `test result: ok. 2329 passed; 0 failed; 6 ignored`，exit 0**（R0.1 第 1 条③ 兑现）· `cargo clippy --all-targets`：error **0** · lib warnings **15 = 基线**。**观测口径**：从批 5 的「**只有接缝、没有纲领**」变为**纲领与承载面均已落地**（B9 的中间态声明在本批**到期作废**，由「已交付 / 未交付」二分清单取代）；但**像素面与真实帧率仍未测**（jsdom 不可达）。 |
 | **7 未接线落地** | 12 条补 UI（含 `kb_search` → ⌘K）· 标签线 · 档位通道 · B 桶 3 条撤下 IPC · **`structuredBlocks` 整模块存废**（批 1 控制方裁决：接线（4 个导出全接入、真实置信度渲染「低置信点线」）**或**删除（连同类名与规格/登记表一并移除）二选一，**批 1 未决前不得删**） | **标签能写进去**；**档位选完真生效**；**`structuredBlocks` 已作出接线或删除的明确裁决** |
+
+> **🔻 批 7 收口就地加注（2026-09-13，上格原文一字未改）**：`structuredBlocks` 的"二选一"**由控制方按**「**逐导出裁决**」（第三条路）执行 —— **这不是绕过二选一，而是二选一在两个粒度上各自取正解**：① `escapeHtml`（**`:13`** 的**再导出**，真源在 **`utils/html.ts:11`**）⇒ **只摘 import 与再导出，真源一个字不动**；② `renderLatex` / `renderMarkdownTable`（唯一消费者是它们自己的测试）⇒ **删**；③ `lowConfidenceClass`（唯一生产消费者 **`session-detail/SessionRawView.tsx:138`**，import 在 `:50`）⇒ **留 + 加宽到 ≥2 生产调用点**（顺带兑现批 6 R12.4 环境层第 ③ 件的「≥2」）。**本加注即控制方的明文授权**（依据 `rulings.md` §C4.1/§C4.2）。
+>
+> **🔻 批 7 收口就地加注 · 上格其余三处状态的实测落位（2026-09-13，上格原文一字未改）**：
+> - 🔴 **「12 条补 UI」的实做面 = 10 条**（§C9.1 逐字裁决）：`kb_search`(#14) **批 3 Task 12 已交付**、`update_fragment_group`(#46) 的**记录同步批 1 已完成** ⇒ 本批实做 10 条 = `reset_tag_color`(#19) · `update_note_tags`(#25) · `video_profile_for_spec`(#28) · `analyze_session_command`(#34) · `delete_session_images_all`(#37) · `finish_session`(#39) · `get_decision`(#40) · `refine_session`(#42) · `set_tag_color`(#45) · `update_knowledge_system`(#47)。🔴 **上格的「12」是规格原文，一字不改** —— 批 8 对账必须能看见「规格写 12、实做 10」的差额来源。
+> - 🔴 **registry 的批 7 净值 = 313 − 3 + 1 = 311**（−3 = §1 L5 行 31 的三条撤下；+1 = 行 34 新增的 `remember_video_profile_tier`）⇒ **收口判据 = 311 / 311 / 0**。
+> - 🔴 **「B 桶 3 条撤下 IPC」的落地形态**（行 31 逐字「撤下但**保留内部函数**」）：摘 `#[tauri::command]` 属性 **+** 删注册条目，**函数体逐字保留、不改 `*_inner` 名**（`create_session` / `add_session_segment` / `add_session_ocr_block`）。
 | **8 治理收口** | 豁免表终态 · 回写 `ui-ux-system.md` / `theme.md` · 新增动效规范章节 · 需求池同步 | 11 条验收全达标 |
 | ↳ 批 1 的收口（批 1 完成时更新） | **22 条命令已删**（本表原写 21 ＋ #41 `open_capture_float` 改判；`git diff --name-status --diff-filter=D e96ab63d HEAD` = **10 个文件**）· **补缝三连连带模块已删**（`ai_judge` + `AiMockAdapter::enhance` + `ai_protocol.rs` 的 `AiEnhance*` 半边，**−26 用例** = 9+7+10；另 T3 整族删除 **−25**、T6 **−4**、T7 **−4** ⇒ 全批 **−59**）· **ADR-010 已废弃**（文件保留）· **`structuredBlocks` 死文案已清**（**整模块存废登记给批 7**） | 收口门禁（2026-09-12 实测）：registry **312/312/0** · `cargo test` **2300/0/6** · `cargo build` 0 `dead_code` · clippy **19**（集合与开工基线 identical）· vitest **124 文件 / 1124 用例** · `tsc` 0 错 · `line-limits --full` **0 / 123 / 123** · `docs-check` exit 0 |
 
@@ -880,6 +895,10 @@
    > - **批 8 输入**：§7.4 的实现 + 它的两条红线裁决（段级身份 / 新 command）。
 7. **47 条未接线命令逐个有结论**，无「不知道」。
    > **进度（批 1 收口，2026-09-12）**：47 条中 **22 条已删**（含 #41 改判）、**25 条处置已定但未执行**（补 UI 12 → 批 7 · 登记不排期 7 → 批 7/无期 · 撤下 IPC 3 → 批 7 · 有意保留 3 → 无期）。**无「不知道」**。批 1 计划 §现状普查第三节给出 47/47 的逐条处置表；删除后复算 = registry 312 / 前端零引用 **25** 条（= 47 − 22，逐条与上列归属一致）。
+    > **进度（批 7 收口，2026-09-13）**：registry **313 → 311**（−3 撤下 IPC + 1 新增 `remember_video_profile_tier`）· 前端零引用 **24 → 11**（**实测值见收口报告**；口径 = 上格那 47 条中**仍在 registry 者 22 条**里**前端生产零引用**的条数；仪器 = 五形态并列带引号定界字面量探针，正控 `invoke(` 命中 **68** 个生产文件、负控 **0**；`kb_search` 已交付的 1 条不计入）· **本次加注不改上格原文**。
+    > - **差额逐条**：**24 → 11 = −13**，分解 = **−10**（本批实做补 UI 的 10 条各得 ≥1 生产调用点）+ **−3**（撤下 IPC 的三条随注册一起离开本集合）。同格局：上格「25 条」是**剩余命令条数**（含 `kb_search`）⇒ 现 **22 条**（−3 撤下）；条数 − 零引用 = **11 = 有引用数**（与逐条读数一致）。
+    > - 🔴 **新命令 `remember_video_profile_tier` 不在上格的 47 条内**：前端生产调用点 **2**（`components/ProfileDetector.tsx`）⇒ **不计入零引用**（它的义务是 §1 L5 行 34 的「新增命令」，不是本格的补 UI）。
+    > - 🔴 **残留 1 条挂着「补 UI（本批）」却仍零引用**：`update_fragment_group`(#46) 全 `app/src/**`（**含测试**）命中 **0 文件 / 0 处**，而它**仍在 registry** ⇒ **本批未接线**（它被 §C9.1 排除出 10 条名单，理由是「记录同步」那一半批 1 已做，**不是因为接线已做**）⇒ **登记为批 8 输入**，并见 §9 该行的状态更正注。
    > ⚠️ **批 1 的实测更正（供批 2+ 引用本条时注意）**：计划的「不删清单」在本批被**证伪五次**（`artifact_templates` 族 / `AiEnhance*` 半边 / `vad_threshold_slot` 三符号 / `spec_from_kind` / 调用点计数），根因是**用「看起来还有人用」代替「删除后可达性」**作保留判据 ⇒ 后续批次判断连通性请照「收口回写」节的四条约纪律（计划 `docs/superpowers/plans/2026-09-11-frontend-redesign-batch1-deletions.md`）。
 8. **标签能写进去**且标签过滤面板有内容；**画面档位选完真的生效**且跨会话记住。
 9. JS 包首屏 gzip 达标或给出瓶颈清单；GSAP 只在独立 chunk 懒加载。
@@ -931,6 +950,11 @@
 > - **口径更正（C17②，文档与后续批次一律照此写）**：本行的「3 套」应读作「**4 套活 + 1 套死**」—— `NoteMarkdown.tsx:18` · `ChatMessageMarkdown.tsx:8` · **`utils/refineDiff.ts:78 mdLineHtml`（计划未点名的第 4 套手写解析器）** · `structuredBlocks.ts`（第 5 套、**无生产消费者**）。**T12 的判据不受影响。**
 > - **行数代价**：`components/NoteMarkdown.tsx` **244 → 266 行**（**只追加**一个槽 + 一个类型导出，**删除行 = 0**；预算 ≤270 ✅）。
 > - **出处**：批 5 计划 §收口回写 §七 · `tmp/t18/measurements.md` §9 A8。
+
+> **🔻 批 7 收口就地加注 · 「3 套 markdown 渲染器归一」的去向终态（2026-09-13，上表与批 5 加注原文一字未改）**：**批 7 已完成归一**，形态 = **C10.1 的「两支手写链合成一支 + #2 并入 #1」**：新建 `utils/markdownLine.ts`（**100 行**：#3 `refineDiff.ts` 的 `mdLineHtml` + #4 `NotePreviewView.tsx` 的 `renderMarkdown` **合成一支**，两个具名模式常量逐字保留原样式 ⇒ 零观感变化）· `ChatMessageMarkdown` **并入** `NoteMarkdown` 后删除（**站点 2 → 1、插件站点 8 → 4**）· `structuredBlocks` 按 §C4。**终态 = 2 套活**（`NoteMarkdown` + `markdownLine`）。🔴 **未做**：把两支手写链换成 react-markdown（**禁止** —— 它们是给 `dangerouslySetInnerHTML` 的串生成器，换 = 改 DOM 形态/样式/安全面，而 #4 无回归网）。
+> - 🔴 **口径逐字（§C11.1 第 ③ 条要求「报告与规格回写里逐字写」）**：**归一 = 逻辑归一；观感统一未做，归批 8**。
+> - 🔴 **补登规格加注的漏点（C4.3）—— 第 4 套活渲染器 = `components/NotePreviewView.tsx:40 renderMarkdown`**：上表与批 5 加注把「第 4 套」记作 `utils/refineDiff.ts:78 mdLineHtml`、把 `structuredBlocks.ts` 记作「第 5 套」，**漏点了 `NotePreviewView.tsx:40 renderMarkdown`** —— 它才是 `NotePreviewView` 那条独立渲染链的真身（**批 7 开工实测 346 行**，终态 **364 行**；`dangerouslySetInnerHTML` 两处在 `:295`/`:301`，图片分支的容器侧前置判断在 `:61`）。🔴 **批 7 开工时它"无测试面"**（§C9.3 因此把「先补表征测试再替换」定为硬顺序）⇒ **T16 `6509e04c` 已补 `components/NotePreviewView.render.test.ts`（34 用例 / 53 处 `expect`，T21 实测 234 行）**，T15 的 M1 与 T17 的迁移各有回归网（**洞已补上 = 实测事实，不再是推断**）。**本加注补上这个漏点**。
+> - **执行顺序与残余（如实登记）**：先 T16 补回归网 → T15/T17 迁移（`NotePreviewView` 迁入 `markdownLine`、`RefineWorkbench` 侧同支受益）⇒ **`[[ts:ms]]` 芯片在两条串渲染链上均已可点**（`data-ts-ms` + 容器侧事件委托）；🔴 **两处页内 seek 未接**（`AiRefineCard` / `NoteAiDialog`，§C49.3 判为另一条线 ⇒ **批 8 输入**）—— **不得**声称「`[[ts:ms]]` 全链已通」。
 
 > **🔻 批 6 收口就地加注 · 「登记不排期」四项的自证 + 本批新增登记项（R0.2 · R5.5-b · R63.1；2026-09-13，**上表原文与批 5 加注一字未改**）**：
 > - 🔴 **R0.2 的自证：本批对四项的**被做数 = 0**。逐项（自证口径 = 全批 77 个提交的改动面 + `app/src` 实测）：① **滚动驱动动效** = 0 处（`ScrollTrigger` **未装、未注册**；`engine.ts` 的插件集合恰 4 个）· ② **图谱浮现** = 0 处（`KnowledgeGraphView` 零改动）· ③ **笔记树生长** = 0 处 · ④ **熵减收拢** = 0 处。⇒ 上表第 5 行的「登记不排期」**在本批未被触碰**（批 6 承接的 6 个签名动效**不在此列**，R0.2 已逐字判过）。
