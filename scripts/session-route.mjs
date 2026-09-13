@@ -38,7 +38,7 @@ const patternsFile = join(learningDir, 'patterns.json');
 const ROUTING_RULES = [
   {
     id: 'rule-env-setup',
-    description: '环境启动类重复工作 → env-bootstrap Skill',
+    description: '环境启动类重复工作 → 现执行者：README.md 的「快速开始」',
     match: (pattern) => {
       // 匹配 category 为 env-setup 的分类重复，或包含 npm install/dev 的命令重复
       if (pattern.category === 'category-repeat' && pattern.detail?.eventCategory === 'env-setup') {
@@ -60,7 +60,7 @@ const ROUTING_RULES = [
   },
   {
     id: 'rule-build-validation',
-    description: '构建验证类重复工作 → 验证流水线 Skill',
+    description: '构建验证类重复工作 → 现执行者：.husky/pre-commit（本地）+ .github/workflows/pr-check.yml（CI）',
     match: (pattern) => {
       if (pattern.category === 'category-repeat' && pattern.detail?.eventCategory === 'validation') {
         return true;
