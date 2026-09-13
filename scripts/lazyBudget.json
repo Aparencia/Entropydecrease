@@ -1,10 +1,10 @@
 {
-  "generatedFrom": "node scripts/check-bundle-budget.mjs（**真构建**，不带 --no-build）· 源码 = 90bb5f6a（7a 段收口树）· 读数存档 tmp/t12/lazy-final-realbuild.json；上一版 = cd800d63（T9，批次中段快照）",
+  "generatedFrom": "node scripts/check-bundle-budget.mjs（**真构建**，不带 --no-build）· 源码 = c0bff722（批 7 全批收口树；T22 重冻）· 读数存档 .superpowers/sdd/2026-09-12-frontend-redesign-batch7-unwired/tmp/t22/logs/g5-bundle-budget-realbuild.txt（时点 2026-09-13T03:46Z · 懒侧 37 chunk / 637,501 B · 首屏 105.95 kB）；上一版 = 950afd5a（T12 的 7a 段收口重冻，limit 636,243）· 再上一版 = cd800d63（T9，批次中段快照 634,316）",
   "unit": "gzip = zlib.gzipSync level 6 · 族前缀 = 去掉 8 位内容 hash 的 chunk 名 + '-'（chunk 名带内容 hash，不稳定，不能当键）",
   "scope": "🔴 必须在**新鲜构建**产物上判定（§C21.3）：旧 dist 上的 --no-build 读数含时代残渣，上界会虚高（实测 +64,497 B）⇒ 本判据的合格调用 = 不带 --no-build（本脚本自行构建）或显式 --dist 指认受判产物",
-  "semantics": "全部字段 = 实测**冻结值**，只许降（批 7 §C9.6 第 2 条 / §C10.4）；写乐观「预算值」会立刻红。★ 本次（rulings §C46.4「每收口一次、重冻一次」）为**一次性、可归属的重冻**：4 族按收口树**真实构建**的实测值重冻（NoteMarkdown- · NotesPage- · RefineLaunchDialog- · SessionsPage-）+ 新族 NoteCardFlowWithSeek- 登记 + chunk 数 36 → 37 + 总量 634,316 → 636,243；🔴 **vendor-* 五族逐族核对为「零增长」**（58,784 / 208,585 / 41,161 / 79,915 / 50,622 逐字节不变）⇒ 未触发 §C46.4 条件⑤ 的 STOP。**批 8 的基线 = 本批收口时的重冻值**（此后才是真正的硬棘轮）。",
+  "semantics": "全部字段 = 实测**冻结值**，只许降（批 7 §C9.6 第 2 条 / §C10.4）；写乐观「预算值」会立刻红。★ 上一轮（rulings §C46.4「每收口一次、重冻一次」· T12 于 0a503cc8）为**一次性、可归属的重冻**：4 族按收口树**真实构建**的实测值重冻（NoteMarkdown- · NotesPage- · RefineLaunchDialog- · SessionsPage-）+ 新族 NoteCardFlowWithSeek- 登记 + chunk 数 36 → 37 + 总量 634,316 → 636,243；🔴 vendor-* 五族逐族核对为「零增长」⇒ 未触发 §C46.4 条件⑤ 的 STOP。★★ **本轮（T22 于 c0bff722，控制方 2026-09-13 逐条授权）为该授权的第 2 次、也是 §C46.4 第 5 条所指的「批 8 基线」那一次**：2 族抬到终态**真构建**实测（KnowledgePage- 27,620 → 28,466 · NotesPage- 48,087 → 48,627）+ 补登遗漏族 lowConfidence-（100 B，chunk 本就在、只是未登记族）+ 总量 636,243 → 637,501；🔴 chunk 数 **37 → 37 不变**、其余 34 族上限**一字未动**（含全部 vendor-* 五族：58,784 / 208,585 / 41,161 / 79,915 / 50,622 逐值保留，实测 Δ ≤ +2 B）。归属 = T18（NoteTagsEditor/过滤面板着色）· T19（档位通道 90bb5f6a/c6a4cb7c）· T20（六条展示面 b72d4709 + 展示面与分件）· T23（片段归组 125eec85/5d59e332）· T17 尾（08717e84/02c32baa）。**批 8 的基线 = 本条所记的终态重冻值**（此后才是真正的硬棘轮）。",
   "lazyChunkCountMax": 37,
-  "lazyTotalGzipBytesMax": 636243,
+  "lazyTotalGzipBytesMax": 637501,
   "families": [
     {
       "prefix": "ActionPage-",
@@ -36,7 +36,7 @@
     },
     {
       "prefix": "KnowledgePage-",
-      "gzipBytesMax": 27620
+      "gzipBytesMax": 28466
     },
     {
       "prefix": "NoteCardFlowView-",
@@ -52,7 +52,7 @@
     },
     {
       "prefix": "NotesPage-",
-      "gzipBytesMax": 48087
+      "gzipBytesMax": 48627
     },
     {
       "prefix": "RefineLaunchDialog-",
@@ -117,6 +117,10 @@
     {
       "prefix": "entityLabel-",
       "gzipBytesMax": 250
+    },
+    {
+      "prefix": "lowConfidence-",
+      "gzipBytesMax": 100
     },
     {
       "prefix": "registry-",
