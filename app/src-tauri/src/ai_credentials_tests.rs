@@ -118,16 +118,20 @@ fn legacy_default_slot_value_survives_code_removal() {
     const LEGACY_VALUE: &str = "sk-legacy-fixture-value";
     let s = store();
     s.seed_legacy_default_for_tests(LEGACY_VALUE);
-    // Act：走一圈现存**可达**的操作（合法槽位读写清 + 尝试抹除旧槽）
+    // Act：走一圈现存**可达**的操作（合法槽位读写清）+ **尝试**抹除旧槽
+    //（守卫若缺失，这一步会真的把旧数据删掉 ⇒ 下面的判据才咬得住）
     s.save_key("provider:p1", "sk-p1-fixture").expect("合法槽位可写");
-    assert!(s.clear_key(LEGACY_DEFAULT_SCOPE).is_err(), "旧槽不可通过 API 抹除");
+    let erase_attempt = s.clear_key(LEGACY_DEFAULT_SCOPE);
     s.clear_key("provider:p1").expect("合法槽位可清");
-    // Assert：旧键与旧值**都还在**（键与值都可读 ⇒ 没有 DELETE / 覆盖写动过它）
+    // Assert ①（本判据的**具名**红点）：旧键与旧值**都还在**
+    //（键与值都可读 ⇒ 没有任何 DELETE / 覆盖写动过它）
     assert_eq!(
         s.read_legacy_default_for_tests().as_deref(),
         Some(LEGACY_VALUE),
         "已存数据必须仍在（本次不抹除任何已存数据）"
     );
+    // Assert ②：那次尝试是**被显式拒绝**的（不是静默成功、也不是静默失败）
+    assert!(erase_attempt.is_err(), "旧槽清除必须被拒绝（具名错误）");
 }
 
 /// 旧凭据 blob 的**物理文件**：合法槽位操作一律不得碰它（字节级对拍）。

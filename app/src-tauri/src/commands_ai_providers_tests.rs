@@ -23,10 +23,13 @@ fn no_default_provider_does_not_fall_back_to_legacy_slot() {
     // Arrange：旧版本只写过遗留槽；当前没有任何 Provider（default_id = None）
     let s = store_with_legacy_only("sk-legacy-fixture-not-a-real-key");
     // Act
-    let resolved = resolve_default_key(None, None, &s).expect("无默认 Provider 不报错");
-    // Assert：**不回落**——遗留槽不是合法槽位，解析结果必须是 None
+    let resolved = resolve_default_key(None, None, &s);
+    // Assert：**不回落**——遗留槽不是合法槽位，解析结果必须是 Ok(None)
+    //（整体断言 Result：回落若"借道"槽位守卫会拿到 Err、若真能读到旧密钥会拿到
+    //  Some(旧值)，两种形态都落在这一条具名判据上）
     assert_eq!(
-        resolved, None,
+        resolved,
+        Ok(None),
         "无默认 Provider 时不得回落遗留 default 槽（U2 = c：读路径已移除）"
     );
 }
