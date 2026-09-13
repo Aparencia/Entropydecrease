@@ -35,7 +35,7 @@ import { inDomain, scanSurfaceTags, textOf as textOfSrc } from "./surfaceScan";
 import {
   FROZEN_SURFACE_TAG_TOTAL, SURFACE_TAG_ANCHOR, SURFACE_TAG_FROZEN_LEGACY_COUNT,
 } from "./surfaceBaseline";
-import { SURFACE_TAG_REGISTRY } from "./surfaceResidual";
+import { SURFACE_TAG_REGISTRY, type SurfaceTagRegistryEntry } from "./surfaceResidual";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** `app/src` —— 登记表的键就是相对这个目录的正斜杠路径 */
@@ -46,15 +46,24 @@ const FILES: readonly string[] = walkSources(SRC).map((abs) => relOf(SRC, abs)).
 /** 域内全部 `<Surface>` 开标签（逐文件） */
 const SURFACE_TAGS = scanSurfaceTags(FILES, textOf);
 
-/** 登记表的逐文件读出（同键只许一条 —— 重复键会让「Σ 登记值」与「逐文件比对」两套口径漂移） */
+/**
+ * 登记表的**键** = `(file, tier)` 二元组（T19）—— `REG_DUP` / 形状断言 / 字典序断言共用**这一处**实现，
+ * 故「键退回 `file`」这类变异会同时打到三条断言上（变异体 M1 的红点即在此）。
+ */
+const keyOf = (e: SurfaceTagRegistryEntry): string => `${e.file}|${e.tier}`;
+/** 登记表的逐**键**读出（同键只许一条 —— 重复键会让「Σ 登记值」与「逐文件比对」两套口径漂移） */
 const REG = new Map<string, number>();
 const REG_DUP: string[] = [];
 for (const e of SURFACE_TAG_REGISTRY) {
-  if (REG.has(e.file)) REG_DUP.push(e.file);
-  REG.set(e.file, (REG.get(e.file) ?? 0) + e.count);
+  const k = keyOf(e);
+  if (REG.has(k)) REG_DUP.push(k);
+  REG.set(k, (REG.get(k) ?? 0) + e.count);
 }
-/** legacy 行 = T17-B 迁移快照的既有文件（`legacy: true` 标记；其和受冻结常数锁） */
-const LEGACY = new Set(SURFACE_TAG_REGISTRY.filter((e) => e.legacy === true).map((e) => e.file));
+/** 逐文件的登记值**之和**（T19 起同一文件可有两行 ⇒ 逐文件比对必须求和，不能只取一行） */
+const REG_BY_FILE = new Map<string, number>();
+for (const e of SURFACE_TAG_REGISTRY) REG_BY_FILE.set(e.file, (REG_BY_FILE.get(e.file) ?? 0) + e.count);
+/** legacy **档**的文件集（判定一律看 `e.tier`；此处只用于「legacy 集合非空」这条非真空自证） */
+const LEGACY = new Set(SURFACE_TAG_REGISTRY.filter((e) => e.tier === "legacy").map((e) => e.file));
 /** 实测逐文件读出（0 命中的文件不进 `SURFACE_TAGS` ⇒ 显式补 0，好让「表里有、实测无」被抓住） */
 const hitsOf = (rel: string): number => SURFACE_TAGS.filter((t) => t.file === rel).length;
 
@@ -67,9 +76,9 @@ describe("⑪ `<Surface>` 新增调用点登记制（T15a 判据修正：允许�
       if (e.reason.trim().length < 12) bad.push(`${e.file}: 理由为空或 <12 字 —— 登记必须写明哪个视图 / 为什么用 <Surface>`);
     }
     expect(bad, `登记表有误：\n${bad.join("\n")}`).toEqual([]);
-    expect(REG_DUP, `登记表里有重复键（同键只许一条）：\n${REG_DUP.join("\n")}`).toEqual([]);
-    const keys = SURFACE_TAG_REGISTRY.map((e) => e.file);
-    expect(keys, "登记表的键必须按字典序（与 FROZEN_*_BY_FILE 同范式）").toEqual([...keys].sort());
+    expect(REG_DUP, `登记表里有重复键（同 \`(file, tier)\` 只许一条）：\n${REG_DUP.join("\n")}`).toEqual([]);
+    const keys = SURFACE_TAG_REGISTRY.map(keyOf);
+    expect(keys, "登记表的键（`file|tier`）必须按字典序（与 FROZEN_*_BY_FILE 同范式）").toEqual([...keys].sort());
     expect(SURFACE_TAG_REGISTRY.length, "登记表空了 ⇒ 本组判据空真").toBeGreaterThan(0);
     expect(LEGACY.size, "legacy 集合为空 ⇒ 牙 1 与 legacy 和锁都会空真").toBeGreaterThan(0);
   });
@@ -81,14 +90,14 @@ describe("⑪ `<Surface>` 新增调用点登记制（T15a 判据修正：允许�
     const zombie: string[] = [];
     const overflow: string[] = [];
     for (const [file, n] of measured) {
-      const reg = REG.get(file);
+      const reg = REG_BY_FILE.get(file);
       // 牙 4：未登记文件的命中仍为 0
       if (reg === undefined) { zombie.push(`${file}: 实测 ${n} 处，**未登记**（新调用点请登记：登记 + 抬高总数 + 同步锚）`); continue; }
       // 牙 1：既有文件一格都不许涨（新登记行由下一用例的「恰等于实测」管）
       if (reg < n) overflow.push(`${file}: 登记 ${reg} 处，实测 ${n} 处 ⇒ 登记值被超（legacy 只许降 / 新登记必须恰等于实测）`);
     }
     // 牙 5b：登记的文件此刻必须仍命中（防僵尸登记）
-    for (const [file, reg] of REG) {
+    for (const [file, reg] of REG_BY_FILE) {
       const n = hitsOf(file);
       if (n === 0) zombie.push(`${file}: 登记 ${reg} 处，实测 0 处 ⇒ 僵尸登记（迁走了却还挂着）`);
     }
@@ -105,15 +114,15 @@ describe("⑪ `<Surface>` 新增调用点登记制（T15a 判据修正：允许�
     expect(SURFACE_TAGS.length, `域内实测 ${SURFACE_TAGS.length} 个 <Surface> ≠ FROZEN_SURFACE_TAG_TOTAL ${FROZEN_SURFACE_TAG_TOTAL}`).toBe(
       FROZEN_SURFACE_TAG_TOTAL,
     );
-    // legacy 面锁死：9 个迁移快照文件的和恒为 FROZEN_LEGACY_COUNT ⇒ 不许「降一个 legacy 值去腾地方放行新条目」
-    const legacySum = SURFACE_TAG_REGISTRY.filter((e) => LEGACY.has(e.file)).reduce((a, e) => a + e.count, 0);
+    // legacy 面锁死：**按档位**筛（T19 起同一文件可有两行 ⇒ `LEGACY.has(file)` 会把 new 档算进 legacy 面）
+    const legacySum = SURFACE_TAG_REGISTRY.filter((e) => e.tier === "legacy").reduce((a, e) => a + e.count, 0);
     expect(legacySum, `legacy 登记值之和 ${legacySum} ≠ ${SURFACE_TAG_FROZEN_LEGACY_COUNT}（T17-B 迁移面只许收紧，不许腾挪）`).toBe(
       SURFACE_TAG_FROZEN_LEGACY_COUNT,
     );
     const bad: string[] = [];
     for (const e of SURFACE_TAG_REGISTRY) {
       const n = hitsOf(e.file);
-      if (LEGACY.has(e.file)) {
+      if (e.tier === "legacy") {
         // 牙 1：legacy 行 = ≤ 上限（只许降）
         if (n > e.count) bad.push(`${e.file}: legacy 实测 ${n} > 登记 ${e.count} ⇒ 既有文件不许涨（牙 1）`);
         if (n === 0) bad.push(`${e.file}: legacy 实测 0 ⇒ 已迁空，请从登记表收紧（legacy 行只许降，降完手工同步总和）`);
