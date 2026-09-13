@@ -31,7 +31,7 @@
 import { readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { DURATION_TOKENS, EASING_TOKENS } from "../../scripts/gen-tokens.mjs";
-import { lowConfidenceClass } from "../components/structuredBlocks";
+import { lowConfidenceClass } from "../utils/lowConfidence";
 import { AMBIENT_ITEMS, LOW_CONFIDENCE_CLASS, LOW_CONFIDENCE_INK_AMPLITUDE } from "./env";
 import {
   PRIMITIVES, blockAt, declaredProps, declarationValue, parseRules, readPrimitiveCss,

@@ -47,7 +47,7 @@
 import { useRef } from "react";
 import SessionScreenCards from "./SessionScreenCards";
 import ImageGallery from "../ImageGallery";
-import { lowConfidenceClass } from "../structuredBlocks";
+import { lowConfidenceClass } from "../../utils/lowConfidence";
 import { useRevealChoreography } from "./useRevealChoreography";
 import type { GlossaryTerm, SessionDetail, SessionOcrBlock } from "../../types";
 import { fmtMs } from "../../utils/fmt";
