@@ -65,10 +65,15 @@ export interface HarnessProps {
   /** 批 7 T17：卡片流那条链的 ms 出口（F11 用；缺省 = 今天的形态） */
   readonly onOpenSession?: (sessionId: number) => void;
   readonly onOpenSessionAt?: (sessionId: number, ms: number) => void;
+  /** 批 8 T10：第三视图（`evidence`）的注入面 —— 页面 `useNoteEvidence` 的产物（缺省 = 未接线态） */
+  readonly evidence?: ColumnEvidence;
 }
 
+/** 注入面的类型**从宿主组件派生**（同 `ColumnViews`：本件不 import 视图/注册表，理由见文件头） */
+export type ColumnEvidence = ComponentProps<typeof NotesReadingColumn>["evidence"];
+
 /** 页面形态的宿主：真 `useColumnLayout` + 调用侧注入的真注册表清单（与 `NotesPage` 的那一行同源） */
-export function HarnessHost({ views, editing = false, selected = note, handle = null, onOpenSession, onOpenSessionAt }: HarnessProps) {
+export function HarnessHost({ views, editing = false, selected = note, handle = null, onOpenSession, onOpenSessionAt, evidence }: HarnessProps) {
   const outlineCol = useColumnLayout("notes-outline", columnSpec("notes-outline"));
   const editorRef = useRef<NoteEditHandle | null>(handle);
   return (
@@ -95,6 +100,7 @@ export function HarnessHost({ views, editing = false, selected = note, handle = 
       onImageOpen={noop}
       onCleanNotice={noop}
       views={views}
+      evidence={evidence}
     />
   );
 }

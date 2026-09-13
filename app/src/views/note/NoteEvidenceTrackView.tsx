@@ -50,6 +50,12 @@ export interface NoteEvidenceTracks {
   readonly segments?: readonly EvidenceCandidate[];
   /** OCR 块轨：`id` = `session_ocr_blocks.id` · `timestampMs` = `timestamp_ms` */
   readonly ocr?: readonly OcrEvidenceCandidate[];
+  /**
+   * **同源段落轨**（T10 注入；缺省 ⇒ 本视图用下方 `evidenceLinesOf` 自派生，DOM 契约一字不变）。
+   * 🔴 存在的唯一理由 = 段落轨**只有一处派生**：容器侧要拿同一个 `paragraphIndex` 才能让
+   * `matches[].anchor` 与 `data-evidence-for` 对齐；两处各切一次会**静默错位**（见 `evidenceLinesOf`）。
+   */
+  readonly lines?: readonly EvidenceLine[];
 }
 
 /**
@@ -141,7 +147,8 @@ function EvidenceColumn({ match }: { match: EvidenceMatch }) {
 
 /** 视图本体：段落轨 + 证据列 + E3 双分母（无锚点段是一条**完整的正常路径**，不是空转分支）。 */
 export default function NoteEvidenceTrackView({ note, evidence }: NoteEvidenceTrackProps) {
-  const lines = evidenceLinesOf(note.content);
+  // 段落轨：容器注入了同源 `lines` 就用它（唯一派生处仍在 `evidenceLinesOf`，见文件头契约）
+  const lines = evidence?.lines ?? evidenceLinesOf(note.content);
   // 取样顺序 = 模型层的顺序（段落 → 抽锚 → 取证 → 覆盖）：分母乙取自**段落**、不是命中数（§C53.5）。
   const matches = extractAnchors(lines).map((anchor) =>
     evidenceFor(anchor, evidence?.segments ?? NO_SEGMENTS, evidence?.ocr ?? NO_OCR));

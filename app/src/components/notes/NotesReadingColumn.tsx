@@ -61,7 +61,7 @@ import { useViewMemory } from "../../views/useViewMemory";
 import { ShellFallback } from "../../shell/ShellFallback";
 import { StatusLine, ViewSwitcher } from "../../ui/primitives";
 import { ResidentNoteView } from "./NotesReadingColumn.parts";
-import { CARD_FLOW_LOAD, lazyMapOf } from "./readingColumnLoaders";
+import { CARD_FLOW_LOAD, EVIDENCE_LOAD, lazyMapOf, type NoteEvidenceSlot } from "./readingColumnLoaders";
 
 /** `views` 缺席时的空清单：**模块级常量**（稳定引用 ⇒ 下面的 `useMemo` 不每渲染重算） */
 const NO_VIEWS: readonly ViewSpec<NoteViewSlot>[] = [];
@@ -109,6 +109,9 @@ interface Props {
   onCleanNotice: (groupNames: string[]) => void;
   /** 视图清单（`NotesPage` 注入 `viewsFor("note")` —— C1①；缺席 ⇒ 单视图退化，见文件头） */
   views?: readonly ViewSpec<NoteViewSlot>[];
+  /** 批 8 T10：第三视图（`evidence`）的**候选轨 + 同源段落轨**（页面 `useNoteEvidence` 产出；
+   *  缺席 ⇒ 视图自派生段落、候选轨为空 ⇒ 有锚点段渲染显式「无证据」——T8 的缺省态，不是缺陷）。 */
+  evidence?: NoteEvidenceSlot;
 }
 
 export default function NotesReadingColumn(props: Props) {
@@ -146,15 +149,17 @@ export default function NotesReadingColumn(props: Props) {
   );
 
   /** 惰性映射（键常量与工厂已搬到 `readingColumnLoaders`）；`useMemo` 留在宿主 —— 工厂是**纯函数**、不持有记忆。 */
-  const lazyOf = useMemo(() => lazyMapOf<NoteViewSlot>(specs, CARD_FLOW_LOAD), [specs]);
+  const lazyOf = useMemo(() => lazyMapOf<NoteViewSlot>(specs, CARD_FLOW_LOAD, EVIDENCE_LOAD), [specs]);
   const isDefault = viewKey === defaultKey;
   const LazyView = isDefault ? null : lazyOf.get(viewKey) ?? null;
   /** 非默认视图的槽（数据全在这里，视图自身零取数 —— C14②）；空态 ⇒ `null`（连卡片流都不挂）。
-   *  T17：`onOpenSessionAt` 不进 `NoteViewSlot`（批 6 已裁）⇒ 只在**传参处**补成包装件的 props。 */
+   *  T17：`onOpenSessionAt` 不进 `NoteViewSlot`（批 6 已裁）⇒ 只在**传参处**补成包装件的 props。
+   *  T10：`evidence` 同款处理 —— 候选轨只在**传参处**并入（视图 props ⊆ slot 的类型级判据
+   *  `architecture.slots.test.ts` A6 **不受影响**：那是视图组件的 props 面，不是宿主的传参）。 */
   const slot: NoteViewSlot | null = selected
     ? { note: selected, onTaskToggle, onOpenSession, onImageOpen }
     : null;
-  const viewProps = slot === null ? null : { ...slot, onOpenSessionAt };
+  const viewProps = slot === null ? null : { ...slot, onOpenSessionAt, evidence: props.evidence };
 
   /** 原文常驻子树的**展示装配**已搬到 `NotesReadingColumn.parts`（本件把整份 props 原样透传 —— 见该件文件头的字节预算理由）。 */
   const residentView = <ResidentNoteView {...props} />;

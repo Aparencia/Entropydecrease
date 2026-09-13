@@ -30,6 +30,7 @@ import { useNotesPageEditing } from "../hooks/useNotesPageEditing";
 import { useNotesBatchActions } from "../hooks/useNotesBatchActions";
 import { useNotesListData } from "../hooks/useNotesListData";
 import { useNotesDeepLink } from "../hooks/useNotesDeepLink";
+import { useNoteEvidence } from "../hooks/useNoteEvidence";
 // 批 3 T8：列规格（组列/列表列/大纲列三行的宽·夹取·阈值）改从 `shell/columnRegistry` 取——页面不再自建规格；断点值（t5 曾在此写 breakpointFor）现在住在注册表里
 import { columnSpec } from "../shell/columnRegistry";
 import { viewsFor } from "../views/registry";
@@ -146,6 +147,9 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
   const { modelDialog, openModelCard, closeModelCard, handleSelectionAction, onModelCardCreated } = useNoteSelectionActions({
     noteId: selected?.id ?? null, onChanged: list.handleNoteChanged, notify: showToast,
   });
+
+  // 批 8 T10：证据候选轨（无 `session_id` 的手动笔记 ⇒ idle、不发 IPC；失败 ⇒ error 且 UI 不白屏）
+  const noteEvidence = useNoteEvidence(selected?.session_id, selected?.content);
 
   // v0.17.0：AI 能力入口——阅读态使用直接进入编辑态（用户裁决）+ 内容快照
   // （编辑态取编辑器当前内容=未保存所见即所修；阅读态用已存笔记内容——快照
@@ -274,6 +278,7 @@ export default function NotesPage({ focusNoteId, focusNoteSearch, focusGroupId, 
         onImageOpen={(src, title) => setPreviewImg({ src, title })}
         onCleanNotice={notifyCleanNotice}
         views={viewsFor("note")}
+        evidence={noteEvidence.evidence}
       />
       {/* 覆盖层（AI 对话框 / 模型卡对话框 / 图片放大预览 / 清理留痕 toast）——
           条件门控与 key 语义见 components/notes/NotesOverlays */}
