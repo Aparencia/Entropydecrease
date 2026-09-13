@@ -387,13 +387,15 @@ pub(crate) fn run_audio_loop(
     audio.stop();
 
     // M4/REQ-068（S4）：结束会话——回填 WAV 长度 + 触发清理
-    // （保留期 30 天 + 磁盘预算上限，删最旧；预算清理在会话结束时执行）
+    // （保留期/磁盘预算**取自配置通道** `audio-store.json`，与 `session_audio_cleanup`
+    // 命令同源——手改配置只有一处真源；缺失/损坏由 `load` 自行降级为默认值，不阻断停止）
     if let Some(w) = ctx.audio_writer.as_mut() {
         w.finalize();
+        let cfg = crate::audio_store::AudioStoreConfig::load(&data_dir.join("audio-store.json"));
         let summary = crate::audio_store::cleanup(
             &data_dir.join("session-audio"),
-            crate::audio_store::DEFAULT_RETENTION_DAYS,
-            crate::audio_store::DEFAULT_DISK_BUDGET_BYTES,
+            cfg.retention_days,
+            cfg.disk_budget_bytes,
         );
         if summary.deleted > 0 {
             eprintln!(
