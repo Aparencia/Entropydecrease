@@ -1,0 +1,297 @@
+/**
+ * LiveTranscriptStream — 实时转写流（采集期「实时转写」Tab 的内容区；批 7 T6 自
+ * `LiveActivityPanel.tsx` 纯搬迁而出，豁免表 `:38` 指定的拆法；**零行为变化**）。
+ *
+ * @ai-context: **常驻挂载**（父件无条件渲染本件，靠 `active` 自隐）：切到「画面要点」Tab 时
+ *              转写行仍继续累积；`live:status` / `asr-partial` / `asr-final` / `subtitle`
+ *              四个订阅与「partial 按句读拆行、定稿原位转黑、超限先沉淀」整段搬自拆前实现。
+ * @ai-context: 注入面：`counts`/`onBump`（状态行计数同源）、`onPhase`/`onStarted`（`live:status`
+ *              的文案与计时起点仍归父件状态机）、`elapsedMs`（父件 1s tick 驱动）、
+ *              `fmtTime`/`nextId`/`maxKept`（父件持单一份实现，防拆件后两套口径）。
+ */
+import { useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+// 2026-08 用户需求：实时转写中显示图片数据（转写 Tab 顶部"最近画面"条，独立区域不跳动）
+import LiveImageStrip from "./LiveImageStrip";
+import type { AsrFinalEvent, SubtitleEvent } from "../types";
+import { Text } from "../ui/primitives";
+
+/** 定稿转写行（字幕或语音） */
+interface TranscriptLine {
+  id: number;
+  time: number; // 会话相对毫秒（前端按事件到达估算，展示 mm:ss）
+  source: "subtitle" | "asr";
+  text: string;
+}
+
+/**
+ * 识别中行（M3/REQ-038 流式先行 + 静默修正；2026-08 扩展为多行挂起）：
+ * committed=false = partial 上屏（灰色斜体"识别中"，同句流式更新原位替换）；
+ * committed=true = SenseVoice 重打分定稿（原位转黑，待新句开始统一沉淀入列表）。
+ * id=句子序：同句 partial→final 复用同一 id（保证 React key 稳定不跳动）。
+ */
+interface PendingLine {
+  id: number;
+  /** 定稿时刻（会话纪元 ms；未定稿阶段 0——展示用实时时钟） */
+  time: number;
+  text: string;
+  committed: boolean;
+}
+
+/** 显示条数（简要：只显示最近几条，总数在状态行计数） */
+const SHOW_TRANSCRIPT_LINES = 6;
+/** 未沉淀行显示上限（防御极端连续定稿；超限先沉淀已定稿行） */
+const MAX_PENDING_LINES = 8;
+
+/** 句子序（未沉淀行 id；跨会话单调递增即可，不重置） */
+let pendingSeq = 0;
+const nextPendingId = () => ++pendingSeq;
+
+/**
+ * 中文句读切分（识别中行展示用，2026-08 用户需求：识别中的灰斜体内容全部显示）。
+ *
+ * @ai-context: 流式 partial 是整句候选且可能含多个句子（zipformer 中文模型输出
+ *              带句读；asr_clean 的跨标点重复/纯标点幻觉处理即依赖此事实）——
+ *              现状整句挤在一行灰斜里越滚越长；按句读切分后每句一行，全部可见。
+ *              句读保留在句尾；无句读尾段为"残余"（调用方加 … 表示仍在识别）。
+ *              不切英文句点（Mr./U.S. 缩写防误切）与逗号（句内成分不拆行）。
+ *              连续句读（"结束。。"）切出的纯标点段过滤（防垃圾行）。
+ */
+function splitBySentence(text: string): string[] {
+  const parts: string[] = [];
+  let buf = "";
+  for (const ch of text) {
+    buf += ch;
+    if ("。！？!?…".includes(ch)) {
+      if (hasText(buf)) parts.push(buf);
+      buf = "";
+    }
+  }
+  if (hasText(buf)) parts.push(buf);
+  return parts;
+}
+
+/** 段是否含实质内容（过滤纯标点/空白段——连续句读切出的垃圾段不展示） */
+function hasText(seg: string): boolean {
+  return seg.trim().length > 0 && !/^[。！？!?…\s]+$/.test(seg);
+}
+
+export default function LiveTranscriptStream({
+  active, sessionId, counts, onBump, onPhase, onStarted, elapsedMs, fmtTime, nextId, maxKept,
+}: {
+  active: boolean;
+  sessionId?: number | null;
+  counts: { subtitle: number; asr: number; ocr: number };
+  onBump: (kind: "asr" | "subtitle") => void;
+  onPhase: (text: string) => void;
+  onStarted: () => void;
+  elapsedMs: number;
+  fmtTime: (ms: number) => string;
+  nextId: () => number;
+  maxKept: number;
+}) {
+  const [transcripts, setTranscripts] = useState<TranscriptLine[]>([]);
+  // 未沉淀行列表（识别中 partial + 已定稿待沉淀 committed；2026-08 多行挂起）
+  const [partials, setPartials] = useState<PendingLine[]>([]);
+  // TD-053 修复：partials 以 ref 镜像（事件回调读最新值），沉淀副作用移出 setState updater
+  const partialsRef = useRef<PendingLine[]>([]);
+
+  useEffect(() => {
+    // M3/REQ-038 沉淀：已定稿（committed）的识别中行并入定稿列表（计数+时间戳）。
+    // 纯追加（不读旧列表、无副作用），StrictMode 双调用安全（幂等由调用方保证只调一次）
+    const settleAsrLine = (text: string, time: number) => {
+      setTranscripts((prev) => {
+        const next = [...prev, { id: nextId(), time, source: "asr" as const, text }];
+        return next.length > maxKept ? next.slice(next.length - maxKept) : next;
+      });
+      onBump("asr");
+    };
+    // 事件回调统一入口：更新未沉淀行列表并同步 ref 镜像（TD-053：副作用在回调，
+    // 不在 updater——StrictMode 双调用不再导致计数双加/ID 跳号）
+    const applyPartials = (next: PendingLine[]) => {
+      let list = next;
+      // 防御极端连续定稿：超上限先沉淀已定稿行（剩余通常 ≤1 条识别中行）
+      if (list.length > MAX_PENDING_LINES) {
+        list = settleCommitted(list);
+      }
+      partialsRef.current = list;
+      setPartials(list);
+    };
+    /** 沉淀全部已定稿行入转写列表（按各自定稿时刻），返回剩余未定稿行 */
+    const settleCommitted = (list: PendingLine[]): PendingLine[] => {
+      for (const line of list) {
+        if (line.committed && line.text.trim()) {
+          settleAsrLine(line.text, line.time);
+        }
+      }
+      return list.filter((l) => !l.committed);
+    };
+
+    const unlisteners: Promise<() => void>[] = [
+      // 状态机：live:status 的 recording 由 ClassroomPage 判定显示时机，此处只映射文案
+      listen<string>("live:status", (e) => {
+        if (e.payload === "recording") {
+          onPhase("● 采集中");
+          onStarted();
+        } else if (e.payload === "stopped") {
+          // 停止：全部已定稿行沉淀入列表（防末句丢失，T2 语义）；识别中残余清空
+          applyPartials(settleCommitted(partialsRef.current));
+          onPhase("⏹ 已停止");
+        } else if (e.payload === "failed") {
+          onPhase("⚠ 采集异常");
+        }
+      }),
+      listen<string>("live:asr-partial", (e) => {
+        // 流式更新分两种：同句（末行未定稿 → 原位替换文本）；新句（末行已定稿或
+        // 无行 → 先沉淀全部已定稿行，再开新行）。后端单流保证：final 之后的
+        // partial 必属新句（端点已重建流）——无需显式句 id 协议
+        const list = partialsRef.current;
+        const last = list[list.length - 1];
+        if (last && !last.committed) {
+          applyPartials([...list.slice(0, -1), { ...last, text: e.payload }]);
+        } else {
+          applyPartials([
+            ...settleCommitted(list),
+            { id: nextPendingId(), time: 0, text: e.payload, committed: false },
+          ]);
+        }
+      }),
+      listen<AsrFinalEvent>("live:asr-final", (e) => {
+        // M3/REQ-038 静默修正：partial 行原位灰→黑（无闪烁无跳动）；
+        // 无 partial（快速断句）时直接沉淀为定稿行；
+        // 连续定稿（上一行已定稿未沉淀）→ 新行追加——修复原实现互相覆盖丢失
+        const list = partialsRef.current;
+        const last = list[list.length - 1];
+        if (last && !last.committed) {
+          applyPartials([
+            ...list.slice(0, -1),
+            { ...last, text: e.payload.text, time: e.payload.timestampMs, committed: true },
+          ]);
+        } else if (last) {
+          applyPartials([
+            ...list,
+            { id: nextPendingId(), time: e.payload.timestampMs, text: e.payload.text, committed: true },
+          ]);
+        } else {
+          settleAsrLine(e.payload.text, e.payload.timestampMs);
+        }
+      }),
+      listen<SubtitleEvent>("live:subtitle", (e) => {
+        setTranscripts((prev) => {
+          // TD-043：时间戳取后端会话纪元（start_ms = 字幕首样本时刻）
+          const next = [
+            ...prev,
+            { id: nextId(), time: e.payload.timestampMs, source: "subtitle" as const, text: e.payload.text },
+          ];
+          return next.length > maxKept ? next.slice(next.length - maxKept) : next;
+        });
+        onBump("subtitle");
+      }),
+    ];
+    return () => {
+      unlisteners.forEach((p) => void p.then((fn) => fn()));
+    };
+  }, []);
+
+  // 简要显示：只渲染最近几条（总数在状态行）
+  const shownTranscripts = transcripts.slice(-SHOW_TRANSCRIPT_LINES);
+  const totalTranscript = counts.subtitle + counts.asr;
+
+  if (!active) return null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      {/* 2026-08 用户需求：实时图片数据（最近画面条；独立区域，图片更新不引起转写行跳动） */}
+      <LiveImageStrip sessionId={sessionId ?? null} />
+      {shownTranscripts.length === 0 && partials.length === 0 && (
+        <Text as="p" size={5} tone="ink-3">等待识别…（说话或屏幕出现字幕时显示）</Text>
+      )}
+      {shownTranscripts.map((t) => (
+        <div key={t.id} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 13, lineHeight: 1.6 }}>
+          <Text tone="ink-3" style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+            {fmtTime(t.time)}
+          </Text>
+          <span
+            title={t.source === "subtitle" ? "字幕" : "语音"}
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              flexShrink: 0,
+              alignSelf: "center",
+              background: t.source === "subtitle" ? "#0d9488" : "#9ca3af",
+            }}
+          />
+          <span style={{ color: t.source === "subtitle" ? "#0f766e" : "#374151" }}>{t.text}</span>
+        </div>
+      ))}
+      {totalTranscript > SHOW_TRANSCRIPT_LINES && (
+        <Text as="p" tone="ink-3" style={{ fontSize: 11, margin: "4px 0 0", paddingLeft: 52 }}>
+          ⋯ 共 {totalTranscript} 段，仅显示最近 {SHOW_TRANSCRIPT_LINES} 条（会话页可看全部）
+        </Text>
+      )}
+      {/* 2026-08 用户需求：ASR 未沉淀行全部展示——识别中（灰斜）按句读拆多行
+          全部显示；已定稿待沉淀（黑）一行；连续定稿各行并存；新句首个
+          partial 到达时统一沉淀入上方列表 */}
+      {partials.map((p) => {
+        if (p.committed) {
+          return (
+            <div
+              key={p.id}
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "baseline",
+                fontSize: 13,
+                color: "#374151",
+              }}
+            >
+              <span style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                {fmtTime(p.time)}
+              </span>
+              <span
+                title="已定稿待沉淀"
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  flexShrink: 0,
+                  alignSelf: "center",
+                  background: "#9ca3af",
+                }}
+              />
+              <span>{p.text}</span>
+            </div>
+          );
+        }
+        // 识别中：整句候选按句读切分多行灰斜体——"识别中的内容全部显示"；
+        // 首行带时间，后续行对齐留空；残余段（无句读尾段）加 … 
+        const segs = splitBySentence(p.text);
+        return segs.map((seg, i) => (
+          <Text as="div" size={4} tone="ink-3" key={`${p.id}-${i}`} style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "baseline",
+            fontStyle: "italic",
+          }}>
+            <span style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+              {i === 0 ? fmtTime(elapsedMs) : ""}
+            </span>
+            <span
+              title="识别中"
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                flexShrink: 0,
+                alignSelf: "center",
+                background: "#d1d5db",
+              }}
+            />
+            <span>{seg}{i === segs.length - 1 ? "…" : ""}</span>
+          </Text>
+        ));
+      })}
+    </div>
+  );
+}

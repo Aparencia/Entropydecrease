@@ -10,64 +10,30 @@
  *              新句首个 partial 到达时统一沉淀入列表。
  * @ai-context: 状态机：初始化（模型加载）→ 采集中 → 停止中 → 融合中 → 完成/失败，
  *              由 live:status / session:fusing/fused/failed 事件推导，父组件控制显隐。
+ * @ai-context: 批 7 T6（C9.16 的 7a 半）：按豁免表 `:38` 的拆法把转录流与 OCR 预览整段搬至
+ *              `LiveTranscriptStream.tsx` / `LiveOcrPreview.tsx`（**纯搬迁、零行为变化**）；
+ *              本件只留状态机 + 统计行 + 采集信息条 + 档案条 + Tab 栏与两件的装配。
+ *              两个子件**常驻挂载**（列表状态与事件订阅在子件内）⇒ 切 Tab 不丢行。
+ *              「逐段显影」动效属 7b/T20，本件不含任何动效。
  */
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-// 2026-08 用户需求：实时转写中显示图片数据（转写 Tab 顶部"最近画面"条，独立区域不跳动）
-import LiveImageStrip from "./LiveImageStrip";
 // v0.9.0 验收缺陷修复：采集态档案条（形态×画面档×领域 + 升降档提示/确认）
 import LiveProfileStrip from "./LiveProfileStrip";
-import type { AsrFinalEvent, LiveSessionStatus, OcrEvent, SessionInfo, SubtitleEvent } from "../types";
+import type { LiveSessionStatus, SessionInfo } from "../types";
 // 批 2b：暂停展示单一来源（context 注入 pausedReason + 三态文案，防双轨）
 import { useCaptureControl } from "../hooks/useLiveCaptureControl";
 import { pauseReasonLabel } from "../hooks/liveCaptureState";
-import { Text } from "../ui/primitives";
+// 批 7 T6：转录流 / OCR 预览两件（各自持有列表状态与事件订阅）
+import LiveTranscriptStream from "./LiveTranscriptStream";
+import LiveOcrPreview from "./LiveOcrPreview";
 
-/** 定稿转写行（字幕或语音） */
-interface TranscriptLine {
-  id: number;
-  time: number; // 会话相对毫秒（前端按事件到达估算，展示 mm:ss）
-  source: "subtitle" | "asr";
-  text: string;
-}
-
-/**
- * 识别中行（M3/REQ-038 流式先行 + 静默修正；2026-08 扩展为多行挂起）：
- * committed=false = partial 上屏（灰色斜体"识别中"，同句流式更新原位替换）；
- * committed=true = SenseVoice 重打分定稿（原位转黑，待新句开始统一沉淀入列表）。
- * id=句子序：同句 partial→final 复用同一 id（保证 React key 稳定不跳动）。
- */
-interface PendingLine {
-  id: number;
-  /** 定稿时刻（会话纪元 ms；未定稿阶段 0——展示用实时时钟） */
-  time: number;
-  text: string;
-  committed: boolean;
-}
-
-/** 画面要点行（v0.7.3 REQ-161：一行=一屏摘要——同屏块合并显示） */
-interface OcrLine {
-  id: number;
-  time: number;
-  /** 屏号（同屏事件合并为一行） */
-  screenId: number;
-  text: string;
-}
-
-/** 显示条数（简要：只显示最近几条，总数在状态行计数） */
-const SHOW_TRANSCRIPT_LINES = 6;
-const SHOW_OCR_LINES = 4;
-/** 内存保留上限（计数独立累加，截断只影响可显示的历史） */
+/** 内存保留上限（计数独立累加，截断只影响可显示的历史；注入给两个子件，保持单一份口径） */
 const MAX_KEPT = 100;
-/** 未沉淀行显示上限（防御极端连续定稿；超限先沉淀已定稿行） */
-const MAX_PENDING_LINES = 8;
 
 let seq = 0;
 const nextId = () => ++seq;
-/** 句子序（未沉淀行 id；跨会话单调递增即可，不重置） */
-let pendingSeq = 0;
-const nextPendingId = () => ++pendingSeq;
 
 function fmtTime(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -84,35 +50,6 @@ function fmtDur(secs: number): string {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-/**
- * 中文句读切分（识别中行展示用，2026-08 用户需求：识别中的灰斜体内容全部显示）。
- *
- * @ai-context: 流式 partial 是整句候选且可能含多个句子（zipformer 中文模型输出
- *              带句读；asr_clean 的跨标点重复/纯标点幻觉处理即依赖此事实）——
- *              现状整句挤在一行灰斜里越滚越长；按句读切分后每句一行，全部可见。
- *              句读保留在句尾；无句读尾段为"残余"（调用方加 … 表示仍在识别）。
- *              不切英文句点（Mr./U.S. 缩写防误切）与逗号（句内成分不拆行）。
- *              连续句读（"结束。。"）切出的纯标点段过滤（防垃圾行）。
- */
-function splitBySentence(text: string): string[] {
-  const parts: string[] = [];
-  let buf = "";
-  for (const ch of text) {
-    buf += ch;
-    if ("。！？!?…".includes(ch)) {
-      if (hasText(buf)) parts.push(buf);
-      buf = "";
-    }
-  }
-  if (hasText(buf)) parts.push(buf);
-  return parts;
-}
-
-/** 段是否含实质内容（过滤纯标点/空白段——连续句读切出的垃圾段不展示） */
-function hasText(seg: string): boolean {
-  return seg.trim().length > 0 && !/^[。！？!?…\s]+$/.test(seg);
-}
-
 export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionId?: number | null; windowTitle?: string | null }) {
   // 批 2b：暂停展示单一来源（CaptureStatusProvider context，主窗单实例）——
   // 本面板不再自订阅 live:paused/resumed（详情流只管内容阶段，防双轨漂移）
@@ -120,19 +57,23 @@ export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionI
   const [tab, setTab] = useState<"transcript" | "ocr">("transcript");
   // 状态机（简要徽标文本；内容阶段——暂停文案由 pausedReason 覆盖展示）
   const [phase, setPhase] = useState<string>("正在初始化…");
-  const [transcripts, setTranscripts] = useState<TranscriptLine[]>([]);
-  // 未沉淀行列表（识别中 partial + 已定稿待沉淀 committed；2026-08 多行挂起）
-  const [partials, setPartials] = useState<PendingLine[]>([]);
-  const [ocrLines, setOcrLines] = useState<OcrLine[]>([]);
   // 累计计数（列表截断后仍保留）
   const countsRef = useRef({ subtitle: 0, asr: 0, ocr: 0 });
   const [counts, setCounts] = useState({ subtitle: 0, asr: 0, ocr: 0 });
   const startedAtRef = useRef<number | null>(null);
   const [, setTick] = useState(0);
-  // TD-053 修复：partials 以 ref 镜像（事件回调读最新值），沉淀副作用移出 setState updater
-  const partialsRef = useRef<PendingLine[]>([]);
   // v0.7.2（REQ-151）：采集信息面板（平台/时长/合集——live:session-info 事件）
   const [info, setInfo] = useState<SessionInfo | null>(null);
+
+  /** 计数累加入口（两个子件的回调；ref 为真源 ⇒ 与列表更新同批，无 updater 副作用） */
+  const bump = (kind: "subtitle" | "asr" | "ocr") => {
+    countsRef.current[kind] += 1;
+    setCounts({ ...countsRef.current });
+  };
+  /** 计时起点（首个 recording 到达时；`??` 幂等，重复事件不重置） */
+  const markStarted = () => {
+    startedAtRef.current = startedAtRef.current ?? Date.now();
+  };
 
   // 会话切换：清空旧会话信息 + 拉取兜底（live:session-info 事件在引擎就绪时
   // 发出，可能早于本面板挂载/监听注册——invoke 拉取保证信息条始终可见；
@@ -164,119 +105,7 @@ export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionI
   }, []);
 
   useEffect(() => {
-    // M3/REQ-038 沉淀：已定稿（committed）的识别中行并入定稿列表（计数+时间戳）。
-    // 纯追加（不读旧列表、无副作用），StrictMode 双调用安全（幂等由调用方保证只调一次）
-    const settleAsrLine = (text: string, time: number) => {
-      setTranscripts((prev) => {
-        const next = [...prev, { id: nextId(), time, source: "asr" as const, text }];
-        return next.length > MAX_KEPT ? next.slice(next.length - MAX_KEPT) : next;
-      });
-      countsRef.current.asr += 1;
-      setCounts({ ...countsRef.current });
-    };
-    // 事件回调统一入口：更新未沉淀行列表并同步 ref 镜像（TD-053：副作用在回调，
-    // 不在 updater——StrictMode 双调用不再导致计数双加/ID 跳号）
-    const applyPartials = (next: PendingLine[]) => {
-      let list = next;
-      // 防御极端连续定稿：超上限先沉淀已定稿行（剩余通常 ≤1 条识别中行）
-      if (list.length > MAX_PENDING_LINES) {
-        list = settleCommitted(list);
-      }
-      partialsRef.current = list;
-      setPartials(list);
-    };
-    /** 沉淀全部已定稿行入转写列表（按各自定稿时刻），返回剩余未定稿行 */
-    const settleCommitted = (list: PendingLine[]): PendingLine[] => {
-      for (const line of list) {
-        if (line.committed && line.text.trim()) {
-          settleAsrLine(line.text, line.time);
-        }
-      }
-      return list.filter((l) => !l.committed);
-    };
-
     const unlisteners: Promise<() => void>[] = [
-      // 状态机：live:status 的 recording 由 ClassroomPage 判定显示时机，此处只映射文案
-      listen<string>("live:status", (e) => {
-        if (e.payload === "recording") {
-          setPhase("● 采集中");
-          startedAtRef.current = startedAtRef.current ?? Date.now();
-        } else if (e.payload === "stopped") {
-          // 停止：全部已定稿行沉淀入列表（防末句丢失，T2 语义）；识别中残余清空
-          applyPartials(settleCommitted(partialsRef.current));
-          setPhase("⏹ 已停止");
-        } else if (e.payload === "failed") {
-          setPhase("⚠ 采集异常");
-        }
-      }),
-      listen<string>("live:asr-partial", (e) => {
-        // 流式更新分两种：同句（末行未定稿 → 原位替换文本）；新句（末行已定稿或
-        // 无行 → 先沉淀全部已定稿行，再开新行）。后端单流保证：final 之后的
-        // partial 必属新句（端点已重建流）——无需显式句 id 协议
-        const list = partialsRef.current;
-        const last = list[list.length - 1];
-        if (last && !last.committed) {
-          applyPartials([...list.slice(0, -1), { ...last, text: e.payload }]);
-        } else {
-          applyPartials([
-            ...settleCommitted(list),
-            { id: nextPendingId(), time: 0, text: e.payload, committed: false },
-          ]);
-        }
-      }),
-      listen<AsrFinalEvent>("live:asr-final", (e) => {
-        // M3/REQ-038 静默修正：partial 行原位灰→黑（无闪烁无跳动）；
-        // 无 partial（快速断句）时直接沉淀为定稿行；
-        // 连续定稿（上一行已定稿未沉淀）→ 新行追加——修复原实现互相覆盖丢失
-        const list = partialsRef.current;
-        const last = list[list.length - 1];
-        if (last && !last.committed) {
-          applyPartials([
-            ...list.slice(0, -1),
-            { ...last, text: e.payload.text, time: e.payload.timestampMs, committed: true },
-          ]);
-        } else if (last) {
-          applyPartials([
-            ...list,
-            { id: nextPendingId(), time: e.payload.timestampMs, text: e.payload.text, committed: true },
-          ]);
-        } else {
-          settleAsrLine(e.payload.text, e.payload.timestampMs);
-        }
-      }),
-      listen<SubtitleEvent>("live:subtitle", (e) => {
-        setTranscripts((prev) => {
-          // TD-043：时间戳取后端会话纪元（start_ms = 字幕首样本时刻）
-          const next = [
-            ...prev,
-            { id: nextId(), time: e.payload.timestampMs, source: "subtitle" as const, text: e.payload.text },
-          ];
-          return next.length > MAX_KEPT ? next.slice(next.length - MAX_KEPT) : next;
-        });
-        countsRef.current.subtitle += 1;
-        setCounts({ ...countsRef.current });
-      }),
-      listen<OcrEvent>("live:ocr", (e) => {
-        setOcrLines((prev) => {
-          // TD-043：时间戳取后端会话纪元；v0.7.3（REQ-161）：同屏块合并为
-          // 一行屏摘要（首块 + 后续小字块追加，防 175 行碎片刷屏）
-          const last = prev[prev.length - 1];
-          if (last && last.screenId === e.payload.screenId) {
-            const next = [...prev];
-            const text =
-              last.text.length < 80 ? `${last.text} ${e.payload.text}` : last.text;
-            next[next.length - 1] = { ...last, text };
-            return next;
-          }
-          const next = [
-            ...prev,
-            { id: nextId(), time: e.payload.timestampMs, screenId: e.payload.screenId, text: e.payload.text },
-          ];
-          return next.length > MAX_KEPT ? next.slice(next.length - MAX_KEPT) : next;
-        });
-        countsRef.current.ocr += 1;
-        setCounts({ ...countsRef.current });
-      }),
       // v0.7.2（REQ-151）：采集信息（平台/时长/合集——标题信号 + 播放器 OCR）
       listen<SessionInfo>("live:session-info", (e) => setInfo(e.payload)),
       // 批 2b：live:paused/resumed 不再由本面板订阅——暂停为采集控制状态，
@@ -295,10 +124,6 @@ export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionI
   const statusText = capture.pausedReason ? pauseReasonLabel(capture.pausedReason) ?? phase : phase;
   const phaseColor = phase.startsWith("●") ? "#dc2626" : phase.startsWith("⏳") ? "#b45309" : phase.startsWith("⚠") ? "#dc2626" : "#374151";
   const statusColor = capture.pausedReason ? "#b45309" : phaseColor;
-  // 简要显示：只渲染最近几条（总数在状态行）
-  const shownTranscripts = transcripts.slice(-SHOW_TRANSCRIPT_LINES);
-  const shownOcr = ocrLines.slice(-SHOW_OCR_LINES);
-  const totalTranscript = counts.subtitle + counts.asr;
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
@@ -390,123 +215,27 @@ export default function LiveActivityPanel({ sessionId, windowTitle }: { sessionI
 
       {/* 内容流（简要：仅最近几条，无滚动） */}
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 14px 14px" }}>
-        {tab === "transcript" ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            {/* 2026-08 用户需求：实时图片数据（最近画面条；独立区域，图片更新不引起转写行跳动） */}
-            <LiveImageStrip sessionId={sessionId ?? null} />
-            {shownTranscripts.length === 0 && partials.length === 0 && (
-              <Text as="p" size={5} tone="ink-3">等待识别…（说话或屏幕出现字幕时显示）</Text>
-            )}
-            {shownTranscripts.map((t) => (
-              <div key={t.id} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 13, lineHeight: 1.6 }}>
-                <Text tone="ink-3" style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-                  {fmtTime(t.time)}
-                </Text>
-                <span
-                  title={t.source === "subtitle" ? "字幕" : "语音"}
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 4,
-                    flexShrink: 0,
-                    alignSelf: "center",
-                    background: t.source === "subtitle" ? "#0d9488" : "#9ca3af",
-                  }}
-                />
-                <span style={{ color: t.source === "subtitle" ? "#0f766e" : "#374151" }}>{t.text}</span>
-              </div>
-            ))}
-            {totalTranscript > SHOW_TRANSCRIPT_LINES && (
-              <Text as="p" tone="ink-3" style={{ fontSize: 11, margin: "4px 0 0", paddingLeft: 52 }}>
-                ⋯ 共 {totalTranscript} 段，仅显示最近 {SHOW_TRANSCRIPT_LINES} 条（会话页可看全部）
-              </Text>
-            )}
-            {/* 2026-08 用户需求：ASR 未沉淀行全部展示——识别中（灰斜）按句读拆多行
-                全部显示；已定稿待沉淀（黑）一行；连续定稿各行并存；新句首个
-                partial 到达时统一沉淀入上方列表 */}
-            {partials.map((p) => {
-              if (p.committed) {
-                return (
-                  <div
-                    key={p.id}
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      alignItems: "baseline",
-                      fontSize: 13,
-                      color: "#374151",
-                    }}
-                  >
-                    <span style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-                      {fmtTime(p.time)}
-                    </span>
-                    <span
-                      title="已定稿待沉淀"
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: 4,
-                        flexShrink: 0,
-                        alignSelf: "center",
-                        background: "#9ca3af",
-                      }}
-                    />
-                    <span>{p.text}</span>
-                  </div>
-                );
-              }
-              // 识别中：整句候选按句读切分多行灰斜体——"识别中的内容全部显示"；
-              // 首行带时间，后续行对齐留空；残余段（无句读尾段）加 … 
-              const segs = splitBySentence(p.text);
-              return segs.map((seg, i) => (
-                <Text as="div" size={4} tone="ink-3" key={`${p.id}-${i}`} style={{
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "baseline",
-                  fontStyle: "italic",
-                }}>
-                  <span style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-                    {i === 0 ? fmtTime(elapsedMs) : ""}
-                  </span>
-                  <span
-                    title="识别中"
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 4,
-                      flexShrink: 0,
-                      alignSelf: "center",
-                      background: "#d1d5db",
-                    }}
-                  />
-                  <span>{seg}{i === segs.length - 1 ? "…" : ""}</span>
-                </Text>
-              ));
-            })}
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            {shownOcr.length === 0 && (
-              <Text as="p" size={5} tone="ink-3">等待画面识别…（屏幕出现文字/板书时显示）</Text>
-            )}
-            {shownOcr.map((o) => (
-              <div key={o.id} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 13, lineHeight: 1.6 }}>
-                <Text tone="ink-3" style={{ fontSize: 11, width: 44, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-                  {fmtTime(o.time)}
-                </Text>
-                <span style={{ fontSize: 10, color: "#2563eb", flexShrink: 0, fontWeight: 600 }}>
-                  屏{o.screenId}
-                </span>
-                <span style={{ color: "#1e40af" }}>{o.text}</span>
-              </div>
-            ))}
-            {counts.ocr > SHOW_OCR_LINES && (
-              <Text as="p" tone="ink-3" style={{ fontSize: 11, margin: "4px 0 0", paddingLeft: 52 }}>
-                ⋯ 共 {counts.ocr} 块 / {ocrLines.length} 屏，仅显示最近 {SHOW_OCR_LINES} 屏（会话页可看全部）
-              </Text>
-            )}
-          </div>
-        )}
+        {/* 批 7 T6：两件常驻挂载（各自按 `active` 自隐，切 Tab 不丢行） */}
+        <LiveTranscriptStream
+          active={tab === "transcript"}
+          sessionId={sessionId}
+          counts={counts}
+          onBump={bump}
+          onPhase={setPhase}
+          onStarted={markStarted}
+          elapsedMs={elapsedMs}
+          fmtTime={fmtTime}
+          nextId={nextId}
+          maxKept={MAX_KEPT}
+        />
+        <LiveOcrPreview
+          active={tab === "ocr"}
+          counts={counts}
+          onBump={bump}
+          fmtTime={fmtTime}
+          nextId={nextId}
+          maxKept={MAX_KEPT}
+        />
       </div>
     </div>
   );

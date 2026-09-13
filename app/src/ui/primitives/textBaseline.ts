@@ -38,7 +38,7 @@ export const FROZEN_MUTED_GRAY_FILES = 43;
 export const FROZEN_FONT_OOB_TOTAL = 551;
 
 /** 字号越界冻结**文件数**（条目数；只许降） */
-export const FROZEN_FONT_OOB_FILES = 120;
+export const FROZEN_FONT_OOB_FILES = 122; // 120 → 122：批 7 T6 拆件，键随代码走（Σ 551 不变，一处文件变三处）
 
 /**
  * 锚（anti-table-swap）：条目数 + 一个具名文件的冻结值；换一张同样「自洽」的表 ⇒ 锚必红。
@@ -46,7 +46,7 @@ export const FROZEN_FONT_OOB_FILES = 120;
  * 新锚 = `NoteLinkToSystem.tsx`：5 处**全部**是登记例外（B1 硬守卫 + 品牌青三元）⇒ 无裁决不可能下降。
  */
 export const ANCHOR_MUTED_GRAY = { file: "components/NoteLinkToSystem.tsx", count: 5, files: 43 } as const;
-export const ANCHOR_FONT_OOB = { file: "components/action-center/ActionCenterPanel.tsx", count: 19, files: 120 } as const;
+export const ANCHOR_FONT_OOB = { file: "components/action-center/ActionCenterPanel.tsx", count: 19, files: 122 } as const;
 
 /**
  * 相对 `app/src` 的正斜杠路径 → 该文件**允许残留的弱化灰行数上限**（只许降，键不许新增）。
@@ -72,7 +72,7 @@ export const FROZEN_MUTED_GRAY_BY_FILE: Readonly<Record<string, number>> = {
   "components/KnowledgeSystemWizard.tsx": 2,
   "components/KnowledgeTreeView.tsx": 1,
   "components/LearningLibraryEngineSection.tsx": 2,
-  "components/LiveActivityPanel.tsx": 2,
+  "components/LiveTranscriptStream.tsx": 2,
   "components/MaterialInputPanel.tsx": 1,
   "components/NoteColorPicker.tsx": 2,
   "components/NoteEditView.tsx": 1,
@@ -140,7 +140,7 @@ export const RESIDUAL: readonly { file: string; kind: TextResidualKind; reason: 
   { file: "components/KnowledgeSystemWizard.tsx", kind: "ternary-no-equivalent", reason: "`:187` 步骤徽标两支非灰（active #0f766e 品牌青 / done #047857）+ 背景 / 描边条件；`:244` 原生 `<button disabled>` ⇒ 无等价档 / `Button` 域" },
   { file: "components/KnowledgeTreeView.tsx", kind: "interactive", reason: "`:162` `onClick` + `data-testid`（展开 / 折叠节点）⇒ 可交互文本属 `Button` 域（批 5/7）" },
   { file: "components/LearningLibraryEngineSection.tsx", kind: "interactive-no-equivalent", reason: "2 处原生 `<button disabled>`（下载模型 / 加载引擎）+ 非灰支 #374151 / #0f766e + `background` 三元 ⇒ 交互 + 无等价档" },
-  { file: "components/LiveActivityPanel.tsx", kind: "nontext", reason: "2 处 `background`（转写来源色点 / 识别中色点底色）不是墨度 ⇒ B19 第 5 条：不迁不动" },
+  { file: "components/LiveTranscriptStream.tsx", kind: "nontext", reason: "2 处 `background`（转写来源色点 / 识别中色点底色）不是墨度 ⇒ B19 第 5 条：不迁不动；批 7 T6 拆件时自 `components/LiveActivityPanel.tsx` 整段搬来（键随代码走：条目数与总数 43/63 均不变）" },
   { file: "components/MaterialInputPanel.tsx", kind: "interactive-no-equivalent", reason: "原生 `<button disabled>` + 非灰支 #fff（品牌青实底白字）⇒ 交互 + 无等价档" },
   { file: "components/NoteColorPicker.tsx", kind: "nontext", reason: "2 处 `border`（悬停描边 / 清除色虚线框）不是墨度 ⇒ B19 第 5 条" },
   { file: "components/NoteEditView.tsx", kind: "b1-non-migrated", reason: "B1/B2 硬守卫：本文件在 `NON_MIGRATED_14` 内（`dialogMigration.e.test.ts` ② + `buttonMigration.test.ts` ④ 断言「不迁的 14 个不许被顺手迁掉」）——加原语 import 会绕过守卫 ⇒ 本处（快捷键提示）不迁" },
@@ -226,9 +226,11 @@ export const FROZEN_FONT_OOB_BY_FILE: Readonly<Record<string, number>> = {
   "components/LearningLibraryEngineSection.tsx": 2,
   "components/LearningLibraryPanel.tsx": 5,
   "components/LinkEntityPicker.tsx": 1,
-  "components/LiveActivityPanel.tsx": 8,
+  "components/LiveActivityPanel.tsx": 1,
   "components/LiveImageStrip.tsx": 6,
+  "components/LiveOcrPreview.tsx": 3,
   "components/LiveProfileStrip.tsx": 8,
+  "components/LiveTranscriptStream.tsx": 4,
   "components/MaterialInputPanel.tsx": 3,
   "components/ModelCardCreateDialog.tsx": 1,
   "components/ModelCardFromNoteDialog.tsx": 1,
