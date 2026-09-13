@@ -17,6 +17,9 @@
  *   真 `SessionViewHost` + 真惰性三轨视图（与 `SessionDetailPanel.test.tsx` 同一形态）。
  */
 import { act, cleanup, render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionDetail } from "../types";
 
@@ -99,7 +102,8 @@ describe("SessionsPage · [[ts:ms]] 深链（T17 · C27.4 的 M3 的页面层闭
         onOpenNote={noop}
       />,
     );
-    await screen.findByTestId("session-tritrack-view");
+    // 惰性三轨视图的 chunk 在并行跑多文件时可能 >1s（`findBy*` 缺省 1s）⇒ 显式放宽等待
+    await screen.findByTestId("session-tritrack-view", undefined, { timeout: 5000 });
     expect(invokeMock.mock.calls.filter((c) => c[0] === "get_session_detail"), "深链必须拉目标会话详情")
       .toEqual([["get_session_detail", { id: 1042 }]]);
     expect(playheads(container), "深链的 ms 没落到播放头上（「定位到 ms」不可感知）").toEqual(["5000"]);
@@ -134,8 +138,25 @@ describe("SessionsPage · [[ts:ms]] 深链（T17 · C27.4 的 M3 的页面层闭
     await act(async () => {
       pending.resolve(detailOf(2043, "会话乙"));
     });
-    await screen.findByTestId("session-tritrack-view");
+    // 惰性三轨视图的 chunk 在并行跑多文件时可能 >1s（`findBy*` 缺省 1s）⇒ 显式放宽等待
+    await screen.findByTestId("session-tritrack-view", undefined, { timeout: 5000 });
     expect(onFocusSeekConsumed).toHaveBeenCalledTimes(1);
     expect(playheads(view.container)).toEqual(["5000"]);
+  });
+
+  /**
+   * ③ **源码级锚**（补深链的**第一跳**）：`App.goSessions` 把 ms 写进焦点载体。
+   * @ai_context 形态取自已有的同类仪器 `shell/CommandPalette.kb.test.tsx`（它同样把 `App.tsx`
+   *   当源码文本读、按正则钉 `const [focusSeekMs, setFocusSeekMs]` 的声明与入口函数表）——
+   *   `App` 没有渲染级测试（渲染它 = 拉起整棵应用树），而这一跳是深链的**唯一入口**，
+   *   丢了 ms 会让下面所有判据都「绿得毫无意义」。故用**源码级**锚把它钉住（诚实边界：
+   *   它证明的是「这一行还在」，不是「运行期真的写进去了」——后者由 ① 的页面级判据接续）。
+   */
+  it("③ 源码级锚：`goSessions` 把 ms 逐字写进焦点载体（丢了它整条深链失效）", () => {
+    const app = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "App.tsx"), "utf8");
+    const body = /const goSessions = \([\s\S]*?\n {2}\};/.exec(app)?.[0] ?? "";
+    expect(body, "App.tsx 里找不到 `goSessions` 的定义体（锚漂了 ⇒ 本判据失效，先修锚）").not.toBe("");
+    expect(body, "`goSessions` 又丢了 ms（`[[ts:ms]]` 深链的第一跳断在这里）")
+      .toMatch(/setFocusSeekMs\(ms === undefined \? null : \{ ms, key \}\)/);
   });
 });

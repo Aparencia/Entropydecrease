@@ -273,7 +273,8 @@ describe("SessionDetailPanel · 批 7 T17 [[ts:ms]] 深链（R9.4 四件闭合 �
     const { container } = render(
       <SessionDetailPanel {...propsOf(detailOf(), { focusSeekMs: { ms: 2500, key: 1 }, onFocusSeekConsumed })} />,
     );
-    await screen.findByTestId("session-tritrack-view");
+    // 惰性三轨视图的 chunk 在并行跑多文件时可能 >1s（`findBy*` 缺省 1s）⇒ 显式放宽等待
+    await screen.findByTestId("session-tritrack-view", undefined, { timeout: 5000 });
     expect(playheads(container), "深链的 ms 没落到播放头上").toEqual(["2500"]);
     expect(onFocusSeekConsumed, "消费回调必须恰一次（App 靠它复位焦点，防陈旧 ms 复触发）").toHaveBeenCalledTimes(1);
     expect(snapshot(), "深链自动切视图改动了 localStorage（§C11.2 逐字禁止）").toEqual(before);
@@ -284,7 +285,7 @@ describe("SessionDetailPanel · 批 7 T17 [[ts:ms]] 深链（R9.4 四件闭合 �
     localStorage.setItem(MEMORY, "proof");
     render(<SessionDetailPanel {...propsOf(detailOf())} />);
     fireEvent.click(findButton("三轨对齐"));
-    await screen.findByTestId("session-tritrack-view");
+    await screen.findByTestId("session-tritrack-view", undefined, { timeout: 5000 });
     expect(localStorage.getItem(MEMORY), "切换器的持久化语义变了（既有调用点被破坏）").toBe("tritrack");
   });
 });
