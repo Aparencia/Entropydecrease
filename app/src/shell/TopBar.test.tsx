@@ -45,7 +45,7 @@ const CSS = readFileSync(join(HERE, "TopBar.css"), "utf8").replace(/\/\*[\s\S]*?
 const MOTION_CSS = readFileSync(join(HERE, "..", "ui", "primitives", "motion.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
 const TOPBAR_TSX = readFileSync(join(HERE, "TopBar.tsx"), "utf8");
 const APP_TSX = readFileSync(join(HERE, "..", "App.tsx"), "utf8");
-const AI_TOAST_TSX = readFileSync(join(HERE, "aiToast.tsx"), "utf8"); // 批 7 T1：AI toast 装配件的新家（纯搬迁）——「交给 belowNav 档」改读它；「导航行里不再有它」两条仍读 App.tsx
+const AI_TOAST_TSX = readFileSync(join(HERE, "aiToast.tsx"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, ""); // 批 7 T1：AI toast 装配件的新家（**剥注释** —— 不剥则注释里的字面量会满足判据，变异体 m9 实测过这个洞）
 /**
  * App.tsx 的**只留代码**版本：剥块注释与整行 `//` 注释。
  * Why 必须剥：App.tsx 的注释里逐字出现了 `<nav>`、`zIndex("toast")` 这些判据串 —— 不剥的话
