@@ -11,7 +11,7 @@
  *   ① `app/src/components/**` 的非 test 文件落在 `nativeButton.ratchet` 的**域内**
  *      （`nativeButton.ratchet.test.ts:143-145` 的 `isTest`/`isPrim`/`isIcons` 只排除
  *      `*.test.(ts|tsx)` / `ui/primitives/**` / `ui/icons/**`）⇒ 本件若渲染原生 `button` 元素，
- *      `FROZEN_NATIVE_BUTTON_TOTAL`（393）与逐文件冻结表会因**新文件**当场红；
+ *      `FROZEN_NATIVE_BUTTON_TOTAL`（392）与逐文件冻结表会因**新文件**当场红；
  *   ② `ui/primitives` 的 `ViewSwitcher` 已**逐字满足** R3.3 的三条形式要求：容器 `.ed-btn-group`
  *      + 段 `.ed-btn--segment`（= 既有 `ed-btn` 段控件类名空间）、布尔 `aria-pressed` 承载选中态、
  *      **零行内 style**（ADR-033 §4）⇒ 本件退化为适配器，零棘轮计数、零新类名、零新样式。
