@@ -283,18 +283,18 @@ describe("笔记视图宿主（批 5 T14 · C4 阻断 / §7.3 三条硬约束 / 
     expect(invokeMock.mock.calls.length).toBe(before);
   });
 
-  /** F11（T17 · C10.3）：卡片流必须经**带 seek 包装件**加载 —— 点真芯片看回调（包装件未生效 / 键改名 ⇒ 命中单参分支 ⇒ `at` 收不到）。 */
+  /** F11（T17 · C10.3）：卡片流必须经**带 seek 包装件**加载（未生效 ⇒ 命中单参分支 ⇒ `at` 收不到）；🔴 选择器限定在卡片流容器内 —— 常驻原文视图里也有同款芯片（若不限定就会点到它 ⇒ M6 实测变体不红）。 */
   it("F11 卡片流芯片带毫秒：点 [data-ts-ms] ⇒ onOpenSessionAt(42, 5000)，单参回调不被调", async () => {
     const plain = vi.fn(); const at = vi.fn();
     const { container } = render(<Harness selected={{ ...note, content: "跳转 [⏱ 00:05]([[ts:5000]]) 处" }} onOpenSession={plain} onOpenSessionAt={at} />);
     await clickSegment("卡片流");
     const chip = await waitFor(() => {
-      const el = container.querySelector<HTMLElement>("[data-ts-ms]");
+      const el = container.querySelector<HTMLElement>('[data-testid="note-card-flow"] [data-ts-ms]');
       expect(el, "卡片流没渲染出回链芯片").toBeTruthy();
       return el as HTMLElement;
     });
     fireEvent.click(chip);
-    expect(at, "包装件没生效 —— 检查 CARD_FLOW_KEY 是否与注册表一致").toHaveBeenCalledWith(42, 5000);
+    expect(at, "包装件没生效 —— 检查 CARD_FLOW_KEY 与 viewProps").toHaveBeenCalledWith(42, 5000);
     expect(plain).not.toHaveBeenCalled();
   });
 });

@@ -68,8 +68,7 @@ import { StatusLine, Text, ViewSwitcher } from "../../ui/primitives";
 /** `views` 缺席时的空清单：**模块级常量**（稳定引用 ⇒ 下面的 `useMemo` 不每渲染重算） */
 const NO_VIEWS: readonly ViewSpec<NoteViewSlot>[] = [];
 
-/** 卡片流键（= 注册表的 `NOTE_VIEWS[1]`；本件不 import 注册表 —— C1①）与其**带 seek 包装件**加载器
- *  （T17/C10.3：该视图槽缺 `onOpenSessionAt`）；仍经 `lazy()` ⇒ 模块级惰性不变。 */
+/** 卡片流键（= 注册表的 `NOTE_VIEWS[1]`；本件不 import 注册表 —— C1①）与其**带 seek 包装件**加载器（T17/C10.3：该槽缺 `onOpenSessionAt`）；仍经 `lazy()` ⇒ 模块级惰性不变。 */
 const CARD_FLOW_KEY = "cardflow";
 const CARD_FLOW_LOAD = (): Promise<{ default: ComponentType<NoteViewSlot> }> => import("../../views/note/NoteCardFlowWithSeek");
 
@@ -176,10 +175,11 @@ export default function NotesReadingColumn({
   const isDefault = viewKey === defaultKey;
   const LazyView = isDefault ? null : lazyOf.get(viewKey) ?? null;
   /** 非默认视图的槽（数据全在这里，视图自身零取数 —— C14②）；空态 ⇒ `null`（连卡片流都不挂）。
-   *  T17：`onOpenSessionAt` 仍不进 `NoteViewSlot`（批 6 已裁）⇒ 卡片流的 ms 由包装件补齐。 */
+   *  T17：`onOpenSessionAt` 不进 `NoteViewSlot`（批 6 已裁）⇒ 只在**传参处**补成包装件的 props。 */
   const slot: NoteViewSlot | null = selected
     ? { note: selected, onTaskToggle, onOpenSession, onImageOpen }
     : null;
+  const viewProps = slot === null ? null : { ...slot, onOpenSessionAt };
 
   /** 默认视图（原文）节点：T14 之前逐字相同，只是现在由常驻容器承载（§7.3①） */
   const residentView = selected ? (
@@ -289,9 +289,9 @@ export default function NotesReadingColumn({
 
         {/* §7.3② 非默认视图：模块级惰性 + `Suspense`（复用 `ShellFallback`）；切走 ⇒ 卸载。
             滚动容器由本件提供 —— `NoteCardFlowView` 是纯展示列（自身无滚动容器） */}
-        {!isDefault && LazyView && slot ? (
+        {!isDefault && LazyView && viewProps ? (
           <div style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "var(--ed-space-16, 16px)" }}>
-            <Suspense fallback={<ShellFallback />}>{createElement(LazyView, slot)}</Suspense>
+            <Suspense fallback={<ShellFallback />}>{createElement(LazyView, viewProps)}</Suspense>
           </div>
         ) : null}
       </div>
