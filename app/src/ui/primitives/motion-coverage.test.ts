@@ -59,7 +59,7 @@ const BASE_CLASSES: ReadonlyArray<readonly [file: string, base: string]> = [
  * 5 个**现存非原语**的 `.ed-*` 名（T3 评审 M-4 实测）。它们不是 CSS 类 —— 是既有标识符里的子串：
  * `ed-desc`←`"updated-desc"` · `ed-label`←`note-link-linked-label` · `ed-note`←`…saved-note` ·
  * `ed-milestone-note`←`data-testid="degraded-milestone-note"` · `ed-low-confidence`←**已退役**的名字：
- * 它是 `structuredBlocks.ts` 的 `lowConfidenceClass()` 在批 6 T13 之前产出的旧类名（其 `App.css` 规则
+ * 它是 `lowConfidenceClass()`（真源今在 `utils/lowConfidence.ts`：批 7 T2 自已删的 `structuredBlocks.ts` 析出）在批 6 T13 之前产出的旧类名（其 `App.css` 规则
  * 已随批 0-D Task 13 删除），T13 按 R12.1 改成了 `ed-text--low-confidence`。本条**仍保留**这个旧名
  * （控制方 R12.1：不启用 G16 ⇒ 不改这几条既有断言）—— 它的作用从「锚住一个真存在的标识符」变成
  * 「锚住一个**绝不许再出现**在 CSS 选择器域里的名字」。任何「全树裸扫 `.ed-*`」的写法都会在这 5 个上假红。
