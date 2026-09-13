@@ -64,6 +64,12 @@ jobs:
         run: cd app && npx tsc --noEmit
       - name: Build
         run: cd app && npm run build
+      # 批 8 T17（G2 分档）：包体闸的**输入是前端构建产物** ⇒ 与产出它的 job 同域。`app/dist` 刚由
+      # 上一 step 生成（同一条 `npm run build`：app/package.json = `tsc && vite build`，vite 默认
+      # outDir=dist）⇒ `--no-build` 判的正是**本次构建**的产物（去掉它 = 同一条命令再构建一次）。
+      # 🔴 挂在无条件 job 会**恒红**（那 job 不构建、`dist` 不入库）：批 8 T17 导出树实测 exit 2。
+      - name: First-screen bundle budget (no-build; lazy side NOT judged — first screen only)
+        run: node scripts/check-bundle-budget.mjs --no-build
 
   # ===========================================================================
   # App Rust 后端 —— Tauri 主进程（含单测与 lint）
@@ -197,13 +203,9 @@ jobs:
         run: node scripts/check-command-registry.mjs
 
       # 批 8 T17（G2 · 脚本域门禁的执行者缺口）：`on:` 无 `paths`，其余四个 job 都带
-      # `needs: changes` + `if:`，只有本 job 无条件 ⇒ 脚本域门禁挂在这里才**每次 PR/push 都跑**。
-      # 不补 `scripts/**` glob —— glob 属 paths-filter 域，补它只覆盖「新增路径」，且会漏掉
-      # 「改了 `scripts/**` 却被 filter 判为无变更」这一二次缺口（控制方 §2 G2）。
-      - name: First-screen bundle budget (no-build; lazy side judged only on fresh builds)
-        run: node scripts/check-bundle-budget.mjs --no-build
-      # ⚠️ 本 step 判的是**既有** `app/dist`（`dist` 不入库）：脚本契约里「产物缺失」= exit 2
-      # ⇒ 它要求受判产物已存在；本 job 不构建，「新鲜构建」的执行者仍待定（批 8 T17 未决）。
+      # `needs: changes` + `if:`，只有本 job 无条件 ⇒ **不需要构建产物**的脚本域门禁挂在这里，
+      # 才每次 PR/push 都跑。不补 `scripts/**` glob —— glob 属 paths-filter 域，补它只覆盖
+      # 「新增路径」，且会漏掉「改了 `scripts/**` 却被 filter 判为无变更」这一二次缺口（§2 G2）。
       # 批 8 T17（G6）：豁免表散文数字对拍探针**单列转正**为 CI step，**不并入八闸集合**
       # （八闸集合是批次间对账基线；散文数字天然易漂 ⇒ 硬合并会让逐字对账漂移、频繁假红）。
       - name: Exemption table prose check
