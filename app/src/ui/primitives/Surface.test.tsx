@@ -23,7 +23,7 @@ import { Surface } from "./index";
 import type { SurfaceLevel, SurfaceRadius, SurfaceTag } from "./index";
 
 /** 契约名单：与 `Surface.css` 的规则一一对应（改名单必须同时改 CSS 与测试） */
-const LEVELS: readonly SurfaceLevel[] = ["sunken", "canvas", "surface", "raised"];
+const LEVELS: readonly SurfaceLevel[] = ["sunken", "canvas", "surface", "raised", "none"];
 const RADIUS: readonly SurfaceRadius[] = ["stamp", "control", "panel", "overlay", "pill"];
 const TAGS: ReadonlyArray<readonly [SurfaceTag, string]> = [
   ["div", "DIV"], ["section", "SECTION"], ["article", "ARTICLE"], ["aside", "ASIDE"], ["li", "LI"],
@@ -61,7 +61,7 @@ describe("Surface 默认契约", () => {
 });
 
 describe("Surface 四档底 / 五档圆角映射到类", () => {
-  it("4 档 level 各有对应类（sunken 输入槽 · canvas 纸 · surface 卡面 · raised 弹层）", () => {
+  it("5 档 level 各有对应类（sunken 输入槽 · canvas 纸 · surface 卡面 · raised 弹层 · none 只出边框）", () => {
     for (const level of LEVELS) {
       const cls = classesOf(render(<Surface level={level}>x</Surface>).container);
       expect(cls, `档位 ${level}`).toContain(`ed-surface--${level}`);
@@ -151,6 +151,35 @@ describe("Surface 语义与透传", () => {
     expect(classesOf(container)).toContain("my-slot");
     expect(classesOf(container)).toContain("ed-surface");
     expect(root(container).style.boxShadow).toBe("var(--ed-shadow-2)");
+  });
+});
+
+describe("Surface 受控槽（批 7 T7：`html` / `domId` —— 只开属性级的两个口，**不开 `...rest`**）", () => {
+  it("`html` 走 `dangerouslySetInnerHTML`：宿主的 innerHTML 含该串，且**不**渲染 children", () => {
+    const { container } = render(<Surface html={'<p class="x">已渲染串</p>'} />);
+    expect(root(container).innerHTML).toBe('<p class="x">已渲染串</p>');
+    expect(root(container).querySelector("p")?.className).toBe("x");
+  });
+
+  it("`html` 与面本身的正交性：类名/圆角档照旧，`html` 不吞掉面的契约", () => {
+    const cls = classesOf(render(<Surface level="none" radius="panel" html="<b>k</b>" />).container);
+    expect(cls).toContain("ed-surface--none");
+    expect(cls).toContain("ed-surface--r-panel");
+  });
+
+  it("`domId` 落到宿主的 `id` ⇒ `document.getElementById` 找得到（锚点跳转的落点）", () => {
+    render(<Surface domId="anchor-x">x</Surface>);
+    expect(document.getElementById("anchor-x")?.textContent).toBe("x");
+  });
+
+  it("`domId` 不给时不产生 `id` 属性（不留 `id=\"undefined\"`）", () => {
+    expect(root(render(<Surface>x</Surface>).container).hasAttribute("id")).toBe(false);
+  });
+
+  it("反例守门：`...rest` 没开 —— 未知属性既不被解构也不被渲染（编译期那一半由 tsc 探针 V2 守）", () => {
+    const stray = { "data-foo": "1" };
+    const { container } = render(<Surface {...stray}>x</Surface>);
+    expect(root(container).hasAttribute("data-foo")).toBe(false);
   });
 });
 

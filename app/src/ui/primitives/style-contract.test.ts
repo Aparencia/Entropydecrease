@@ -104,6 +104,8 @@ const LEVEL_CLASS: Record<SurfaceLevel, string> = {
   canvas: "ed-surface--canvas",
   surface: "ed-surface--surface",
   raised: "ed-surface--raised",
+  // 批 7 T7：「只出边框」档（透明边框容器的落点）⇒ 底档 4 → 5
+  none: "ed-surface--none",
 };
 const RADIUS_CLASS: Record<SurfaceRadius, string> = {
   stamp: "ed-surface--r-stamp",
@@ -163,7 +165,7 @@ const CONTRACTS: readonly UnionContract[] = [
   { union: "TextTone", css: "Text.css", members: TONE_CLASS, expected: 9 },
   { union: "TextSize", css: "Text.css", members: SIZE_CLASS, expected: 6 },
   { union: "TextFont", css: "Text.css", members: FONT_CLASS, expected: 3 },
-  { union: "SurfaceLevel", css: "Surface.css", members: LEVEL_CLASS, expected: 4 },
+  { union: "SurfaceLevel", css: "Surface.css", members: LEVEL_CLASS, expected: 5 },
   { union: "SurfaceRadius", css: "Surface.css", members: RADIUS_CLASS, expected: 5 },
   { union: "ButtonVariant", css: "Button.css", members: VARIANT_CLASS, expected: 3 },
   { union: "ButtonSize", css: "Button.css", members: BTN_SIZE_CLASS, expected: 3 },

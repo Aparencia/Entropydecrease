@@ -38,6 +38,14 @@
 .ed-surface--surface { background: var(--ed-bg-surface); } /* 卡片 / 列 / 阅读面（= 基类，显式写出让四档对称） */
 .ed-surface--raised { background: var(--ed-bg-raised); box-shadow: var(--ed-shadow-1); } /* 弹层 / 菜单 / 浮窗 */
 
+/* 第五档底 `none`（批 7 T7 的「只出边框」档）：**明确声明不出底** —— `transparent` 就是
+   `background` 的初始值，与迁移前「style 里根本不写 background」逐字同义。
+   Why 需要它：基类必出 `--ed-bg-surface`，而仓里有一批「整圈边框 + 无底色」的透明容器
+   （批 4 B11 的 `no-background` 残留，批 7 T7 实测 21 处）—— 没有本档就只能留在行内 style 里。
+   ⚠️ 本档**不是**第五种底色，也不能反过来当「继承父层底」用：它就是不出底。
+   规则写在四档之后 ⇒ 同特异性下后者胜，基类的 `background` 被本档覆盖。 */
+.ed-surface--none { background: transparent; }
+
 /* 五档圆角：前四档的 token 真源是 `SCALE_TOKENS.radiusScale`（3/5/8/10），类名带 `r-` 前缀以免与
    同名的 level 档（如 `--surface`）撞在一起。
 

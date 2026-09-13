@@ -27,8 +27,11 @@
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import "./Surface.css";
 
-/** 四档底，与 `COLOR_TOKENS` 的 `bg-*` 四个颜色 token 一一对应（值只在 `ui/tokens.css`） */
-export type SurfaceLevel = "sunken" | "canvas" | "surface" | "raised";
+/** 底档：四档与 `COLOR_TOKENS` 的 `bg-*` 四个颜色 token 一一对应（值只在 `ui/tokens.css`）；
+ *  第五档 `none` 是**批 7 T7 的「只出边框」档** —— 它不是第五种底色，而是**明确声明不出底**
+ *  （`background: transparent` = 迁移前「不写 background」的逐字同义），供「整圈边框 + 无底色」的
+ *  透明容器落进原语（批 4 B11 的 `no-background` 残留：`Surface` 基类必出底色）。 */
+export type SurfaceLevel = "sunken" | "canvas" | "surface" | "raised" | "none";
 
 /** 五档圆角：四档与 `SCALE_TOKENS.radiusScale` 同序（3 / 5 / 8 / 10px），第五档 `pill` 是批 4 T17 加的**药丸**形态
  *  （`radiusScale` 里还没有它 ⇒ `Surface.css` 的该档走 `var(--ed-radius-pill, 999px)` 兜底；补 token 见彼处注释） */
@@ -37,8 +40,9 @@ export type SurfaceRadius = "stamp" | "control" | "panel" | "overlay" | "pill";
 /** 可渲染的语义标签（不含 `button` / `a` —— 可交互元素属 `Button` 与调用点） */
 export type SurfaceTag = "div" | "section" | "article" | "aside" | "li";
 
-export interface SurfaceProps {
-  /** 底色档位，默认 `surface`（卡片 / 列 / 阅读面） */
+/** 面的**自有属性**（不含内容面 —— 内容的二选一由 `SurfaceProps` 的联合表达） */
+interface SurfaceOwnProps {
+  /** 底色档位，默认 `surface`（卡片 / 列 / 阅读面）；`none` = **只出边框、不出底色**（批 7 T7） */
   level?: SurfaceLevel;
   /** 圆角档位，默认 `panel`（8px） */
   radius?: SurfaceRadius;
@@ -56,8 +60,29 @@ export interface SurfaceProps {
   style?: CSSProperties;
   /** 落到 `data-testid`；不传时不产生该属性 */
   testId?: string;
-  children: ReactNode;
+  /**
+   * **受控槽**：宿主元素的 `id`（供锚点跳转，如 `SessionScreenCards` 的 `ocr-<会话>-<ms>`）。
+   * Why 用受控槽而不是 `...rest`：`Surface` 是「面」的唯一出口，DOM 属性面一旦放开就再也收不回
+   * （ADR-033 §4 + 批 7 §C9.4 的裁决）—— 只把**已点名的**两个属性开口。
+   */
+  domId?: string;
 }
+
+/**
+ * `Surface` 的属性。**内容面是联合类型**：`children`（常规）与 `html`（受控槽，走
+ * `dangerouslySetInnerHTML`）**互斥** —— 两者都给 = TS2353/TS2322，不是运行期才炸。
+ */
+export type SurfaceProps =
+  | (SurfaceOwnProps & {
+      readonly children: ReactNode;
+      /** 受控槽：把**已渲染的 HTML 串**交给 `dangerouslySetInnerHTML`（与 `children` 互斥） */
+      readonly html?: never;
+    })
+  | (SurfaceOwnProps & {
+      readonly children?: never;
+      /** 受控槽：把**已渲染的 HTML 串**交给 `dangerouslySetInnerHTML`（与 `children` 互斥） */
+      readonly html: string;
+    });
 
 /**
  * 渲染一个「面」。
@@ -75,6 +100,8 @@ export function Surface({
   className,
   style,
   testId,
+  domId,
+  html,
   children,
 }: SurfaceProps): ReactElement {
   const cls = [
@@ -90,8 +117,16 @@ export function Surface({
     .join(" ");
 
   const Tag = as;
+  // 两个内容分支**分开写**：`children` 与 `dangerouslySetInnerHTML` 同时出现会被 React 抛错，
+  // 而联合类型已在编译期禁止「两者都给」；分开写让「运行期只可能走一支」一眼可见。
+  if (html !== undefined) {
+    return (
+      <Tag className={cls} style={style} data-testid={testId} id={domId}
+        dangerouslySetInnerHTML={{ __html: html }} />
+    );
+  }
   return (
-    <Tag className={cls} style={style} data-testid={testId}>
+    <Tag className={cls} style={style} data-testid={testId} id={domId}>
       {children}
     </Tag>
   );
