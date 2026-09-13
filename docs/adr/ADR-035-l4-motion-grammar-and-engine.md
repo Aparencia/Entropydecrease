@@ -181,6 +181,7 @@ export { gsap, useGSAP };
 - **`pinnable` 的消费方 → 本批波 C 的列折叠 Flip**（规格 §6.2 该行的「接线拖拽+记忆**或**删钩子」）：代码权威 = `app/src/shell/columnRegistry.ts:50` 的 `notes-outline` = **`true`**、其余 12 行 `false`（ADR-034 §2 加注① 已就地更正规格）。
 - **五类棘轮余量 · `FROZEN_NUMERIC_ZINDEX` · `bundle-eager-graph` 的 `import type` 口径 → 均非本批**（R6.10，去向照 `docs/versions/v0.22.md` 原表：批 5/7、批 8）。
 - **`docs/tech-debt/`（191,980 B / 1555 行，未入库未忽略）→ 挂起、待用户裁决**（R6.9）：本批**零动作**。
+  > 🔻 **前向指针（2026-09-13 · 批 8 收口；上面那条原文一字未改，按当时时态读）**：R6.9 的挂起**已由用户裁决结清** —— **2026-09-13 用户裁决 U3 = a ⇒ 归档到 `docs/archive/`**，落入 [`docs/archive/2026-09-13/`](../archive/2026-09-13/)（`README.md` / `tech-debt.md` / `review-2026-09-11.md`）；「挂起、待用户裁决」按**当时时态**读，本指针不改任何既有结论。
 - **只能登记（仪器不可达）**：真实 60fps · Flip 几何位移 · 真实媒体播放 · `window` 级滚动 · 真机 / WebView2 观感 · 视图密度观感 · 切视图卡顿 · 惰性挂载的运行时内存效果 · 暗档实际生效 —— 清单本体在决策 8，收口报告与 `docs/versions/v0.22.md` 的批 6 节各带一份。
 - **本 ADR 不管辖的邻近项**：相变两态（规格 §6.3）与列折叠 Flip 的**结构改造**（「先改结构、再上 Flip」，8 处 `ColumnBar` 落点）· 6 个签名动效的**逐条形态**（R5.1–R5.7，含 #2 的**字符率近似**「规格未定义语速函数」）· `usePresence` 本批**零改动**（R2.4）· 多窗口间的档位同步 · `%TEMP%` 导入会话无音频承载面 · sidecar 孤儿文件（`cleanup` 只扫 `.wav`）· 「删除会话不删音频」—— 均归批 6 的波 B/C/D 或后续批次，见[批 6 实施计划](../superpowers/plans/2026-09-12-frontend-redesign-batch6-motion.md)。
 
