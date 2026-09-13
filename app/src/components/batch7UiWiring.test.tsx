@@ -200,7 +200,7 @@ describe("T20-D⑥ §9 #47 `update_knowledge_system`（体系三字段编辑）"
   });
 });
 
-describe("T20-D⑦ 源码级：六条命令在生产侧各 ≥1 个调用点（退回注释/删掉调用必红）", () => {
+describe("T20-D⑦ + T23 源码级：七条命令在生产侧各 ≥1 个调用点（退回注释/删掉调用必红）", () => {
   for (const cmd of COMMANDS) {
     it(`\`${cmd}\` 的生产调用点 ≥1`, () => {
       const sites = prodSitesOf(cmd);
