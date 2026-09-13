@@ -72,9 +72,9 @@ const ROUTING_RULES = [
       return false;
     },
     owner: {
-      type: 'script',
-      path: 'scripts/validate-all.mjs',
-      description: '全项目验证脚本 — 一键执行 lint/typecheck/test/build',
+      type: 'memory',
+      path: null,
+      description: '构建验证的现执行者 = `.husky/pre-commit`（本地）+ `.github/workflows/pr-check.yml`（CI）；本规则不再指向脚本',
     },
   },
   {
