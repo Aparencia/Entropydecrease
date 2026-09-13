@@ -31,12 +31,13 @@
  *        `--json` 与默认构建同用会把 vite 输出混进 stdout；机器消费请配 `--no-build`。
  * 退出码：0 = 达标 · 1 = 超预算 · 2 = 构建失败 / 产物缺失 / 自检失败。
  */
-import { readFileSync, readdirSync, existsSync, statSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { join, resolve, dirname, relative } from "node:path";
+import { readFileSync, existsSync, statSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
+import { measure, rel, fmtB, kB, BudgetError } from "./lib/bundleMeasure.mjs";
 
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = resolve(dirname(SELF), "..");
@@ -51,94 +52,10 @@ const DIST = resolve(opt("--dist", join(APP, "dist")));
 const BUDGET_KB = Number(opt("--budget", "200"));
 const BUDGET_SOURCE = "docs/standards/performance.md:28";
 
-const rel = (p) => relative(ROOT, p).split("\\").join("/");
 /** 全部失败路径的统一出口：**必须** exit 2（1 只留给「超预算」），并给出可执行的下一条命令。 */
 function fail(msg) {
   console.error(`❌ 首屏预算守卫：${msg}`);
   process.exit(2);
-}
-const fmtB = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-const kB = (n) => (Math.round(n / 10) / 100).toFixed(2); // 半进位：与 vite 打印口径一致（11745 B：toFixed 给 11.74、vite 给 11.75）
-const gzBytes = (buf) => gzipSync(buf, { level: 6 }).length;
-
-/** 动态形态先整段剥掉；静态形态要求引号紧跟 `from` / `import`（产物里就是 `from"./x.js"`）。 */
-const RE_DYNAMIC = /import\s*\(\s*["'][^"']+["']\s*\)/g;
-const RE_STATIC = [/\bfrom\s*["']\.\/([^"'/\\]+\.js)["']/g, /\bimport\s*["']\.\/([^"'/\\]+\.js)["']/g];
-
-/** 一段 chunk 代码里的静态 ESM 依赖（basename 集合）；`export … from` 与裸 `import` 都算静态边。 */
-function staticDeps(code) {
-  const text = code.replace(RE_DYNAMIC, "");
-  const out = new Set();
-  for (const re of RE_STATIC) {
-    re.lastIndex = 0;
-    let m;
-    while ((m = re.exec(text)) !== null) out.add(m[1]);
-  }
-  return out;
-}
-
-/** 从 index.html 取入口 chunk 的 basename；解析不到即产物问题 ⇒ exit 2（属性顺序无关）。 */
-function entryChunkName(dist) {
-  const htmlPath = join(dist, "index.html");
-  if (!existsSync(htmlPath) || !statSync(htmlPath).isFile()) {
-    fail(`找不到 ${rel(htmlPath)} —— 产物缺失。先跑「cd app; npm run build」，或去掉 --no-build 让本脚本代跑。`);
-  }
-  const html = readFileSync(htmlPath, "utf8");
-  for (const tag of html.match(/<script\b[^>]*>/gi) ?? []) {
-    if (!/\btype\s*=\s*["']module["']/i.test(tag)) continue;
-    const m = /\bsrc\s*=\s*["']([^"']+)["']/i.exec(tag);
-    const base = m ? m[1].split(/[?#]/)[0].split("/").pop() : "";
-    if (base && base.endsWith(".js")) return base;
-  }
-  fail(`${rel(htmlPath)} 里没有带 src 的 <script type="module"> —— 空/损坏的 dist 走这条，不是「零字节首屏」。`);
-}
-
-/** 首屏闭包：从入口 BFS，**只沿静态边**；动态可达的 chunk 不会进来。返回 Map<basename,{bytes,gzip}>。 */
-function firstScreenChunks(dist) {
-  const entry = entryChunkName(dist);
-  const assets = join(dist, "assets");
-  if (!existsSync(assets) || !statSync(assets).isDirectory()) fail(`找不到 ${rel(assets)} 目录 —— 产物缺失。`);
-  const eager = new Map();
-  const queue = [entry];
-  while (queue.length) {
-    const name = queue.shift();
-    if (eager.has(name)) continue;
-    const p = join(assets, name);
-    if (!existsSync(p) || !statSync(p).isFile()) fail(`首屏 chunk 静态引用了 ${name}，但 ${rel(p)} 不存在 —— 产物残缺。`);
-    const bytes = readFileSync(p);
-    eager.set(name, { bytes: bytes.length, gzip: gzBytes(bytes) });
-    for (const dep of staticDeps(bytes.toString("utf8"))) if (!eager.has(dep)) queue.push(dep);
-  }
-  return eager;
-}
-
-/** 产物资产清单（vite 把 chunk / CSS / 字体平铺在 dist/assets 下）。 */
-function listAssets(dist) {
-  const assets = join(dist, "assets");
-  if (!existsSync(assets) || !statSync(assets).isDirectory()) return [];
-  return readdirSync(assets)
-    .map((name) => join(assets, name))
-    .filter((p) => statSync(p).isFile())
-    .map((p) => ({ name: p.slice(assets.length + 1), path: p, bytes: statSync(p).size }));
-}
-
-/** 唯一的度量实现（报表与 JSON 共用）：量一次产物，返回全部读数。 */
-function measure(dist) {
-  const assets = listAssets(dist);
-  const eager = firstScreenChunks(dist);
-  const gzFile = (p) => gzBytes(readFileSync(p));
-  const shaped = (a) => { const g = gzFile(a.path); return { name: a.name, bytes: a.bytes, gzipBytes: g, gzipKb: Number(kB(g)) }; };
-  const htmlPath = join(dist, "index.html");
-  return {
-    dist,
-    eager,
-    eagerBytes: [...eager.values()].reduce((a, c) => a + c.gzip, 0),
-    rawBytes: [...eager.values()].reduce((a, c) => a + c.bytes, 0),
-    lazy: assets.filter((a) => a.name.endsWith(".js") && !eager.has(a.name)).map(shaped),
-    excluded: assets.filter((a) => !a.name.endsWith(".js")).map(shaped),
-    htmlBytes: existsSync(htmlPath) ? statSync(htmlPath).size : 0,
-    htmlGzip: existsSync(htmlPath) ? gzFile(htmlPath) : 0,
-  };
 }
 
 /** 参考项：HTML 用 modulepreload 声明但静态闭包没覆盖的 .js —— 值得人看一眼，不影响判定。 */
@@ -290,10 +207,18 @@ if (!Number.isFinite(BUDGET_KB) || BUDGET_KB <= 0) {
   fail(`--budget 需要正数（实得 "${opt("--budget", "")}"）—— 预算解析失败时绝不能静默按「超标」处理。`);
 }
 if (has("--dist") && !NO_BUILD) fail(`--dist 与构建互斥：--dist 用于既有产物或自检夹具，请配 --no-build。`);
-if (SELF_TEST) selfTest();
-if (!NO_BUILD) {
-  console.log(`▶ cd app && npm run build（--no-build 可跳过；产物写入 app/dist）`);
-  const r = spawnSync("npm", ["run", "build"], { cwd: APP, stdio: "inherit", shell: process.platform === "win32" });
-  if (r.status !== 0) fail(`npm run build 失败（exit ${r.status}）—— 构建不绿时「首屏 gzip」没有意义，先修构建。`);
+// 度量已搬进 `./lib/bundleMeasure.mjs`：那边的 `fail()` **只抛** `BudgetError`（度量模块不得持有进程
+// 出口），这里把它桥回本件的统一出口（`console.error` + `exit 2`，文案逐字不变）。用**专属类型**是为了
+// 让其余异常继续原样上抛 —— 拆前它们就是未捕获栈 + exit 1，无差别转 exit 2 才是真的行为变化。
+try {
+  if (SELF_TEST) selfTest();
+  if (!NO_BUILD) {
+    console.log(`▶ cd app && npm run build（--no-build 可跳过；产物写入 app/dist）`);
+    const r = spawnSync("npm", ["run", "build"], { cwd: APP, stdio: "inherit", shell: process.platform === "win32" });
+    if (r.status !== 0) fail(`npm run build 失败（exit ${r.status}）—— 构建不绿时「首屏 gzip」没有意义，先修构建。`);
+  }
+  finish(measure(DIST));
+} catch (e) {
+  if (e instanceof BudgetError) fail(e.message);
+  throw e;
 }
-finish(measure(DIST));
