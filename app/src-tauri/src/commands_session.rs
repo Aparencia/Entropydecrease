@@ -34,7 +34,8 @@ fn apply_display_no(items: &mut [SessionListItem]) {
 }
 
 /// 新建会话（REQ-010；v0.5.0 M1/REQ-043：可指定视频类型档案）。
-#[tauri::command]
+/// @ai-context 已依规格 §1 L5 行 31 从 IPC 撤下（批 7）；实现保留供内部/未来接线，勿再注册。
+#[allow(dead_code)] // 批 7：已从 IPC 撤下（规格 §1 L5 行 31）⇒ lib 内暂无调用方，保留实现（同 db_colors.rs:42 先例）
 pub async fn create_session(
     state: State<'_, AppState>,
     title: String,
@@ -180,7 +181,8 @@ pub async fn delete_session(state: State<'_, AppState>, id: i64) -> Result<bool,
 }
 
 /// 追加转写段（实时捕获链路调用）。
-#[tauri::command]
+/// @ai-context 已依规格 §1 L5 行 31 从 IPC 撤下（批 7）；实现保留供内部/未来接线，勿再注册。
+#[allow(dead_code)] // 批 7：已从 IPC 撤下（规格 §1 L5 行 31）⇒ lib 内暂无调用方，保留实现（同 db_colors.rs:42 先例）
 pub async fn add_session_segment(
     state: State<'_, AppState>,
     session_id: i64,
@@ -210,7 +212,8 @@ pub async fn add_session_segment(
 }
 
 /// 追加 OCR 块（实时捕获链路调用）。
-#[tauri::command]
+/// @ai-context 已依规格 §1 L5 行 31 从 IPC 撤下（批 7）；实现保留供内部/未来接线，勿再注册。
+#[allow(dead_code)] // 批 7：已从 IPC 撤下（规格 §1 L5 行 31）⇒ lib 内暂无调用方，保留实现（同 db_colors.rs:42 先例）
 pub async fn add_session_ocr_block(
     state: State<'_, AppState>,
     session_id: i64,
@@ -244,6 +247,7 @@ pub async fn add_session_ocr_block(
 // ────────────────────────────────────────────────────────────
 
 /// 归一化转写段来源标识（asr | subtitle | fused，其余回退 asr）。
+#[allow(dead_code)] // 批 7：唯一调用方 add_session_segment 已从 IPC 撤下（规格要求保留实现）⇒ 随其保留，勿单独删除
 fn normalize_source(source: &str) -> String {
     match source {
         "subtitle" | "fused" => source.to_string(),

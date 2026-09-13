@@ -200,7 +200,6 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         crate::commands_knowledge_canvas::get_canvas_prefs,
         crate::commands_knowledge_canvas::save_canvas_prefs,
         // 会话管理（REQ-010，ADR-004）
-        crate::commands_session::create_session,
         crate::commands_session::finish_session,
         crate::commands_session::list_sessions,
         crate::commands_session::get_session_detail,
@@ -209,8 +208,6 @@ pub fn handle() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync
         crate::commands_session_delete::batch_delete_sessions,
         // REQ-282（v0.19.6）：会话改名（title_kind=manual 停止自动覆写）
         crate::commands_session::update_session_title,
-        crate::commands_session::add_session_segment,
-        crate::commands_session::add_session_ocr_block,
         // 会话 → 笔记（v0.7.6 审查硬拆：管线在 commands_session_note.rs，
         // 命令按定义模块注册——tauri 宏生成项不随 pub use 重导出）
         crate::commands_session_note::session_to_note,
