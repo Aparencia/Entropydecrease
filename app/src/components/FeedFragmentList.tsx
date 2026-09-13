@@ -233,8 +233,7 @@ export default function FeedFragmentList({ width = 320, onChanged, onPromoted, o
               >
                 🗑 删除
               </button>
-              <FragmentGroupAction fragmentId={f.id} groupId={f.groupId} groups={containerGroups} onNeedGroups={loadGroupsIfNeeded}
-                disabled={busy} onMoved={() => { void load().then(onChanged); }} onError={setErr} onCleanNotice={onCleanNotice} />
+              <FragmentGroupAction fragmentId={f.id} groupId={f.groupId} disabled={busy} onMoved={() => { void load().then(onChanged); }} onError={setErr} onCleanNotice={onCleanNotice} />
               <span style={{ fontSize: 9, color: "#d1d5db", marginLeft: "auto" }}>
                 {new Date(f.createdAt * 1000).toLocaleDateString()}
               </span>

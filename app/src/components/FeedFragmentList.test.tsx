@@ -32,6 +32,9 @@ const containerGroup: NoteGroup = {
   noteCount: 0, createdAt: 0, updatedAt: 0,
 };
 
+/** 碎片的家：feed 地形组（V7 正控；id 11 与容器组 9 并列，绝不共号） */
+const feedGroup: NoteGroup = { ...containerGroup, id: 11, name: "美妆碎片", terrain: "feed" };
+
 const noteStub: Note = {
   id: 42, title: "晕染笔记", content: "眼影要晕染。第二步定妆。", source: "manual",
   tags: "[]", pin: 0, group_id: 9, created_at: 2000, updated_at: 2000,
@@ -47,7 +50,8 @@ beforeEach(() => {
       case "list_fragments":
         return dbFragments;
       case "list_note_groups":
-        return [containerGroup];
+        // 桩按 terrain 分派（promote 要容器组 / 碎片归组要 feed 组）；🔴 feed 查询**故意多回一个容器组** = V7 负控
+        return args.terrain === "feed" ? [feedGroup, containerGroup] : [containerGroup];
       case "promote_fragment_to_note":
         dbFragments = dbFragments.filter((f) => f.id !== args.fragmentId);
         return { note: noteStub, autoCleanedGroups: [] };
@@ -206,32 +210,29 @@ describe("FeedFragmentList 收件箱状态机", () => {
   });
 });
 
-/**
- * 批 7 C11（规格 §9 第 46 条 `update_fragment_group`）：片段行的归组入口。
- *
- * @ai-context 与 T20-D 的分工：`batch7UiWiring.test.tsx` 第 ⑦ 条管「生产侧恰有调用点」，
- *   本组管「点得到 + 载荷逐字 + 正/负控 + 失败不静默」。载荷键名按 Rust 真身走 camelCase
- *   （`fragment_id` ⇒ `fragmentId`；计划 C11 那格写的 `id` 是勘误）。
- */
+/** 批 7 C11：片段行归组入口。与 `batch7UiWiring.test.tsx` 第 ⑦ 条分工：那条管「生产侧有调用点」，
+ *  本组管「点得到 + 载荷逐字 + 正/负控 + 失败不静默 + 候选只含 feed 组（V7）」。
+ *  载荷键名按 Rust 真身 camelCase：`fragment_id` ⇒ `fragmentId`（计划 C11 那格写的 `id` 是勘误）。 */
 describe("批 7 C11 · 片段归组入口（update_fragment_group）", () => {
-  it("入口是常规点击可达的真按钮；选中组 ⇒ 载荷逐字（负控：展开不发 · 另一行的 id 不出现）", async () => {
+  it("入口是真按钮 · 候选只含 feed 组（负控：容器组 9 不出现）⇒ 选组载荷逐字", async () => {
     const onChanged = vi.fn();
     render(<FeedFragmentList onChanged={onChanged} onPromoted={vi.fn()} />);
     await screen.findByTestId("fragment-card-2");
-
-    // 正控①：入口是 Button 原语（真 <button> ⇒ 鼠标与键盘都到得了）
+    // V7：查询按 feed 地形走（后端真源）+ 客户端再收一次口径 ⇒ 容器组 9 必须在候选之外
     const entry = screen.getByTestId("fragment-move-group-2");
     expect(entry.tagName, "归组入口必须是可点击的真按钮").toBe("BUTTON");
     fireEvent.click(entry);
-    const option = await screen.findByTestId("fragment-move-group-2-9");
+    const option = await screen.findByTestId("fragment-move-group-2-11");
+    expect(invokeMock).toHaveBeenCalledWith("list_note_groups", { terrain: "feed" });
+    expect(screen.queryByTestId("fragment-move-group-2-9"), "容器组混进了碎片候选（V7 负控）").toBeNull();
     // 负控①：只展开清单不发命令
     expect(invokeMock.mock.calls.map((c) => c[0]), "展开清单本身不得发命令").not.toContain("update_fragment_group");
 
-    // 正控②：选中组 9 ⇒ 载荷逐字（fragmentId = Rust 侧 fragment_id 的 camelCase）
+    // 正控：选中 feed 组 11 ⇒ 载荷逐字（fragmentId = Rust 侧 fragment_id 的 camelCase）
     fireEvent.click(option);
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_fragment_group", { fragmentId: 2, groupId: 9 }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_fragment_group", { fragmentId: 2, groupId: 11 }));
     // 负控②：载荷里的 fragmentId 只能是点的那一行
-    expect(invokeMock).not.toHaveBeenCalledWith("update_fragment_group", { fragmentId: 1, groupId: 9 });
+    expect(invokeMock).not.toHaveBeenCalledWith("update_fragment_group", { fragmentId: 1, groupId: 11 });
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
   });
 
@@ -240,11 +241,13 @@ describe("批 7 C11 · 片段归组入口（update_fragment_group）", () => {
     await screen.findByTestId("fragment-card-1");
     fireEvent.click(screen.getByTestId("fragment-move-group-1"));
     const none = await screen.findByTestId("fragment-move-group-1-none");
-
-    // 负控：未归组的行（fragment 2）不出现「移出组」
+    // 组名查不到时如实报 id（fragment 1 还在容器组 9 里）—— 不许谎报「未归组」
+    expect(screen.getByTestId("fragment-move-group-1-current").textContent).toBe("当前组 #9");
+    // 负控：未归组的行（fragment 2）不出现「移出组」，且如实报「当前未归组」
     fireEvent.click(screen.getByTestId("fragment-move-group-2"));
-    await screen.findByTestId("fragment-move-group-2-9");
+    await screen.findByTestId("fragment-move-group-2-11");
     expect(screen.queryByTestId("fragment-move-group-2-none"), "未归组的行不该有「移出组」").toBeNull();
+    expect(screen.getByTestId("fragment-move-group-2-current").textContent).toBe("当前未归组");
 
     // 正控：移出组 ⇒ groupId: null（Rust Option<i64> 的 None 语义）
     fireEvent.click(none);
@@ -254,7 +257,7 @@ describe("批 7 C11 · 片段归组入口（update_fragment_group）", () => {
   it("失败路径不静默：命令 reject ⇒ 收件箱错误行可见，且带后端原因（父层既有 setErr 形态）", async () => {
     invokeMock.mockImplementation(async (cmd: string) => {
       if (cmd === "list_fragments") return dbFragments;
-      if (cmd === "list_note_groups") return [containerGroup];
+      if (cmd === "list_note_groups") return [feedGroup, containerGroup];
       if (cmd === "resolve_fragment_image") return null;
       if (cmd === "update_fragment_group") throw new Error("feed 开关未开启");
       throw new Error(`unexpected command: ${cmd}`);
@@ -262,7 +265,7 @@ describe("批 7 C11 · 片段归组入口（update_fragment_group）", () => {
     render(<FeedFragmentList onChanged={vi.fn()} onPromoted={vi.fn()} />);
     await screen.findByTestId("fragment-card-2");
     fireEvent.click(screen.getByTestId("fragment-move-group-2"));
-    fireEvent.click(await screen.findByTestId("fragment-move-group-2-9"));
+    fireEvent.click(await screen.findByTestId("fragment-move-group-2-11"));
     await waitFor(() => expect(screen.getByTestId("inbox-error").textContent).toContain("移动到组失败"));
     expect(screen.getByTestId("inbox-error").textContent, "后端原因必须落到可见行").toContain("feed 开关未开启");
   });
@@ -270,7 +273,7 @@ describe("批 7 C11 · 片段归组入口（update_fragment_group）", () => {
   it("REQ-316：源组被自动清理 ⇒ 上抛组标题；无清理（空数组）⇒ 不打扰", async () => {
     const stub = (cleaned: string[]) => async (cmd: string): Promise<unknown> => {
       if (cmd === "list_fragments") return dbFragments;
-      if (cmd === "list_note_groups") return [containerGroup];
+      if (cmd === "list_note_groups") return [feedGroup, containerGroup];
       if (cmd === "resolve_fragment_image") return null;
       if (cmd === "update_fragment_group") return { moved: true, autoCleanedGroups: cleaned };
       throw new Error(`unexpected command: ${cmd}`);
@@ -280,18 +283,17 @@ describe("批 7 C11 · 片段归组入口（update_fragment_group）", () => {
     const { unmount } = render(<FeedFragmentList onChanged={vi.fn()} onPromoted={vi.fn()} onCleanNotice={onCleanNotice} />);
     await screen.findByTestId("fragment-card-2");
     fireEvent.click(screen.getByTestId("fragment-move-group-2"));
-    fireEvent.click(await screen.findByTestId("fragment-move-group-2-9"));
+    fireEvent.click(await screen.findByTestId("fragment-move-group-2-11"));
     await waitFor(() => expect(onCleanNotice).toHaveBeenCalledWith(["旧主题组"]));
     unmount();
-
     // 负控：结果为空 ⇒ 零变化，不上抛（与 runPromote / runDelete 同向）
     const quiet = vi.fn();
     invokeMock.mockImplementation(stub([]));
     render(<FeedFragmentList onChanged={vi.fn()} onPromoted={vi.fn()} onCleanNotice={quiet} />);
     await screen.findByTestId("fragment-card-2");
     fireEvent.click(screen.getByTestId("fragment-move-group-2"));
-    fireEvent.click(await screen.findByTestId("fragment-move-group-2-9"));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_fragment_group", { fragmentId: 2, groupId: 9 }));
+    fireEvent.click(await screen.findByTestId("fragment-move-group-2-11"));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_fragment_group", { fragmentId: 2, groupId: 11 }));
     expect(quiet, "无清理 ⇒ 不上抛").not.toHaveBeenCalled();
   });
 });
