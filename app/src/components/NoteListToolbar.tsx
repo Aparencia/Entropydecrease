@@ -12,8 +12,15 @@
  *              避免两处样式漂移；`btn` 仅作为其基底，保持模块私有。
  * @ai-context: 边界——`SortMode` 以 **type-only import** 自 NoteListView 取（编译期
  *              擦除，无运行时循环依赖）；公共 API（`export type SortMode`）仍归主文件。
+ * @ai-context: 批 7 T18（C2.4 / §C11.3）：过滤芯片按 `tagColors` **上色**——与 `NoteListRow`
+ *              同口径（`paletteHex(id, theme) + "22"` 透明度后缀）。`allTags` 仍是 `string[]`，
+ *              只多一张可选查色表；本文件 nativeButton 4 / 边框 3 / 越界圆角 2 三格已满
+ *              ⇒ 上色只动 `background`，**不新增**这三类字面量。
  */
+import { useMemo } from "react";
 import type { SortMode } from "./NoteListView";
+import { paletteHex } from "../utils/colorPalette";
+import type { ThemeMode } from "../utils/colorPalette";
 
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 /** 幽灵按钮基底（顶栏「选择」+ 批量栏/选集菜单 6 处共用） */
@@ -36,13 +43,23 @@ interface Props {
   allTags: string[];
   tagFilter: string | null;
   onTagFilterChange: (tag: string | null) => void;
+  /** 批 7 T18（C2.4）：标签 → 色板 id 查色表（缺省 ⇒ 芯片沿用原底色） */
+  tagColors?: Record<string, string>;
 }
 
 export default function NoteListToolbar({
   selectionMode, selectionCount, onToggleBatchMode, onCreate, onCollapse,
   keyword, onKeywordChange, onRefresh, sortMode, onSortModeChange,
-  allTags, tagFilter, onTagFilterChange,
+  allTags, tagFilter, onTagFilterChange, tagColors,
 }: Props) {
+  // v0.14 B：当前主题（跟随 prefers-color-scheme；jsdom 无 matchMedia 回退 light）
+  const theme: ThemeMode = useMemo(
+    () => (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
+    [],
+  );
+  /** 芯片底色：有标签色 ⇒ 与 `NoteListRow` 同口径的色板值 + `22`；否则沿用原选中/默认底色 */
+  const chipBackground = (t: string): string =>
+    tagColors?.[t] ? `${paletteHex(tagColors[t], theme)}22` : tagFilter === t ? "#f0fdfa" : "#f9fafb";
   return (
     <>
       <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
@@ -85,7 +102,7 @@ export default function NoteListToolbar({
               <span onClick={() => onTagFilterChange(null)} style={{ fontSize: 11, color: "#6b7280", cursor: "pointer", border: "1px solid #d1d5db", borderRadius: 10, padding: "1px 6px", background: "#f3f4f6" }}>清除过滤 ✕</span>
             )}
             {allTags.map((t) => (
-              <span key={t} onClick={() => onTagFilterChange(t)} style={{ fontSize: 11, cursor: "pointer", border: `1px solid ${tagFilter === t ? "#0d9488" : "#e5e7eb"}`, borderRadius: 10, padding: "1px 6px", background: tagFilter === t ? "#f0fdfa" : "#f9fafb", color: tagFilter === t ? "#0d9488" : "#6b7280" }}>{t}</span>
+              <span key={t} data-testid={`tag-chip-${t}`} onClick={() => onTagFilterChange(t)} style={{ fontSize: 11, cursor: "pointer", border: `1px solid ${tagFilter === t ? "#0d9488" : "#e5e7eb"}`, borderRadius: 10, padding: "1px 6px", background: chipBackground(t), color: tagFilter === t ? "#0d9488" : "#6b7280" }}>{t}</span>
             ))}
           </div>
         )}

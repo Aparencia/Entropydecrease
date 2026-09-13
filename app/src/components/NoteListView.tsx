@@ -160,6 +160,7 @@ export default function NoteListView({
         allTags={allTags}
         tagFilter={tagFilter}
         onTagFilterChange={onTagFilterChange}
+        tagColors={tagColors}
       />
 
       <NoteListBody
