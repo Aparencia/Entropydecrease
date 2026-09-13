@@ -289,7 +289,7 @@ describe("RefineWorkbench · [[ts:ms]] 芯片可点（T17 的容器侧委托）"
       const el = document.querySelector<HTMLElement>("[data-ts-ms]");
       expect(el, "芯片未渲染（markdownLine 的时间码链缺席）").toBeTruthy();
       return el as HTMLElement;
-    });
+    }, { timeout: 10000 });
     fireEvent.click(chip);
     expect(onOpenSessionAt, "工作台侧芯片仍不可点（C10.2「不再算残余」未兑现）").toHaveBeenCalledWith(42, 5000);
   });

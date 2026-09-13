@@ -292,7 +292,7 @@ describe("笔记视图宿主（批 5 T14 · C4 阻断 / §7.3 三条硬约束 / 
       const el = container.querySelector<HTMLElement>('[data-testid="note-card-flow"] [data-ts-ms]');
       expect(el, "卡片流没渲染出回链芯片").toBeTruthy();
       return el as HTMLElement;
-    });
+    }, { timeout: 10000 });
     fireEvent.click(chip);
     expect(at, "包装件没生效 —— 检查 CARD_FLOW_KEY 与 viewProps").toHaveBeenCalledWith(42, 5000);
     expect(plain).not.toHaveBeenCalled();

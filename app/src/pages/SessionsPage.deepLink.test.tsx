@@ -102,8 +102,9 @@ describe("SessionsPage · [[ts:ms]] 深链（T17 · C27.4 的 M3 的页面层闭
         onOpenNote={noop}
       />,
     );
-    // 惰性三轨视图的 chunk 在并行跑多文件时可能 >1s（`findBy*` 缺省 1s）⇒ 显式放宽等待
-    await screen.findByTestId("session-tritrack-view", undefined, { timeout: 5000 });
+    // 惰性三轨视图的 chunk 在满负载并行（227 文件 + 同机其它单元）下实测可超 5s ⇒ 上限取 15s
+    // （与仓内最重的 `registryResolution` G3 同档；**判据内容一字未改**，只放宽等待预算）
+    await screen.findByTestId("session-tritrack-view", undefined, { timeout: 15000 });
     expect(invokeMock.mock.calls.filter((c) => c[0] === "get_session_detail"), "深链必须拉目标会话详情")
       .toEqual([["get_session_detail", { id: 1042 }]]);
     expect(playheads(container), "深链的 ms 没落到播放头上（「定位到 ms」不可感知）").toEqual(["5000"]);
@@ -138,8 +139,9 @@ describe("SessionsPage · [[ts:ms]] 深链（T17 · C27.4 的 M3 的页面层闭
     await act(async () => {
       pending.resolve(detailOf(2043, "会话乙"));
     });
-    // 惰性三轨视图的 chunk 在并行跑多文件时可能 >1s（`findBy*` 缺省 1s）⇒ 显式放宽等待
-    await screen.findByTestId("session-tritrack-view", undefined, { timeout: 5000 });
+    // 惰性三轨视图的 chunk 在满负载并行（227 文件 + 同机其它单元）下实测可超 5s ⇒ 上限取 15s
+    // （与仓内最重的 `registryResolution` G3 同档；**判据内容一字未改**，只放宽等待预算）
+    await screen.findByTestId("session-tritrack-view", undefined, { timeout: 15000 });
     expect(onFocusSeekConsumed).toHaveBeenCalledTimes(1);
     expect(playheads(view.container)).toEqual(["5000"]);
   });

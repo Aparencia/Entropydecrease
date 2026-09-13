@@ -59,7 +59,7 @@ const chipOf = async (c: HTMLElement): Promise<HTMLElement> =>
     const el = c.querySelector<HTMLElement>("[data-ts-ms]");
     expect(el, "芯片未渲染（markdown 链没走到时间码锚点）").toBeTruthy();
     return el as HTMLElement;
-  });
+  }, { timeout: 10000 });
 
 afterEach(() => cleanup());
 
