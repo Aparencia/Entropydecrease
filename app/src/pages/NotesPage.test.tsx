@@ -162,7 +162,10 @@ describe("NotesPage [[ts:ms]] 带上毫秒（批 6 T26）", () => {
     fireEvent.click(await screen.findByText("带时间码"));
 
     const chip = await waitFor(() => {
-      const el = container.querySelector<HTMLElement>('span[title*="跳转到会话"]');
+      // 批 7 T17（Y9 · C37.1/§C10.2）：原选择器 `span[title*="跳转到会话"]` 依赖 **title 文案**，
+      // 而三条链（`noteMarkdownComponents` / `utils/html.ts`）今天共用同名定名 marker ⇒
+      // 改读 `[data-ts-ms="5000"]`：比原来**更强**（不再依赖文案，且顺带钉住 ms 载体本身）。
+      const el = container.querySelector<HTMLElement>('[data-ts-ms="5000"]');
       expect(el, "回链芯片未渲染（阅读栏未进入阅读态？）").toBeTruthy();
       return el as HTMLElement;
     });

@@ -272,3 +272,25 @@ describe("RefineWorkbench 行级染色与差异视图（批 3 / 问题11）", ()
     expect(screen.getByRole("button", { name: "差异" })).toBeTruthy();
   });
 });
+
+/** 批 7 T17（C10.2）：工作台侧的 `[[ts:ms]]` 芯片靠**容器委托**可点（芯片是 `dangerouslySetInnerHTML`
+ *  的串产物，没有 React 上下文）⇒ 判据 = 点 `[data-ts-ms]` ⇒ `onOpenSessionAt(sessionId, ms)`。 */
+describe("RefineWorkbench · [[ts:ms]] 芯片可点（T17 的容器侧委托）", () => {
+  const CHIP_MD = "跳转 [⏱ 00:05]([[ts:5000]]) 处";
+  it("点 [data-ts-ms] ⇒ onOpenSessionAt(42, 5000)", async () => {
+    // 两栏文本来自行级 ops（只读透传的 ruleMd 仅在 ops 缺席时兜底）⇒ 夹具必须放进 ops
+    invokeMock.mockImplementation(async (cmd: string) =>
+      cmd === "diff_markdown_ops"
+        ? { ops: [{ unchanged: "# 标题" }, { unchanged: CHIP_MD }], added: 0, removed: 0 }
+        : cmd === "diff_markdown_sections" ? [] : wbStub);
+    const onOpenSessionAt = vi.fn();
+    render(<RefineWorkbench sessionId={42} readonly ruleMd={CHIP_MD} refinedMd={CHIP_MD} onClose={vi.fn()} onOpenSessionAt={onOpenSessionAt} />);
+    const chip = await waitFor(() => {
+      const el = document.querySelector<HTMLElement>("[data-ts-ms]");
+      expect(el, "芯片未渲染（markdownLine 的时间码链缺席）").toBeTruthy();
+      return el as HTMLElement;
+    });
+    fireEvent.click(chip);
+    expect(onOpenSessionAt, "工作台侧芯片仍不可点（C10.2「不再算残余」未兑现）").toHaveBeenCalledWith(42, 5000);
+  });
+});

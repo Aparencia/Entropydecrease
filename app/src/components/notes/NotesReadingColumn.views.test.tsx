@@ -79,10 +79,13 @@ interface HarnessProps {
   readonly editing?: boolean;
   readonly selected?: Note | null;
   readonly handle?: NoteEditHandle | null;
+  /** 批 7 T17：卡片流那条链的 ms 出口（F11 用；缺省 = 今天的形态） */
+  readonly onOpenSession?: (sessionId: number) => void;
+  readonly onOpenSessionAt?: (sessionId: number, ms: number) => void;
 }
 
 /** 页面形态的宿主：真 `useColumnLayout` + 真注册表清单（与 `NotesPage` 的那一行同源） */
-function Harness({ views = viewsFor("note"), editing = false, selected = note, handle = null }: HarnessProps) {
+function Harness({ views = viewsFor("note"), editing = false, selected = note, handle = null, onOpenSession, onOpenSessionAt }: HarnessProps) {
   const outlineCol = useColumnLayout("notes-outline", columnSpec("notes-outline"));
   const editorRef = useRef<NoteEditHandle | null>(handle);
   return (
@@ -104,6 +107,8 @@ function Harness({ views = viewsFor("note"), editing = false, selected = note, h
       onDelete={noop}
       onTaskToggle={noop}
       onTagClick={noop}
+      onOpenSession={onOpenSession}
+      onOpenSessionAt={onOpenSessionAt}
       onImageOpen={noop}
       onCleanNotice={noop}
       views={views}
@@ -276,5 +281,20 @@ describe("笔记视图宿主（批 5 T14 · C4 阻断 / §7.3 三条硬约束 / 
     // 惰性 chunk 已解析、卡片流已挂载之后再看：切换这条路径自身 0 次 invoke（§7.1 依赖方向）
     await act(async () => {});
     expect(invokeMock.mock.calls.length).toBe(before);
+  });
+
+  /** F11（T17 · C10.3）：卡片流必须经**带 seek 包装件**加载 —— 点真芯片看回调（包装件未生效 / 键改名 ⇒ 命中单参分支 ⇒ `at` 收不到）。 */
+  it("F11 卡片流芯片带毫秒：点 [data-ts-ms] ⇒ onOpenSessionAt(42, 5000)，单参回调不被调", async () => {
+    const plain = vi.fn(); const at = vi.fn();
+    const { container } = render(<Harness selected={{ ...note, content: "跳转 [⏱ 00:05]([[ts:5000]]) 处" }} onOpenSession={plain} onOpenSessionAt={at} />);
+    await clickSegment("卡片流");
+    const chip = await waitFor(() => {
+      const el = container.querySelector<HTMLElement>("[data-ts-ms]");
+      expect(el, "卡片流没渲染出回链芯片").toBeTruthy();
+      return el as HTMLElement;
+    });
+    fireEvent.click(chip);
+    expect(at, "包装件没生效 —— 检查 CARD_FLOW_KEY 是否与注册表一致").toHaveBeenCalledWith(42, 5000);
+    expect(plain).not.toHaveBeenCalled();
   });
 });

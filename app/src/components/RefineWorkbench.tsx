@@ -120,6 +120,7 @@ export default function RefineWorkbench({
   onRegenerate,
   ruleMd: propRuleMd,
   refinedMd: propRefinedMd,
+  onOpenSessionAt,
 }: {
   /** 会话级目标（规则草稿基线；与 noteMode 二选一） */
   sessionId?: number;
@@ -140,6 +141,10 @@ export default function RefineWorkbench({
   ruleMd?: string;
   /** 只读模式透传精修版 markdown */
   refinedMd?: string;
+  /** 批 7 T17（C10.2）：`[[ts:ms]]` 芯片的**容器侧事件委托**出口（双栏/差异三处阅读面共用）。
+   *  @ai-context 缺省 ⇒ 芯片不可点（与今天逐字相同）。生产接线见 `VersionPanel`（笔记页版本对比）；
+   *  `AiRefineCard` / `NoteAiDialog` 两处调用点未接线（理由见 T17 报告「诚实边界」）。 */
+  onOpenSessionAt?: (sessionId: number, ms: number) => void;
 }) {
   const [data, setData] = useState<WorkbenchData | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -324,6 +329,12 @@ export default function RefineWorkbench({
   const leftHtml = renderSideHtml(baseRows);
   const rightHtml = hasRefined ? decorateRefined(renderSideHtml(refinedRows), sections) : "";
   const diffHtml = renderDiffColumnHtml(diffRows);
+  /** 批 7 T17（C10.2）：容器侧事件委托（三处阅读面都是 `dangerouslySetInnerHTML` 的串产物，
+   *  芯片没有 React 上下文）⇒ 按 C10.2 逐字给的 `closest("[data-ts-ms]")` 取目标。 */
+  const openChip = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = (e.target as HTMLElement).closest("[data-ts-ms]");
+    if (el && sessionId && onOpenSessionAt) onOpenSessionAt(sessionId, Number(el.getAttribute("data-ts-ms")));
+  };
   // 差异视图仅在两版可比时展示（精修版缺失时保持并排占位——单侧无 diff 语义）
   const showDiff = view === "diff" && hasRefined;
 
@@ -436,7 +447,7 @@ export default function RefineWorkbench({
             <span style={{ margin: "0 8px" }}>/</span>
             <span>灰 = 两版共有</span>
           </div>
-          <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: 12 }} onClick={openChip}>
             <Surface
               level="surface"
               radius="panel"
@@ -455,6 +466,7 @@ export default function RefineWorkbench({
           <div
             ref={leftRef}
             onScroll={() => onScroll("left")}
+            onClick={openChip}
             style={{ flex: 1, overflowY: "auto", padding: 12, fontSize: 12, lineHeight: 1.6 }}
             dangerouslySetInnerHTML={{ __html: leftHtml }}
           />
@@ -468,6 +480,7 @@ export default function RefineWorkbench({
             <div
               ref={rightRef}
               onScroll={() => onScroll("right")}
+              onClick={openChip}
               style={{ flex: 1, overflowY: "auto", padding: 12, fontSize: 12, lineHeight: 1.6 }}
               dangerouslySetInnerHTML={{ __html: rightHtml }}
             />

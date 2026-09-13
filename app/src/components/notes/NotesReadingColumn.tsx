@@ -51,7 +51,7 @@
  *              `StatusLine` 原语 · 间距走 `--ed-space-*`），`style` 只承载布局（ADR-033 §4）。
  */
 import { Suspense, createElement, lazy, useCallback, useMemo, useState } from "react";
-import type { RefObject } from "react";
+import type { ComponentType, RefObject } from "react";
 import type { Note, NoteGroup } from "../../types";
 import type { NoteEditHandle } from "../NoteEditView";
 import type { ColumnLayout } from "../../hooks/useColumnLayout";
@@ -67,6 +67,11 @@ import { StatusLine, Text, ViewSwitcher } from "../../ui/primitives";
 
 /** `views` 缺席时的空清单：**模块级常量**（稳定引用 ⇒ 下面的 `useMemo` 不每渲染重算） */
 const NO_VIEWS: readonly ViewSpec<NoteViewSlot>[] = [];
+
+/** 卡片流键（= 注册表的 `NOTE_VIEWS[1]`；本件不 import 注册表 —— C1①）与其**带 seek 包装件**加载器
+ *  （T17/C10.3：该视图槽缺 `onOpenSessionAt`）；仍经 `lazy()` ⇒ 模块级惰性不变。 */
+const CARD_FLOW_KEY = "cardflow";
+const CARD_FLOW_LOAD = (): Promise<{ default: ComponentType<NoteViewSlot> }> => import("../../views/note/NoteCardFlowWithSeek");
 
 interface Props {
   /** 当前选中笔记（null=空态占位） */
@@ -123,7 +128,7 @@ export default function NotesReadingColumn({
   // v0.17.0 REQ-246：阅读态独立面板移除，用 AI 直接进入编辑态）
   const auxPanels = selected ? (
     <>
-      <VersionPanel key={`version-${selected.id}`} noteId={selected.id} onChanged={() => void onChanged()} />
+      <VersionPanel key={`version-${selected.id}`} noteId={selected.id} onChanged={() => void onChanged()} onOpenSessionAt={onOpenSessionAt} />
     </>
   ) : null;
 
@@ -162,15 +167,16 @@ export default function NotesReadingColumn({
   /**
    * 惰性映射：**默认视图无 `load` ⇒ 值为 `null`**，永不进 `React.lazy`（§7.3② 的构造性证据）。
    * `lazy()` 只按 `specs` 引用建一次 —— 每渲染新建会让子树恒重挂（F5 的挂载计数会当场红）。
+   * T17：**卡片流**经包装件加载（键漂移会让它静默失效 ⇒ F11 用例即守卫）。
    */
   const lazyOf = useMemo(
-    () => new Map(specs.map((spec) => [spec.key, spec.load ? lazy(spec.load) : null])),
+    () => new Map(specs.map((spec) => [spec.key, spec.load ? lazy(spec.key === CARD_FLOW_KEY ? CARD_FLOW_LOAD : spec.load) : null])),
     [specs],
   );
   const isDefault = viewKey === defaultKey;
   const LazyView = isDefault ? null : lazyOf.get(viewKey) ?? null;
-  /** 非默认视图的槽（数据全在这里，视图自身零取数 —— C14②）；空态 ⇒ `null`（连卡片流都不挂） */
-  // ⚠️ T26：`onOpenSessionAt` **不进** NoteViewSlot（该槽类型属批 6 T24 的规范面，本任务不改）⇒ 卡片流视图的时间码回链仍无 ms，已登记为残余
+  /** 非默认视图的槽（数据全在这里，视图自身零取数 —— C14②）；空态 ⇒ `null`（连卡片流都不挂）。
+   *  T17：`onOpenSessionAt` 仍不进 `NoteViewSlot`（批 6 已裁）⇒ 卡片流的 ms 由包装件补齐。 */
   const slot: NoteViewSlot | null = selected
     ? { note: selected, onTaskToggle, onOpenSession, onImageOpen }
     : null;

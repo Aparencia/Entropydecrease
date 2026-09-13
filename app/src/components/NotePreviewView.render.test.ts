@@ -8,7 +8,7 @@
  *   （组件级取数/状态/交互不在本文件）；② 串里文本的 `"`/`'` 经解析往返为字面量，属性的 `"` 仍见 `&quot;`。
  */
 import { createElement } from "react";
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { invokeMock, convertMock } = vi.hoisted(() => ({
@@ -210,5 +210,25 @@ describe("NotePreviewView.renderMarkdown 表征（钉住今天的行渲染行为
     const out = await previewHtml(long);
     expect(out).toBe(P(long));
     expect(out.split("<p ").length).toBe(2);
+  });
+
+  /**
+   * 批 7 T17（C10.2）的**唯一新增用例**（上面 34 条一字未改 = 迁移的回归网）。
+   * @ai_context 芯片是串渲染产物 ⇒ 点击只能在**容器上委托**（`closest("[data-ts-ms]")`）：
+   *   判据 = 点 `[data-ts-ms]` ⇒ `onOpenSessionAt(sessionId, ms)`（ms 来自 marker，sessionId 由容器补）。
+   *   缺省不注入该回调 ⇒ 芯片不可点（与迁移前逐字相同；上一条的属性表用例即该形态）。
+   */
+  it("T17 容器侧委托：点 [data-ts-ms] ⇒ onOpenSessionAt 收到 (sessionId, ms)", async () => {
+    const onOpenSessionAt = vi.fn();
+    convertMock.mockClear();
+    installInvoke("[⏱ 00:05]([[ts:5000]]) 尾巴");
+    let container!: HTMLElement;
+    await act(async () => {
+      ({ container } = render(createElement(NotePreviewView, { sessionId: 7, onOpenSessionAt })));
+    });
+    const chip = container.querySelector<HTMLElement>("[data-ts-ms]");
+    expect(chip, "芯片未渲染 ⇒ 委托无目标（T15 的 marker 或迁移落点坏了）").toBeTruthy();
+    fireEvent.click(chip as HTMLElement);
+    expect(onOpenSessionAt, "预览侧的芯片不可点（C10.2 的容器侧委托未兑现）").toHaveBeenCalledWith(7, 5000);
   });
 });

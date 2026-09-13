@@ -226,6 +226,10 @@ export function noteMarkdownComponents({
         const secStr = String(sec % 60).padStart(2, "0");
         return (
           <span
+            // 批 7 T17（§C37.1 · Y9）：与串渲染链（`utils/html.ts` 的芯片）**同名**的定名 marker。
+            // Why：三条链共用一个 marker ⇒ ① 容器侧委托一处可读（`closest("[data-ts-ms]")`）
+            // ② `pages/NotesPage.test.tsx` 的脆选择器（`span[title*="跳转到会话"]`）可换成定名选择器。
+            data-ts-ms={ms}
             style={{ cursor: "pointer", color: "#0d9488", borderBottom: "1px dashed #14b8a6", background: "#f0fdfa", borderRadius: 3, padding: "0 4px" }}
             onClick={() => {
               if (!note.session_id) return;

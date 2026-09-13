@@ -72,13 +72,17 @@ function renderMarkdown(md: string, imageBaseUrl: string, dataDir: string): stri
 }
 
 export default function NotePreviewView({
-  sessionId, autoTaskId, onTaskStarted,
+  sessionId, autoTaskId, onTaskStarted, onOpenSessionAt,
 }: {
   sessionId: number;
   /** v0.16.1：工作台深链任务 id（透传 AiRefineCard——对话页任务视图跳转） */
   autoTaskId?: number | null;
   /** v0.16.1：精修任务启动回调（会话页 → 跳 AI 对话页） */
   onTaskStarted?: (sessionId: number, taskId: number) => void;
+  /** 批 7 T17（C10.2）：`[[ts:ms]]` 芯片的**容器侧事件委托**出口（串渲染的芯片没有 React 上下文
+   *  ⇒ 只能在容器上监听）。缺省 ⇒ 芯片不可点（与今天逐字相同：不新增任何导航行为）。
+   *  ⚠️ 生产调用点（`views/session/SessionNotePreview` 适配器）**本任务不接线**（见报告「诚实边界」）。 */
+  onOpenSessionAt?: (sessionId: number, ms: number) => void;
 }) {
   const [preview, setPreview] = useState<NoteFilterResult | null>(null);
   const [status, setStatus] = useState("");
@@ -193,6 +197,17 @@ export default function NotePreviewView({
     }
   };
 
+  /**
+   * 批 7 T17（C10.2）：**容器侧事件委托** —— 芯片是 `dangerouslySetInnerHTML` 的字符串产物
+   * （没有 React 上下文，无法给它挂 `onClick`），故在容器上按 C10.2 逐字给的形态取目标：
+   * `closest("[data-ts-ms]")`（marker 由 `utils/html.ts` 的 `renderTimestampAnchors` 写）。
+   * 未注入回调 ⇒ 直接返回（**不新增任何行为**，与今天的预览逐字相同）。
+   */
+  const openChip = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = (e.target as HTMLElement).closest("[data-ts-ms]");
+    if (el && onOpenSessionAt) onOpenSessionAt(sessionId, Number(el.getAttribute("data-ts-ms")));
+  };
+
   if (!preview) {
     // 批 4 T14：加载态改由 L1 原语承载（`role="status"` + 探针 + 逐字文案）。`status` 是
     // 可读信息（可能是"载入失败"之类的说明），故仍作 label；排版权威留在原语的 `Text` 里。
@@ -205,7 +220,7 @@ export default function NotePreviewView({
 
   const stats = preview.stats;
   return (
-    <div>
+    <div onClick={openChip}>
       {/* 过滤统计卡（v0.7.5：口头禅/净化计数——REQ-162~164/171 口径） */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0" }}>
         {[

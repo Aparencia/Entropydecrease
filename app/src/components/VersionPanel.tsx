@@ -36,7 +36,13 @@ function DiffLine({ op }: { op: DiffOp }) {
   return <div style={{ color: "#6b7280", padding: "2px 6px" }}>  {("unchanged" in op ? op.unchanged : "").replace(/^#+\s*/, "") || " "}</div>;
 }
 
-export default function VersionPanel({ noteId, onChanged }: { noteId: number; onChanged?: () => void }) {
+/** 批 7 T17（C10.2）：版本对比工作台的 `[[ts:ms]]` 芯片出口 —— 容器（`NotesReadingColumn`）注入，
+ *  转交只读 `RefineWorkbench`；缺省 ⇒ 芯片不可点（与本任务之前逐字相同）。 */
+export default function VersionPanel({ noteId, onChanged, onOpenSessionAt }: {
+  noteId: number;
+  onChanged?: () => void;
+  onOpenSessionAt?: (sessionId: number, ms: number) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [versions, setVersions] = useState<NoteVersion[]>([]);
   const [usage, setUsage] = useState<AiUsageRecord[]>([]);
@@ -206,6 +212,7 @@ export default function VersionPanel({ noteId, onChanged }: { noteId: number; on
           ruleMd={compareData.ruleMd}
           refinedMd={compareData.refinedMd}
           onClose={() => setCompareData(null)}
+          onOpenSessionAt={onOpenSessionAt}
         />
       )}
 
