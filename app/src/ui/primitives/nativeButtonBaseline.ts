@@ -43,8 +43,18 @@
  *   ⚠️ **另一处「余量」不许收紧**：`pages/ChatPage.tsx` 实测 **2** < 冻结 **5** 是**拆件搬运**的正常
  *   形态 —— 3 处随 `✨ 发起任务` 菜单搬进 `components/chat/ChatLaunchMenu.tsx`（见 `SPLIT_MOVES`），
  *   两侧之和必须仍等于源键的 5（`nativeButton.ratchet.test.ts` ④ 的守恒判据）。
+ *
+ * ★ **收紧 1 处余量（批 7 T12 · 7a 段收口；依据 `rulings.md` §C31.2 的 Important I1）**：
+ *   批 7 收口实测 **392 处 / 114 文件**，而常量与逐文件表之和都是 **393** ⇒ 差值来源 = 
+ *   `components/SessionDetailPanel.tsx` **登记 1 / 实测 0**（该文件不在 T6 的写集内，登记值过期）。
+ *   据实收紧：`["components/SessionDetailPanel.tsx"] 1 → 0`。**保留键、不整键删除** —— 因为
+ *   `buttonMigration.test.ts:271` 的「逐文件基线键数 == 114」是一条**普查等式**，删键会让它红，
+ *   而那与本次收紧无关。连带**必改**：`FROZEN_NATIVE_BUTTON_TOTAL 393 → 392` ——
+ *   `buttonMigration.test.ts:272` 断言「常量 == 逐文件 entries 之和」，键值降 1 会让和降 1；
+ *   两者**同为下降**，符合 §C5.1「只许降或持平」。⇒ 收紧后 **Σentries == 常量 == 实测 == 392**（零余量）。
+ *   ⚠️ 本文件外的遗留散文（本次未改，已登记进 T12 报告）：`components/MotionIntensityControl.tsx:14`。
  */
-export const FROZEN_NATIVE_BUTTON_TOTAL = 393;
+export const FROZEN_NATIVE_BUTTON_TOTAL = 392;
 
 /** `const *Btn*` 样式常量族的冻结**行数**（T12 迁移后实测 56；迁移前 79）。 */
 export const FROZEN_BTN_STYLE_CONST_LINES = 56;
@@ -52,7 +62,8 @@ export const FROZEN_BTN_STYLE_CONST_LINES = 56;
 /** `const *Btn*` 样式常量族的冻结**文件数**（T12 迁移后实测 44；迁移前 55）。 */
 export const FROZEN_BTN_STYLE_CONST_FILES = 44;
 
-/** 相对 `app/src` 的路径 → 基线计数（T12 迁移后实测 394/114 ⇒ 收口评审 M-3 收紧总量为 **393**，键数仍 114） */
+/** 相对 `app/src` 的路径 → 基线计数（T12 迁移后实测 394/114 ⇒ 收口评审 M-3 收紧总量为 **393**，键数仍 114；
+ *  批 7 T12 再收紧 `SessionDetailPanel` 键 1 → 0 与总量 → **392**，见上方 ★；零值键 = 该文件「必须保持 0 处」） */
 export const FROZEN_NATIVE_BUTTON_BY_FILE: Readonly<Record<string, number>> = {
   "components/action-center/ActionCenterPanel.tsx": 11,
   "components/AiConversationDock.tsx": 9,
@@ -143,7 +154,7 @@ export const FROZEN_NATIVE_BUTTON_BY_FILE: Readonly<Record<string, number>> = {
   "components/session-detail/SessionDetailHeader.tsx": 2,
   "components/session-detail/SessionRefineSection.tsx": 3,
   "components/session-detail/SessionScreenCards.tsx": 1,
-  "components/SessionDetailPanel.tsx": 1,
+  "components/SessionDetailPanel.tsx": 0,
   "components/SessionListBody.tsx": 1,
   "components/SessionListPanel.tsx": 2,
   "components/SessionRowContextMenu.tsx": 5,
