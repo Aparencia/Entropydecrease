@@ -4,7 +4,7 @@
  *   ① `app_commands.rs` 登记行正文的「N 条」（generate_handler! 实条目数）—— `--write` 只刷数字列 ⇒ 零门禁；
  *   ② `App.tsx` 登记行的行数 —— 另有 `--full` 的 (e) 判据兜底，本探针作对照。判据 = 散文值 == 真源实测值。
  * 口径：行数 = countLines()（文件**全部**行数含空行；末尾换行不额外算一行），与 `scripts/line-limits.mjs` 同源。
- * ⚠️ 本脚本**不是门禁**：不入八闸 / 不入 CI / 不入 husky，只能**手工跑**（批 7 §C11.8）。批 8 的候选闸。
+ * ⚠️ 本脚本**不进八闸集合**（八闸集合是批次间对账基线，扩闸会让对账漂移），批 8 T17 已挂进 CI（`pr-check.yml` 的 line-limits job 内单列 step「Exemption table prose check」，`:211`）、仍不进 husky；⚠️ 若它在 CI 上频繁假红 ⇒ 回退裁决、改回手工跑，并写明回退理由。
  * 退出码：0 = 全一致 · 1 = 有不一致 · 2 = 解析失败（登记行/字段缺失，或读不到门禁输出）。
  */
 import { execFileSync } from 'node:child_process';
@@ -21,7 +21,7 @@ const APP_TSX = 'app/src/App.tsx';
 const USAGE = `用法：node scripts/check-exemption-prose.mjs [--self-test]
   无参数       对拍：豁免表「N 条」↔ 命令注册门禁「定义 N」；App.tsx 登记行数 ↔ countLines 实测
   --self-test  四例内存夹具（一致 / 条数错值 / 行数错值 / 缺行）自证判据有牙 · --help 本帮助
-⚠️ 本脚本不是门禁：不入八闸 / 不入 CI / 不入 husky，只能手工跑（批 7 §C11.8）。批 8 的候选闸。`;
+⚠️ 本脚本不进八闸集合（八闸集合是批次间对账基线，扩闸会让对账漂移），批 8 T17 已挂进 CI（pr-check.yml 的 line-limits job 内单列 step「Exemption table prose check」，:211）、仍不进 husky；⚠️ 若它在 CI 上频繁假红 ⇒ 回退裁决、改回手工跑，并写明回退理由。`;
 
 const countLinesText = (s) => s.split('\n').length - (s.endsWith('\n') ? 1 : 0);
 const countLines = (abs) => countLinesText(readFileSync(abs, 'utf8'));
@@ -70,7 +70,7 @@ function realRun() {
     console.log(`${c.ok ? '✅' : '❌'} ${c.label}（${TABLE}${c.where}）`);
     if (!c.ok) { bad++; console.log(`     ⇒ ${c.hint}`); }
   }
-  console.log(bad ? `❌ 散文与真源不一致：${bad} 处` : '✅ 散文与真源一致（本脚本非门禁、只能手工跑；批 8 候选闸）');
+  console.log(bad ? `❌ 散文与真源不一致：${bad} 处` : '✅ 散文与真源一致（本脚本不进八闸集合；批 8 T17 起为 CI 门禁、单列 step，仍不进 husky）');
   return bad ? 1 : 0;
 }
 
