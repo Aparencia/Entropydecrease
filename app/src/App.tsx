@@ -357,6 +357,8 @@ function MainShell() {
         onOpenSettings={() => setPage("settings")}
         // 批 3 T11：⌘K 按钮与 Ctrl+K 快捷键都开同一个面板（T7 时这里还是空实现）
         onOpenPalette={() => setPaletteOpen(true)}
+        proofread={proofread}
+        onToggleProofread={toggleProofread}
         right={
           <>
             <TopBarAction

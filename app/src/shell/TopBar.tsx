@@ -26,6 +26,7 @@
 import type { ReactNode } from "react";
 import { Icon, type IconName } from "../ui/icons";
 import { NAV_ENTRIES, navEntry, type PageKey } from "./navRegistry";
+import type { ProofreadMode } from "./proofreadMode";
 import "./TopBar.css";
 
 export interface TopBarProps {
@@ -35,6 +36,13 @@ export interface TopBarProps {
   onOpenPalette: () => void;
   /** 右侧状态区（采集徽标 / 对话面板入口）—— 本组件不读这些状态，由 App 注入 */
   right?: ReactNode;
+  /**
+   * 审校模式位（规格 §4.3③；批 8 T11）—— **由 App 注入**（单一写入方纪律：属性是全局唯一载体，
+   * 本组件**不**自己去写 `<html>`，否则按钮与快捷键各持一份 state 必然互擦）。
+   */
+  proofread?: ProofreadMode;
+  /** 切换审校模式（与快捷键 / `Esc` **同一个**切换器，由 App 透传） */
+  onToggleProofread?: () => void;
 }
 
 export interface TopBarActionProps {
@@ -73,7 +81,7 @@ export function TopBarAction({ testId, icon, label, title, onClick, current, pre
   );
 }
 
-export function TopBar({ page, onSelect, onOpenSettings, onOpenPalette, right }: TopBarProps) {
+export function TopBar({ page, onSelect, onOpenSettings, onOpenPalette, right, proofread, onToggleProofread }: TopBarProps) {
   const settings = navEntry("settings");
   return (
     <nav className="ed-topbar" data-testid="topbar" aria-label="主导航">
@@ -103,6 +111,16 @@ export function TopBar({ page, onSelect, onOpenSettings, onOpenPalette, right }:
           onClick={onOpenPalette}
         />
         {right}
+        {/* 审校模式入口（批 8 T11；规格 §4.3①「一个可发现的入口按钮」）—— 复用右簇动作按钮族，
+            因此**零原生 `<button>` 新增**、零新样式常量；`pressed` 走 `aria-pressed`（与 dock-toggle 同族）。 */}
+        <TopBarAction
+          testId="topbar-proofread"
+          icon="check"
+          label="审校"
+          title="审校模式（Ctrl/⌘+Shift+R）"
+          pressed={proofread === "on"}
+          onClick={() => onToggleProofread?.()}
+        />
         <TopBarAction
           testId="topbar-settings"
           icon={settings.icon}

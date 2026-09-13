@@ -27,7 +27,9 @@
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { useEffect } from "react";
 import { TopBar } from "./TopBar";
+import { PROOFREAD_MODE_ATTR, useProofreadMode } from "./proofreadMode";
 import { NAV_ENTRIES } from "./navRegistry";
 import { BREAKPOINTS } from "./breakpoints";
 import {
@@ -142,7 +144,7 @@ describe("TopBar（规格 §6.1）", () => {
     expect(
       classes,
       "顶栏按钮的类序变了：带 `ed-btn` ⇒ 掉出 `button:not(.ed-btn)` 的元素级回执（也就掉出 reduced-motion 名单）",
-    ).toEqual([...NAV_ENTRIES.map(() => "ed-topbar__tab"), "ed-topbar__action", "ed-topbar__action"]);
+    ).toEqual([...NAV_ENTRIES.map(() => "ed-topbar__tab"), "ed-topbar__action", "ed-topbar__action", "ed-topbar__action"]);
     // ③a-2 落点覆盖面（今天 0 处声明 ⇒ 条件式；变异体证明有牙：把落点写到 `.ed-topbar__brand`（`<span>`）⇒ 红）
     const buttons = new Set(classes.flatMap((c) => c.split(/\s+/)));
     const rules = [...CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => motionDecls(m[2]).length > 0);
@@ -209,6 +211,55 @@ describe("TopBar（规格 §6.1）", () => {
       expect(at, `TopBar.css 缺规则：${selector}`).toBeGreaterThan(-1);
       expect(CSS.slice(at, CSS.indexOf("}", at)), `${selector} 缺 flex: 0 0 auto`).toContain("flex: 0 0 auto");
     }
+  });
+});
+
+/**
+ * 批 8 T11 · 审校模式**入口按钮**（规格 §4.3① 可发现的入口 + ③ 三条等价出口）。通道层判据在
+ * `proofreadMode.test.ts` / `.dom.test.tsx`；本节判**装配层**：宿主 `Harness` = `App.tsx:330-339`
+ * 的**最小镜像**（单一 `useProofreadMode()` + 两条键盘出口）⇒ 三条出口必须**合流**。
+ */
+describe("审校模式入口（批 8 T11；规格 §4.3①③）", () => {
+  const mode = () => document.documentElement.getAttribute(PROOFREAD_MODE_ATTR);
+  afterEach(() => document.documentElement.removeAttribute(PROOFREAD_MODE_ATTR));
+  function Harness() {
+    const [proofread, toggleProofread] = useProofreadMode();
+    useEffect(() => {
+      const onKey = (e: KeyboardEvent) => {
+        const hit = e.ctrlKey && e.shiftKey && (e.key === "R" || e.key === "r");
+        if (hit) { e.preventDefault(); toggleProofread(); }
+        else if (e.key === "Escape" && proofread === "on") toggleProofread();
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [proofread, toggleProofread]);
+    return <TopBar {...base} proofread={proofread} onToggleProofread={toggleProofread} />;
+  }
+  const entry = () => screen.getByTestId("topbar-proofread");
+
+  it("① 入口常驻在右簇动作按钮族里、有可读文案与快捷键提示（条件 ① 的字面要求）", () => {
+    render(<Harness />);
+    expect([entry().className.includes("ed-topbar__action"), entry().textContent?.trim(), entry().getAttribute("title") ?? ""],
+      "入口不在动作按钮族 / 缺可读文案 / 缺快捷键提示").toEqual([true, "审校", "审校模式（Ctrl/⌘+Shift+R）"]);
+  });
+
+  it("②③ 点一次 ⇒ `<html>` 置 `on`；再点 ⇒ **摘属性**（不是写成 \"off\"）", () => {
+    render(<Harness />);
+    expect(document.documentElement.hasAttribute(PROOFREAD_MODE_ATTR), "起点必须干净").toBe(false);
+    fireEvent.click(entry());
+    expect(mode(), "点击后没置属性").toBe("on");
+    fireEvent.click(entry());
+    expect(document.documentElement.hasAttribute(PROOFREAD_MODE_ATTR), "再点必须能退出（缺省不落属性）").toBe(false);
+  });
+
+  it("④ 三出口合流：按钮打开的模式，`Esc` 与 `Ctrl+Shift+R` 都必须能关掉", () => {
+    render(<Harness />);
+    fireEvent.click(entry());
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(mode(), "Esc 对按钮打开的模式无效 ⇒ 按钮与快捷键各持一份 state").toBeNull();
+    fireEvent.click(entry());
+    fireEvent.keyDown(window, { key: "R", ctrlKey: true, shiftKey: true });
+    expect(mode(), "快捷键关不掉按钮打开的模式").toBeNull();
   });
 });
 
