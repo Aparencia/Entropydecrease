@@ -202,6 +202,7 @@ export default function SessionDetailPanel({ detail, views, fusing, degradedBann
         }
         refining={refining}
         onStartRefine={startRefine}
+        sessionId={detail.session.id}
         canSecondPass={detail.session.status === "finished" && detail.session.kind !== "photo"}
         onOpenPass2={() => setShowPass2(true)}
         onOpenProofread={() => setShowProofread(true)}

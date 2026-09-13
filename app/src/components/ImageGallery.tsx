@@ -14,6 +14,7 @@ import { listen } from "@tauri-apps/api/event";
 import ImagePreviewOverlay from "./ImagePreviewOverlay";
 import StructureImageSection from "./StructureImageSection";
 import { Button, EmptyState, StatusLine } from "../ui/primitives";
+import GalleryBulkDelete from "./session-detail/GalleryBulkDelete";
 
 export default function ImageGallery({ sessionId }: { sessionId: number }) {
   const [images, setImages] = useState<string[]>([]);
@@ -72,6 +73,9 @@ export default function ImageGallery({ sessionId }: { sessionId: number }) {
         <Button variant="secondary" size="md" busy={loading} onClick={() => void refresh()}>
           {loading ? "加载中…" : "⟳ 刷新"}
         </Button>
+        {/* 批 7 T20（§9 #37）：整场批量删（`delete_session_images_all`）+ 危险确认。
+            本件在 `buttonMigration` 的 35 文件普查名单内 ⇒ 按钮留在新件里，本件只加装配行。 */}
+        <GalleryBulkDelete sessionId={sessionId} count={images.length} onDeleted={() => void refresh()} />
         {error && <StatusLine kind="error">{error}</StatusLine>}
       </div>
       {images.length === 0 && !loading && (

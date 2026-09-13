@@ -13,14 +13,23 @@
  * @ai-context: refineMsg 提示行与 SecondPassPanel/ProofreadPanel 的挂载**不在此文件**——它们留在
  *              面板的就地位置，避免把 in-flow 提示行与 fixed overlay 换父节点（DOM 顺序契约）。
  * @ai-context: 样式口径——沿用拆分前的全部 inline style（无 .ed-* 类名），拆分不改色值。
+ * @ai-context: **批 7 T20（§9 #42）**：本件新增「🛠 手动精修」入口（`refine_session`）—— 与既有的
+ *              🔬 课后精修（`auto_refine_session`，幂等跳过）**并列、不替换**。本件原生 `<button>`
+ *              已满 **3/3**（`nativeButton` 棘轮）⇒ 新入口走 `Button` 原语；`sessionId` 由面板注入。
  */
+import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { Button, StatusLine } from "../../ui/primitives";
+
 /** 通用小按钮基础样式（拆分前 SessionDetailPanel 的 `btn`——本文件三个按钮复用） */
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
 
 interface Props {
+  /** 本会话 id（手动精修 `refine_session` 的入参；与 auto 版**同一条命令族、不同命令**） */
+  sessionId: number;
   /** 精修中（事件驱动；禁用 🔬 并改文案） */
   refining: boolean;
-  /** 🔬 手动入口（面板层 useSessionDetailData().startRefine） */
+  /** 🔬 手动入口（面板层 useSessionDetailData().startRefine —— 调 `auto_refine_session`） */
   onStartRefine: () => void;
   /** 是否允许第二遍/校对（finished 且非图文会话） */
   canSecondPass: boolean;
@@ -30,7 +39,23 @@ interface Props {
   onOpenProofread: () => void;
 }
 
-export default function SessionRefineSection({ refining, onStartRefine, canSecondPass, onOpenPass2, onOpenProofread }: Props) {
+export default function SessionRefineSection({ sessionId, refining, onStartRefine, canSecondPass, onOpenPass2, onOpenProofread }: Props) {
+  // 批 7 T20（§9 #42）：**手动精修**（`refine_session`）—— 与 auto 版**并列**、不替换。
+  // 与 auto 版的差别是**语义**而非文案：auto 会先做幂等检查（`no-pending` 快速返回），
+  // 手动版**无条件跑**（用户明确要求），故两条命令的载荷虽同形、命令名不同。
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualErr, setManualErr] = useState("");
+  const runManual = async (): Promise<void> => {
+    setManualBusy(true);
+    setManualErr("");
+    try {
+      await invoke("refine_session", { sessionId });
+    } catch (e) {
+      setManualErr(`手动精修失败: ${e}`);
+    } finally {
+      setManualBusy(false);
+    }
+  };
   return (
     <>
       {/* v0.11.5（spec 5️⃣）：课后精修入口迁移到面板层（与懒触发同命令，幂等防重） */}
@@ -41,6 +66,11 @@ export default function SessionRefineSection({ refining, onStartRefine, canSecon
       >
         {refining ? "精修中…" : "🔬 课后精修"}
       </button>
+      {/* 批 7 T20：手动精修（`refine_session`）—— 走 `Button` 原语（本件原生按钮已满 3/3） */}
+      <Button size="sm" variant="secondary" busy={manualBusy} onClick={() => void runManual()} title="无条件跑一遍精修（不幂等跳过）">
+        {manualBusy ? "手动精修中…" : "🛠 手动精修"}
+      </Button>
+      {manualErr !== "" && <StatusLine kind="error" testId="session-manual-refine-error">{manualErr}</StatusLine>}
       {/* v0.20.2（REQ-268）：全量离线精修（第二遍）——仅已结束非图文会话
           （需要 S4 落盘音频）；面板内预览/采纳/回退，原料视图恒原文 */}
       {canSecondPass && (

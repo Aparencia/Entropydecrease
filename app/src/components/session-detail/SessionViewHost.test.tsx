@@ -121,6 +121,7 @@ function HostHarness({ views = STUB_VIEWS, slot = slotOf() }: { views?: readonly
       slot={slot}
       resident={<ResidentProbe />}
       refining={false}
+      sessionId={7}
       onStartRefine={noop}
       canSecondPass={false}
       onOpenPass2={noop}
@@ -246,6 +247,7 @@ describe("SessionViewHost · T10 判据（H1–H6 + 默认视图重锚）", () =
         resident={<ResidentProbe />}
         errorSlot={<span data-testid="err-line">保存失败</span>}
         refining={false}
+        sessionId={7}
         onStartRefine={noop}
         canSecondPass={false}
         onOpenPass2={noop}

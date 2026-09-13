@@ -17,6 +17,7 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import AudioLevelMeter from "./AudioLevelMeter";
+import StaleSessionRecoveryBar from "./StaleSessionRecoveryBar";
 import { AUTO_RESUME_HINTS } from "../hooks/liveCaptureState";
 import type { CaptureActionKind } from "../hooks/useLiveCaptureControl";
 import type { PrepareState } from "../hooks/useClassroomHints";
@@ -289,6 +290,7 @@ export default function ClassroomCapturePanel({
           </button>
         </>
       )}
+      {sessionId && !starting && <StaleSessionRecoveryBar sessionId={sessionId} onRecovered={() => onStatus("会话已收尾（结束会话）")} />}
       {sessionId && !starting && (
         <p style={{ fontSize: 11, color: "#6b7280", margin: "6px 0 0" }}>实时捕获中（可到「会话」页查看）</p>
       )}

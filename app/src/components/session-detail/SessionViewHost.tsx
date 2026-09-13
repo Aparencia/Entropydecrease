@@ -69,6 +69,8 @@ interface Props {
   readonly errorSlot?: ReactNode;
   /** 精修工具条的显隐/启用条件（面板按 detail 计算后传入，与 T2 逐字相同） */
   readonly refining: boolean;
+  /** 批 7 T20（§9 #42）：本会话 id —— 精修工具条的「手动精修」（`refine_session`）入参 */
+  readonly sessionId: number;
   readonly onStartRefine: () => void;
   readonly canSecondPass: boolean;
   readonly onOpenPass2: () => void;
@@ -83,6 +85,7 @@ export default function SessionViewHost({
   resident,
   errorSlot,
   refining,
+  sessionId,
   onStartRefine,
   canSecondPass,
   onOpenPass2,
@@ -115,6 +118,7 @@ export default function SessionViewHost({
         {/* v0.11.5（spec 5️⃣）+ v0.20.2（REQ-268/270）：精修工具条三按钮 */}
         <SessionRefineSection
           refining={refining}
+          sessionId={sessionId}
           onStartRefine={onStartRefine}
           canSecondPass={canSecondPass}
           onOpenPass2={onOpenPass2}

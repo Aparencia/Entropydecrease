@@ -20,6 +20,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { SessionDetail } from "../../types";
 import { zIndex } from "../../ui/zIndex";
 import { Button } from "../../ui/primitives";
+import SessionAnalysisPanel from "./SessionAnalysisPanel";
 
 /** 通用小按钮基础样式（拆分前 SessionDetailPanel 的 `btn`——本文件「转为笔记/删除」复用） */
 const btn: React.CSSProperties = { padding: "5px 10px", cursor: "pointer", fontSize: 12 };
@@ -160,6 +161,8 @@ export default function SessionDetailHeader({ detail, fusing, degradedBanner, on
           </span>
         )}
         <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          {/* 批 7 T20（§9 #34）：`analyze_session_command` 的入口 + 结果面板（本件只加这一行装配） */}
+          <SessionAnalysisPanel sessionId={sessionId} />
           <button
             style={{ ...btn, background: "#0d9488", color: "#fff", border: "none", borderRadius: 6 }}
             onClick={() => onToNote(sessionId)}

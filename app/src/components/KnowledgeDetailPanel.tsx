@@ -1,4 +1,4 @@
-﻿/**
+/**
  * KnowledgeDetailPanel — 知识体系右栏详情面板（v0.13.x）。
  *
  * @ai-context: 按选中实体三态分派——节点（只读信息 + 引用）/概念（三问编辑）/
@@ -22,6 +22,7 @@ import KnowledgeLinkSection from "./KnowledgeLinkSection";
 import DiscoverySuggestSection from "./DiscoverySuggestSection";
 import KnowledgeDecisionForm from "./KnowledgeDecisionForm";
 import KnowledgeDecisionLog from "./KnowledgeDecisionLog";
+import KnowledgeSystemEditPanel from "./KnowledgeSystemEditPanel";
 import { StatusLine, Text } from "../ui/primitives";
 
 interface Props {
@@ -145,6 +146,7 @@ export default function KnowledgeDetailPanel({ width = 320, system, nodes, conce
     <div data-testid="detail-panel" style={{ width, flexShrink: 0, borderLeft: "1px solid #e5e7eb", display: "flex", flexDirection: "column", minWidth: 0, background: "#fff" }}>
       <div style={{ display: "flex", alignItems: "center", padding: "8px 12px", borderBottom: "1px solid #e5e7eb" }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>详情</span>
+        <KnowledgeSystemEditPanel system={system} onChanged={onChanged} />
         <button data-testid="detail-collapse" onClick={() => setCollapsed(true)} title="折叠详情面板" style={{ marginLeft: "auto", border: "none", background: "none", cursor: "pointer", fontSize: 14, color: "#9ca3af" }}>
           ▸
         </button>

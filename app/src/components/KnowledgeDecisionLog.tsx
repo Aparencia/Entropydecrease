@@ -17,6 +17,7 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import type { DecisionKind, KnowledgeDecision } from "../types/knowledge";
 import { countUsedRefs, parseUsedRefs } from "../types/knowledge";
 import { EmptyState, StatusLine, Text } from "../ui/primitives";
+import DecisionDetailPanel from "./session-detail/DecisionDetailPanel";
 
 interface Props {
   systemId: number;
@@ -40,6 +41,8 @@ export default function KnowledgeDecisionLog({ systemId, conceptId, onChanged }:
   const [decisions, setDecisions] = useState<KnowledgeDecision[]>([]);
   const [tab, setTab] = useState<DecisionKind>("decision");
   const [status, setStatus] = useState("");
+  // 批 7 T20（§9 #40）：单条展开详情 —— 点条目行 ⇒ `get_decision`（同一时刻只展开一条）
+  const [openId, setOpenId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -95,8 +98,9 @@ export default function KnowledgeDecisionLog({ systemId, conceptId, onChanged }:
               <div key={d.id} data-testid={`decision-row-${d.id}`} style={{ display: "flex", alignItems: "flex-start", gap: 6, padding: "6px 0", borderBottom: "1px solid #f3f4f6" }}>
                 <span data-testid={`decision-kind-${d.id}`} style={{ fontSize: 12 } as const}>{d.kind === "decision" ? "🧭" : "🛠"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div data-testid={`decision-content-${d.id}`} style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.content}</div>
+                  <div data-testid={`decision-content-${d.id}`} onClick={() => setOpenId(openId === d.id ? null : d.id)} style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.content}</div>
                   <Text as="div" tone="ink-3" style={{ fontSize: 11 }}>{formatDecisionTime(d.decidedAt)} · {refCount} 个引用</Text>
+                  {openId === d.id && <DecisionDetailPanel id={d.id} />}
                 </div>
                 <button data-testid={`decision-delete-${d.id}`} onClick={() => void remove(d.id)} title="删除记录" style={{ border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#9ca3af" }}>🗑</button>
               </div>
