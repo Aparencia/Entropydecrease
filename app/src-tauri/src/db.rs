@@ -34,6 +34,12 @@ impl Db {
         crate::db_migrations::init_schema(&conn)?;
         // v0.8.0 F2（2026-08-21）：AI 任务中心持久化（任务记录/恢复/保留）
         let db = Self { conn: Arc::new(Mutex::new(conn)) };
+        // 批 7 T18（规格 §1 L5 行 35「tag_colors 补种子/迁移」）：存量标签幂等回填——
+        // 每个去重标签取确定性色板 id；已设色的行不吃（`INSERT OR IGNORE`），重跑返回 0。
+        // 失败警告不阻断启动（同下面 uid 回填的范式：标签着色是增强，不是关键路径）。
+        if let Err(e) = db.backfill_tag_colors() {
+            eprintln!("[Db] tag_colors 存量回填失败（可忽略，下次启动重试）: {e}");
+        }
         db.init_ai_tasks()?;
         // v0.16.0（REQ-224）：AI 对话持久化（会话/消息双表）
         db.init_ai_chat()?;
