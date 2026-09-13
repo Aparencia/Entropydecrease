@@ -6,6 +6,9 @@
  * 批 0-D 追加：剪报底纹（`--ed-mark-clip`）作为**第三种底**参与判定 —— §4.3 的阈值是以
  * 「阅读面」为基准定的，把文字放到剪报底上会换底，故「底 × 墨」组合必须逐对实测。
  */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { contrastRatio, meetsAA, parseHex, relativeLuminance } from "./contrast";
 import { COLOR_TOKENS } from "./tokens";
@@ -167,3 +170,64 @@ describe("剪报底纹上的文字（底 × 墨组合 · 规范 §4.4）", () =>
     expect(contrastRatio(by("due")!.light, clipOf("light"))).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+// ---- 批 8 T9 · 审校模式的墨度覆盖（规格 §4.3 条件③；控制方 §2 B1）----------------------------
+// 🔴 本段**只新增**：上面三条 ink-4 断言（`:100` / `:106` 与剪报底反例）**逐字节未改**（V4）。
+// Why 落在这里：本文件是「墨度阈值」的机器面（ADR-032），而审校模式的覆盖块**只动墨度变量** ——
+//   覆盖块消失 / 改成硬编码色值 / 改成弱特异性选择器，都该在**同一台仪器**上红。
+// 🔴 诚实边界：`var()` 在 jsdom 里**不解析**（实测回字面量），且本段是**文本级**判据 ⇒ 它判的是
+//   「覆盖块在不在、绑的是不是变量、特异性够不够」，**判不到解算后的对比度** ⇒ **不得**据此写
+//   「墨度已升到 ≥4.5:1」（真解算值归 T12–T15 的 CDP 读数）。
+describe("审校模式的墨度覆盖块（ui/proofread.css；文本级）", () => {
+  const HERE = dirname(fileURLToPath(import.meta.url));
+  const OVERRIDE_SEL = 'html[data-proofread-mode="on"]';
+  const RAW = readFileSync(join(HERE, "proofread.css"), "utf8").replace(/\r\n/g, "\n");
+  /** 注释**就地掩码**（等长空白、保留换行）：本文件的头注里逐字写着选择器与变量名（R8.7 家族）。 */
+  const CODE = RAW.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "));
+  const RULES = [...CODE.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
+    selector: m[1].trim().replace(/\s+/g, " "),
+    body: m[2],
+  }));
+  const bodyOf = (sel: string): string => {
+    const hit = RULES.filter((r) => r.selector === sel);
+    if (hit.length !== 1) throw new Error(`期望恰 1 条规则命中 ${sel}，实得 ${hit.length} 条`);
+    return hit[0].body;
+  };
+  /** 特异性三元组 (id, class/attr, type) —— 只认本层用到的三种形态，够判这两条选择器。 */
+  const specOf = (sel: string): readonly [number, number, number] => [
+    (sel.match(/#[\w-]+/g) ?? []).length,
+    (sel.match(/\.[\w-]+|\[[^\]]+\]/g) ?? []).length,
+    (sel.match(/(?:^|[\s>+~])[a-z][\w-]*/g) ?? []).length,
+  ];
+
+  it("① 覆盖块存在：选择器逐字 html[data-proofread-mode=\"on\"]，块内把 --ed-ink-4 绑到 var(--ed-ink-3)", () => {
+    expect(RULES.length, "读不到任何规则 ⇒ 下面的断言会空真").toBeGreaterThan(0);
+    expect(bodyOf(OVERRIDE_SEL).trim(), "覆盖块的声明体不是「变量重绑一次」").toBe("--ed-ink-4: var(--ed-ink-3);");
+  });
+
+  it("② 覆盖必须走变量重绑（不得硬编码色值）", () => {
+    expect(bodyOf(OVERRIDE_SEL), "覆盖块出现颜色字面量 ⇒ 暗档会失配（应当是 var() 重绑）").not.toMatch(
+      /#[0-9a-fA-F]{3,8}\b|\b(?:rgb|hsl)a?\(/,
+    );
+    // 正对照（防空真）：同一台读法在 token 真源上必须数得到色值
+    expect(readFileSync(join(HERE, "tokens.css"), "utf8"), "读法失效 ⇒ 上面的 0 命中不是证据").toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+
+  it("③ 特异性 (0,1,1) 高于 [data-theme=\"dark\"] 的 (0,1,0) ⇒ 覆盖与源序无关（源序纪律另有一条判据）", () => {
+    const darkSel = /\[data-theme="dark"\]/.exec(readFileSync(join(HERE, "tokens.css"), "utf8"))?.[0];
+    expect(darkSel, "tokens.css 里读不到暗档选择器 ⇒ 下面的比较没有对手").toBe('[data-theme="dark"]');
+    expect(specOf(OVERRIDE_SEL), "覆盖选择器的特异性形状变了").toEqual([0, 1, 1]);
+    expect(specOf(darkSel!), "暗档选择器的特异性形状变了").toEqual([0, 1, 0]);
+    const [oa, ob, oc] = specOf(OVERRIDE_SEL);
+    const [da, db, dc] = specOf(darkSel!);
+    expect([oa - da, ob - db, oc - dc].find((d) => d !== 0), "覆盖特异性必须严格高于暗档块").toBe(1);
+  });
+
+  it("④ 单一职责：本文件恰一条规则、恰一条 token 声明（不许顺手改别的 token）", () => {
+    expect(RULES.map((r) => r.selector)).toEqual([OVERRIDE_SEL]);
+    expect(CODE.match(/--ed-[a-z0-9-]+\s*:/g) ?? [], "覆盖文件动了第二个 token").toHaveLength(1);
+    // 反空真：同一台读法在 tokens.css 上必须数得到大量声明
+    expect((readFileSync(join(HERE, "tokens.css"), "utf8").match(/--ed-[a-z0-9-]+\s*:/g) ?? []).length).toBeGreaterThan(10);
+  });
+});
+

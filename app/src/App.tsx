@@ -77,6 +77,7 @@ import { pauseReasonLabel } from "./hooks/liveCaptureState";
 // `active` 门控都收在 `shell/phaseSource.ts`，T19）
 import { useShellPhaseState } from "./shell/phaseSource";
 import PhaseChrome from "./shell/PhaseChrome"; // T19：两态叠层（A′ 顶栏 / 58px LIVE 仪表交叉淡入；§8.4）
+import { useProofreadMode } from "./shell/proofreadMode"; // 批 8 T9：审校模式位（规格 §4.3③；与 LLM 文本校对无关）
 import type { AiTaskState } from "./types";
 
 // 页面键 = 注册表键集（批 3 T6：从前是 9 个字面量的手写联合，现在从注册表派生）
@@ -325,6 +326,17 @@ function MainShell() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  const [proofread, toggleProofread] = useProofreadMode(); // 批 8 T9：两条出口（规格 §4.3③）—— ⌘/Ctrl+Shift+R 切换、Esc 退出；按钮归 T11
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const hit = e.ctrlKey && e.shiftKey && (e.key === "R" || e.key === "r");
+      if (hit) { e.preventDefault(); toggleProofread(); }
+      else if (e.key === "Escape" && proofread === "on") toggleProofread();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [proofread, toggleProofread]);
 
   return (
     // 全局错误边界在 App 外层（批 2b 结构调整后包住 provider+壳，职责不变）

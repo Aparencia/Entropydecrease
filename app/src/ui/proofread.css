@@ -1,0 +1,12 @@
+/* @ai-context 批 8 T9（规格 §4.3 条件③ + 控制方 §2 B1）：**审校模式的唯一覆盖点**。
+   Why 新建本文件而不是改 ui/tokens.css：后者是**生成物**（头注逐字「由 scripts/gen-tokens.mjs 生成，
+     请勿手改」，判据件 ui/tokens.drift.test.ts 断言盘上文件 == renderAll()）⇒ 手改必红；
+     生成器 gen-tokens.mjs 与 ui/primitives/Text.css 同样不动（控制方 §2 B1 逐字）。
+   Why 只重绑变量、不改 .ed-text--ink-4 规则：条件是「档位覆盖」——变量重绑一次即通吃（含暗档），
+     而类规则要逐档各写一遍，且会把覆盖塞进原语层的既有职责里。
+   边界：本规则的选择器特异性 (0,1,1) **高于** [data-theme="dark"] 的 (0,1,0) ⇒ 与源序无关；
+     源序（本文件在 token CSS 之后 import）仍由 main.tsx 的 import 次序保证（判据见 proofreadMode.test.ts）。
+   边界：`data-proofread-mode` 与既有 LLM 文本校对（ProofreadPanel 一族）无关 —— 见 shell/proofreadMode.ts。 */
+html[data-proofread-mode="on"] {
+  --ed-ink-4: var(--ed-ink-3);
+}
