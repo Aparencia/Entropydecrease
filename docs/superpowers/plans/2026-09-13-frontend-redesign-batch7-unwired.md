@@ -185,7 +185,23 @@
   - ⚠️ **`Δ` 恰为 0 时先当仪器故障**；**< ~2 kB 的 Δ 必须用同源真构建对比**（rollup 的 CSS 拼接顺序非确定性，批 4 实测同源两树差 9 B）。
   - ⚠️ **chunk 名不是稳定标识**（v0.22 `:549` 陷阱 #110）⇒ 判 chunk 增删**必须用模块级字面量归属**或**逐块字节闭合核算**。
   - 🔴 **懒侧判据必须用族前缀**（C9.6 第 2 条）：`vendor-katex-*` · `vendor-gsap-*` · `vendor-md-*` …（chunk 名带内容 hash，不稳定）。
-- **★ 提交纪律**：`git commit --only -m "<msg>" -- <显式路径…>`（本仓**多 agent 并行**，裸 `git commit` 会扫走别人已暂存的条目，包括 `D` 条目）。**新建文件必须两步**：`git add -- <path>` 再 `--only`。**禁止**：`git add -A` · `git add .` · `git stash` · `git checkout --` · `git restore` · `git clean`（任何写模式）· `git reset --hard` · `--no-verify` · `git add -f` · `amend` · `rebase` · force push。Conventional Commits：`<type>(<scope>): <subject>`，**subject ≤50 字**、动词开头、无结尾句号。
+- **★ 提交纪律（🔴 §C18.2 已改写机制：**共享文件走 blob 构造，不走暂存区**）**：
+  - **根因（§C18 逐字）**：`git commit --only -m "<msg>" -- <paths>` **只按路径取工作树内容、不看暂存区** ⇒ 首波 `fa45caf1` 实际**带走了 T4 的 2 行**（「暂存区自证」这条路**不可靠**）。
+  - 🔴 **共享文件**（`docs/standards/line-limit-exemptions.md`，以及**任何可能被多单元同时编辑**的文件）**一律不走 `git add` 整份、不走 `--only`**，改用 **blob 构造 + `update-index --cacheinfo`**：
+    ```
+    git show HEAD:<path>            # ① 取 LF 规范版本（不看工作树）
+    （在临时文件里只改自己那几行）
+    git hash-object -w <tmp>        # ② 造 blob
+    git update-index --cacheinfo 100644,<blob>,<path>   # ③ 只把该 blob 放进索引
+    git diff --cached --stat        # ④ 自证：只有自己的 hunk
+    git commit                      # ⑤ 不带 --only
+    ```
+  - ✅ **廉价前置检查（先做）**：`git diff HEAD -- <shared path>` —— **只有自己的 hunk** ⇒ 两种方式都行；**出现别人的 hunk** ⇒ 🔴 **必须**用上面的 blob 构造（或 **STOP 报控制方**）。
+  - ✅ **新建文件**：`git add -- <path>` 后 `git commit`（🔴 **不要** `--only`）。
+  - ✅ **普通改动**：`git add -- <自己的路径…>`（**不要** `git add -A` / `git add .`）后 `git commit`。
+  - ⚠️ **`git commit --only -m "<msg>" -- <显式路径…>` 只许用于「确无他人共享的文件」**（它只按路径取工作树内容 ⇒ 对共享文件正是 `fa45caf1` 事故的机理）。
+  - 🔴 **禁止**：`git add -A` · `git add .` · `git stash` · `git checkout -- <path>` · `git restore <path>`（**任何改工作树的写模式**）· `git clean` · `git reset --hard` · `--no-verify`（**除 §C14.3 的四条条件式授权外**）· `git add -f` · `amend` · `rebase` · force push。
+  - ✅ **`git restore --staged <path>` 允许**（**只动索引、不动工作树**）。Conventional Commits：`<type>(<scope>): <subject>`，**subject ≤50 字**、动词开头、无结尾句号。
   - 🔴 **`.superpowers/**` 永不 `git add -f`**。
   - ⚠️ **新建任何目录前先 `git check-ignore <path>`（不带斜杠）验证**：根 `tmp/` **未被 gitignore**（批 6 实测 `git check-ignore tmp` = **exit 1**）—— 本批已发生过一次事故（recon-b/recon-c 把探针写到仓库根 `tmp/`）。**临时文件只许写 `.superpowers/sdd/2026-09-12-frontend-redesign-batch7-unwired/tmp/<unit>/`**。
   - ⚠️ **`--write` 只在「无并行在飞改动」的独占窗口跑**（recon-c C6-8 的代码级机理）：`writeTable()` **不读旧表数字** ⇒ 会把并行单元的在飞中间态行数冻结进表；指向**当前树不存在的路径**的行会被**静默删除**。⇒ 本批**首选不跑 `--write`**（改完行数后手工核对 `--full`）；确需跑 ⇒ 跑完必须 `git diff docs/standards/line-limit-exemptions.md` 逐行确认。
@@ -232,7 +248,7 @@
 5. **验收判据 = 「既有测试逐条原样通过」+「新增用例只增不减」**；本批**授权改动**的既有断言**仅限** `### 表 5` 逐条点名的那些 ⇒ **表外任何改动 ⇒ STOP 并报控制方**。
 6. **每条新判据自带变异体**（导出副本、带 CONTROL、禁 `--reporter=basic`、harness 带 `ran` 闸）。
 7. **报告必含**：见 `## Global Constraints` 的报告七项。
-8. **提交**：`git diff --stat` 复核只含自己的文件 → 新建文件先 `git add -- <path>` → `git commit --only -m "<msg>" -- <显式路径…>`（subject 人工数到 ≤50）。
+8. **提交**：`git diff --stat` 复核只含自己的文件 → 🔴 **共享文件**（如 `line-limit-exemptions.md`）按 `## Global Constraints` 的「提交纪律」走 **blob 构造 + `update-index --cacheinfo` + `git diff --cached --stat` 自证 + `git commit`（不带 `--only`）**；**新建 / 普通改动**走 `git add -- <自己的路径…>` 后 `git commit`（🔴 **不带 `--only`**）；**`--only` 只许用于确无他人共享的文件**。subject 人工数到 ≤50。
 9. **冲突即 STOP**：发现两条已批准要求互相排斥，或本计划与实测冲突时 —— **STOP，点名冲突，并把「绿色方案」也一并实测出来**。
 
 ---
@@ -450,6 +466,7 @@ surfaceBaseline.ts:49 →  *     阴影 **24 → 24 处 / 24 文件（…）**�
 | **E-27** | **计划方第 3 例错误**：T3 卡 Step 3 要求「`lowConfidenceClass` 的用例**已由 T2 搬到** `utils/lowConfidence.test.ts`」 | 🔴 **T2 卡没有这个文件、T2 也（正确地）没建它** ⇒ 原措辞会让 T3 依赖一个不存在的产物 | 🔴 **控制方 2026-09-13 裁决：授权 T3 自建** `app/src/utils/lowConfidence.test.ts`（内容 = `structuredBlocks.test.ts:82` 的**那 1 个 `it`**，内含 4 条 `expect` = `:86-89`）；理由 = **删除与迁移必须在同一单元内完成**（否则中间态丢用例） | `structuredBlocks.test.ts`（**92**，`it(` = `:14/:21/:31/:38/:49/:59/:68/:82`）· `probe4.mjs` · 出处 = **控制方追加裁决 2026-09-13** | **T3** 的 Files（新增该文件）· **T3** 的 Step 3 · **T3** 的冻结值预算表（用例数行） · **T3** 的 V4/M4 |
 | **E-28** | **计划方第 4 例错误**：原计划把「改文件」（T1/T6/T7）与「补豁免表行数」（T11 集中做）**拆给不同单元** | 🔴 **设计缺陷**：`line-limits.mjs --full` 的 **(e) 判据 = 工作树实测 == 登记值**，而 husky pre-commit 扫**工作树** ⇒ **每一个中间提交都必然撞钩子** ⇒ 等于**强制全员 `--no-verify`**（把门禁变成形式）。**T2 与 T8 各自独立撞上，读数一致** | 🔴 **控制方 §C14 裁决**：**豁免表的行数列改由「改文件的那个单元」在同一提交里更新**；**T11 缩为只做非行数类维护**（拆法说明列 / 记录文案）；另给 **`--no-verify` 的条件式授权**（四条 + 「❌ 其余钩子失败 ⇒ STOP」，见 `## Global Constraints` 的「提交纪律」节），**权威证据 = T12/T22 在最终树上的串行八闸** | `.husky/pre-commit`（**20** 行，三条具名脚本，实测）· `scripts/line-limits.mjs`（**300**）的 (e) 判据 · 出处 = **控制方 §C14**（T2/T8 实测触发） | **T11** 的标题/目标/预算表/Files/Step 1–2/V1/V3/V6′/诚实边界 · **`### 段 7a 任务一览`** 的 T1/T6/T7/T10/T11 行 · **`> 🔴 热点文件的单写者约束`** 的豁免表行 · **`## Global Constraints` 的「提交纪律」节**（新增条件式授权） |
 | **E-29** | **计划方第 5 例错误**：T4 卡 Step 4 写「**分支 A**：**三条**各加 `#[allow(dead_code)]`」 | 🔴 **实测是 4 条**：第 4 条是**传递受害的私有 helper `normalize_source`**（其**唯一调用方**就是已撤下的 `add_session_segment`）⇒ **只加 3 处会留 1 条新告警** ⇒ clippy **集合差异非空** ⇒ 违反「只许持平」（C5.1） | 🔴 **T4 卡已改为**：「**按 `cargo build` 实测逐条添加** —— 实测 4 条（三条撤下命令 + 传递受害的 helper；**4 条是实测值、不是上限**）」 | `commands_session.rs`（**443**）· T4 报告 §3.5 / §5.2（控制方已采信）：`cargo build` 实测 **4 条** `dead_code`、加 allow 后 **0 条**；`cargo clippy --all-targets` **19 条唯一诊断（lib 15）SET-IDENTICAL** | **T4** 的 Step 4 · **T4** 的冻结值预算表（clippy 行） |
+| **E-30** | **计划方第 6 例错误**：计划的「提交纪律」与 `rulings.md` **§C18.2** 矛盾 —— 原 `:188` 强制的正是**首波事故的机理**（`git commit --only -- <paths>` **只按路径取工作树内容、不看暂存区** ⇒ 共享文件的工作树永远含别人的在飞改动），且它把 `--no-verify` 列进「禁止」清单、而同一段的 §C14 条又**条件式授权**它 ⇒ **同段自相矛盾** | 🔴 **机理实证**：首波 **`fa45caf1` 带走了 T4 的 2 行**（该树 `line-limits --full` exit 1，由 `39f74e4f` 闭合） | ✅ **已对齐 §C18.2**：共享文件改走 **blob 构造**（`git show HEAD:<path>` → 只改自己那几行 → `git hash-object -w` → `git update-index --cacheinfo 100644,<blob>,<path>` → `git diff --cached --stat` 自证 → `git commit` **不带 `--only`**）；**新建 / 普通改动** = `git add -- <自己的路径…>` 后 `git commit`（**不带 `--only`**）；**`--only` 只许用于确无他人共享的文件**；保留廉价前置检查 `git diff HEAD -- <path>`（出现别人的 hunk ⇒ **必须** blob 构造或 STOP）；**`--no-verify` 从禁止清单移出**、改指 §C14 的四条条件式授权；**`git restore --staged <path>` 允许**，`git restore <path>` / `git checkout -- <path>` **仍禁止** | `rulings.md` §C18.1/§C18.2（权威文本）· 事故 `fa45caf1` / 闭合 `39f74e4f` | `## Global Constraints` 的「提交纪律」节（`:188` 起）· 「每个拆分任务的统一作业模式」第 8 条 · **T3** 的 Step 3（删除文件的带走方式） |
 
 **（d）全量重推的范围与结果（§C12「每一条都要有」的落实）**
 | 项 | 读数（2026-09-13，基线 `681e73c6`，只读） |
@@ -915,7 +932,7 @@ surfaceBaseline.ts:49 →  *     阴影 **24 → 24 处 / 24 文件（…）**�
   🔴 **`katex` 顶层包的全仓唯一生产引用就是这两行**（控制方实测）：`ChatMessageMarkdown.tsx:12` 与 `NoteMarkdown.tsx:25` 的命中是 **`rehype-katex`（另一个包、另一条管道）**，**不在删除面内** ⇒ 实施者须用 `sites.mjs` 分别扫 `rehype-katex` 与 `from "katex"` 并**逐条列出**。
 
 - [ ] **Step 3: 删文件与其测试**
-  - `git rm app/src/components/structuredBlocks.ts app/src/components/structuredBlocks.test.ts`（**或** `Remove-Item` 后由 `git commit --only -- <paths>` 带走 D 条目；🔴 **不得** `git add -A`）
+  - `git rm app/src/components/structuredBlocks.ts app/src/components/structuredBlocks.test.ts`（**或** `Remove-Item` 后 `git add -- <两个路径>` 再 `git commit` 带走 D 条目；🔴 **不得** `git add -A`；🔴 这两个文件**非共享** ⇒ 若确要用 `--only` 也仅限本任务路径）
   - ⚠️ **`lowConfidenceClass` 的那 **1 个 `it`**（`structuredBlocks.test.ts:82`，内含 4 条 `expect`；🔴 原写"4 条用例"是错的 —— `### 表 6b` 的 **E-19**）必须**由本任务自建并迁入** `app/src/utils/lowConfidence.test.ts`**（🔴 **本步内完成**，否则本步会**真丢用例**；**控制方已授权 T3 自建** —— `### 表 6b` 的 **E-27**）
 
 - [ ] **Step 4: 改写 `SessionRawView.tsx:35-37` 的过时注释**（逐字给出 before/after）
