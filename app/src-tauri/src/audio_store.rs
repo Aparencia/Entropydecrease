@@ -33,7 +33,7 @@ pub(crate) mod audio_align;
 pub(crate) mod audio_store_config;
 
 /// 配置面的公共 API 仍从本模块再导出（既有调用点 `crate::audio_store::AudioStoreConfig` 零改动）。
-pub use audio_store_config::{AudioStoreConfig, DEFAULT_DISK_BUDGET_BYTES, DEFAULT_RETENTION_DAYS};
+pub use audio_store_config::AudioStoreConfig;
 
 /// WAV 头长度（RIFF 12 + fmt 24 + data 8）。
 const WAV_HEADER_LEN: usize = 44;
