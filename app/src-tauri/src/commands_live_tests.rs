@@ -71,3 +71,25 @@ fn start_tier_does_not_touch_downgrade_confirm_slot() {
     let _ = seed_initial_tier(&manager.profile_override_slot(), Some(VisualTier::Low));
     assert!(manager.tier_override().lock().unwrap().is_none());
 }
+
+/// ① 的**接线面**（V9 类判据的补牙）：start_live_session 必须真的把解析结果写进覆写槽。
+///
+/// @ai-context: 纯单测只证明「函数本体对」——抓不到「函数写好了但没接线」（本批已知的
+///              失效形态：定义在、调用点 0）。故对**剥注释后的源码文本**断言调用点存在；
+///              注释里提一句不算接线（与 R8.9 的假阳同源，故先剥注释）。
+#[test]
+fn start_path_seeds_tier_into_override_slot() {
+    // Arrange：剥行注释（含 `//` 的行只保留 `://` 之前的部分——防 URL 误切）
+    let code: String = include_str!("commands_live.rs")
+        .lines()
+        .map(|l| if l.contains("://") { l } else { l.split("//").next().unwrap_or("") })
+        .collect::<Vec<_>>()
+        .join("\n");
+    // Assert：解析结果 → seed_initial_tier（唯一落点）
+    assert!(
+        code.contains("seed_initial_tier(&override_slot, resolved_tier)"),
+        "start_live_session 未接 seed_initial_tier ⇒ 档位不随 start 生效（①的接线面断了）"
+    );
+    // 且 starter 内部确实先解析档位（防"接了空值"）
+    assert!(code.contains("resolve_start_tier(tier.as_deref()"), "档位解析未接入 start 路径");
+}
