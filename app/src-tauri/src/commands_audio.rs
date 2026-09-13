@@ -61,28 +61,39 @@ pub struct SessionAudioStatus {
     pub disk_budget_bytes: u64,
     /// 落盘策略开关（false=未启用，前端提示）
     pub enabled: bool,
+    /// 生效开关（env ENTROPY_AUDIO_STORE 覆盖配置文件时与 `enabled` 不同）
+    pub effective: bool,
 }
 
-/// 查询会话音频落盘状态（数量/占用/策略）。
-#[tauri::command]
-pub fn session_audio_status(state: State<'_, AppState>) -> SessionAudioStatus {
-    let dir = state.data_dir.join("session-audio");
-    let (file_count, total_bytes) = audio_dir_stats(&dir);
-    let config = AudioStoreConfig::default();
+/// 组装状态载荷（状态查询与 setter 回读**共用** ⇒ 两者走同一条取数路径，不会各读各的）。
+///
+/// @ai-context: 配置**每次调用都从磁盘读**（不缓存）：命令层无状态，而配置文件还能被 env
+///              之外的路径（用户手工编辑 `{data_dir}/audio-store.json`）改动 —— 缓存会让
+///              面板显示陈旧值。文件名与先例 `audio-preproc.json` 同形。
+fn status_of(data_dir: &std::path::Path) -> SessionAudioStatus {
+    let (file_count, total_bytes) = audio_dir_stats(&data_dir.join("session-audio"));
+    let config = AudioStoreConfig::load(&data_dir.join("audio-store.json"));
     SessionAudioStatus {
         file_count,
         total_bytes,
         retention_days: config.retention_days,
         disk_budget_bytes: config.disk_budget_bytes,
         enabled: config.enabled,
+        effective: config.effective().enabled,
     }
+}
+
+/// 查询会话音频落盘状态（数量/占用/策略/开关）。
+#[tauri::command]
+pub fn session_audio_status(state: State<'_, AppState>) -> SessionAudioStatus {
+    status_of(&state.data_dir)
 }
 
 /// 手动触发音频清理（超保留期删除 + 超预算删最旧）。
 #[tauri::command]
 pub fn session_audio_cleanup(state: State<'_, AppState>) -> Result<crate::audio_store::CleanupSummary, String> {
     let dir = state.data_dir.join("session-audio");
-    let config = AudioStoreConfig::default();
+    let config = AudioStoreConfig::load(&state.data_dir.join("audio-store.json"));
     Ok(cleanup(&dir, config.retention_days, config.disk_budget_bytes))
 }
 

@@ -254,11 +254,11 @@ pub(crate) fn run_session_after_engine(
     let speech_active = Arc::new(AtomicBool::new(false));
     // REQ-291（v0.19.7）：媒体级"最后有声时刻"共享戳（音频线程写/屏幕线程读）
     let media_sound: Arc<Mutex<Option<std::time::Instant>>> = Arc::new(Mutex::new(None));
-    // M4/REQ-068（S4）：实时链路音频落盘（WAV PCM16；创建失败降级不阻断）
+    // M4/REQ-068（S4）：实时链路音频落盘（WAV PCM16；创建失败降级不阻断）；T27 起生效配置 = audio-store.json > env ENTROPY_AUDIO_STORE > 默认开
     let mut audio_writer = crate::audio_store::SessionAudioWriter::create(
         &params.data_dir.join("session-audio"),
         session_id,
-        &crate::audio_store::AudioStoreConfig::default(),
+        &crate::audio_store::AudioStoreConfig::load(&params.data_dir.join("audio-store.json")).effective(),
     );
     let screen_worker: Option<JoinHandle<()>> = if ocr_enabled {
         // worker 需独立持有 Db/AppHandle（主循环仍要使用，先 clone 再 move 进闭包）
