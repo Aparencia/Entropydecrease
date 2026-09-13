@@ -1,0 +1,153 @@
+{
+  "generatedFrom": "node scripts/check-bundle-budget.mjs --no-build --json（2026-09-13 实测；批 7 T9）",
+  "unit": "gzip = zlib.gzipSync level 6 · 族前缀 = 去掉 8 位内容 hash 的 chunk 名 + '-'（chunk 名带内容 hash，不稳定，不能当键）",
+  "semantics": "全部字段 = 当次实测的**冻结值**，只许降（批 7 §C9.6 第 2 条 / §C10.4）；写乐观「预算值」会立刻红",
+  "lazyChunkCountMax": 36,
+  "lazyTotalGzipBytesMax": 698859,
+  "families": [
+    {
+      "prefix": "ActionPage-",
+      "gzipBytesMax": 8191
+    },
+    {
+      "prefix": "AiConversationDock-",
+      "gzipBytesMax": 2807
+    },
+    {
+      "prefix": "CaptureFloatPanel-",
+      "gzipBytesMax": 4538
+    },
+    {
+      "prefix": "CaptureOverlayPanel-",
+      "gzipBytesMax": 1402
+    },
+    {
+      "prefix": "ChatPage-",
+      "gzipBytesMax": 11382
+    },
+    {
+      "prefix": "ConfirmDialog-",
+      "gzipBytesMax": 765
+    },
+    {
+      "prefix": "GoalsPage-",
+      "gzipBytesMax": 12349
+    },
+    {
+      "prefix": "KnowledgePage-",
+      "gzipBytesMax": 27621
+    },
+    {
+      "prefix": "NoteCardFlowView-",
+      "gzipBytesMax": 787
+    },
+    {
+      "prefix": "NoteMarkdown-",
+      "gzipBytesMax": 2948
+    },
+    {
+      "prefix": "NotesPage-",
+      "gzipBytesMax": 47047
+    },
+    {
+      "prefix": "RefineLaunchDialog-",
+      "gzipBytesMax": 7184
+    },
+    {
+      "prefix": "RefineStrategyPicker-",
+      "gzipBytesMax": 2710
+    },
+    {
+      "prefix": "ReviewPage-",
+      "gzipBytesMax": 6815
+    },
+    {
+      "prefix": "SessionCardFlowView-",
+      "gzipBytesMax": 767
+    },
+    {
+      "prefix": "SessionNotePreview-",
+      "gzipBytesMax": 4899
+    },
+    {
+      "prefix": "SessionProofView-",
+      "gzipBytesMax": 1069
+    },
+    {
+      "prefix": "SessionScreenCard-",
+      "gzipBytesMax": 255
+    },
+    {
+      "prefix": "SessionTriTrackView-",
+      "gzipBytesMax": 4325
+    },
+    {
+      "prefix": "SessionsPage-",
+      "gzipBytesMax": 21012
+    },
+    {
+      "prefix": "SettingsPage-",
+      "gzipBytesMax": 17762
+    },
+    {
+      "prefix": "TaskConversationView-",
+      "gzipBytesMax": 2923
+    },
+    {
+      "prefix": "ViewSwitcher-",
+      "gzipBytesMax": 562
+    },
+    {
+      "prefix": "colorPalette-",
+      "gzipBytesMax": 947
+    },
+    {
+      "prefix": "controls-",
+      "gzipBytesMax": 400
+    },
+    {
+      "prefix": "engine-",
+      "gzipBytesMax": 200
+    },
+    {
+      "prefix": "entityLabel-",
+      "gzipBytesMax": 250
+    },
+    {
+      "prefix": "registry-",
+      "gzipBytesMax": 1966
+    },
+    {
+      "prefix": "shift-",
+      "gzipBytesMax": 212
+    },
+    {
+      "prefix": "useColumnFlip-",
+      "gzipBytesMax": 817
+    },
+    {
+      "prefix": "useDbRefresh-",
+      "gzipBytesMax": 383
+    },
+    {
+      "prefix": "vendor-canvas-",
+      "gzipBytesMax": 58784
+    },
+    {
+      "prefix": "vendor-editor-",
+      "gzipBytesMax": 208585
+    },
+    {
+      "prefix": "vendor-gsap-",
+      "gzipBytesMax": 41161
+    },
+    {
+      "prefix": "vendor-katex-",
+      "gzipBytesMax": 144412
+    },
+    {
+      "prefix": "vendor-md-",
+      "gzipBytesMax": 50622
+    }
+  ]
+}
