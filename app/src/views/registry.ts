@@ -93,8 +93,11 @@ export interface NoteViewSlot {
  *   `NotePreviewView` 本体：`NotePreviewView` 的 props 是 `{sessionId, autoTaskId, onTaskStarted}`
  *   （容器形态、自带取数），而注册表的 `P` 是 `SessionViewSlot`（纯注入槽）—— 两者不同形，
  *   直接指向它得到 `TS2322`。适配器把槽映射成 props（**不是**第二套取数），详见该文件头部。
- * @ai-context 笔记 spec 顺序：`raw` → `cardflow`。「带证据三轨」是 T13 的**条件项** —— T1 的探针
- *   判定「不存在逐段级『笔记 ↔ 证据』读取路径」⇒ **不进表**（C2：不许空壳视图）。
+ * @ai-context 笔记 spec 顺序：`raw` → `cardflow` → `evidence`。**批 5 的中间态已闭合**：`evidence`
+ *   （「带证据三轨」）在批 8 落地 —— 模型层 T6（`note/noteEvidenceModel.ts`）· 视图层 T8（本项）
+ *   · 容器取数 T10。它的两处 DOM 契约（E1 每段带 `data-evidence-for`（**含无锚点段**）∧ **只有
+ *   带锚点段**才渲染证据列；E2 命中 / 显式「无证据」）写在 `note/NoteEvidenceTrackView.tsx`
+ *   的文件头；**无锚点是一等状态**（`raw` 仍是 `[0]` 默认视图 ⇒ 原文不丢，规格 §7.3①）。
  * @ai-context `FROZEN_VIEW_KEYS` 是**独立于实现的**冻结声明：`keysFor` 由 `viewsFor` 派生，冻结表
  *   逐字写死 ⇒ 二者对拍（G1）能同时抓住「实现偷偷增删视图」与「冻结表被手工改宽」。
  */
@@ -111,6 +114,8 @@ const NOTE_VIEWS: readonly ViewSpec<NoteViewSlot>[] = [
   // 默认视图：**无 `load`**（同上）；图标 = 文档 + 文字行
   { key: "raw", label: "原文", icon: "notes", appliesTo: "note" },
   { key: "cardflow", label: "卡片流", icon: "action", appliesTo: "note", load: () => import("./note/NoteCardFlowView") },
+  // 「带证据三轨」（批 8 T8）：吃 `NoteViewSlot`；候选轨由容器侧（T10）注入，视图自身零取数。
+  { key: "evidence", label: "证据", icon: "clock", appliesTo: "note", load: () => import("./note/NoteEvidenceTrackView") },
 ];
 
 /** 可用视图清单（按对象类型；`viewsFor(t)[0]` 恒为默认视图）。未知 `objectType` ⇒ `[]`（G5）。 */
@@ -133,5 +138,5 @@ export function keysFor(objectType: ObjectType): readonly string[] {
 /** 冻结的视图键清单（顺序 = spec 顺序，`[0]` = 默认视图）。增删视图必须**同时**改此处与 `viewsFor`。 */
 export const FROZEN_VIEW_KEYS: Readonly<Record<ObjectType, readonly string[]>> = {
   session: ["raw", "tritrack", "proof", "cardflow", "preview"],
-  note: ["raw", "cardflow"],
+  note: ["raw", "cardflow", "evidence"],
 };

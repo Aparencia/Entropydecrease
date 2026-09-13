@@ -32,14 +32,16 @@ import type { ObjectType, SessionViewSlot, ViewSpec } from "./registry";
 import { viewsFor } from "./registry";
 
 /** G7 的**独立**期望：每个非默认 spec 的 `load` 目标模块（逐字路径字面量）。
- *  ⚠️ 最后一项是**适配器**（`./session/SessionNotePreview`），不是 `NotePreviewView` 本体 ——
- *  后者 props 不同形（`TS2322`），见文件头 A1/A2 与 `SessionNotePreview.tsx` 的说明。 */
+ *  ⚠️ 第 4 项是**适配器**（`./session/SessionNotePreview`），不是 `NotePreviewView` 本体 ——
+ *  后者 props 不同形（`TS2322`），见文件头 A1/A2 与 `SessionNotePreview.tsx` 的说明。
+ *  批 8 T8：第 6 项 = 笔记侧第三视图（「带证据三轨」）。 */
 const EXPECTED_LOAD_TARGETS: readonly string[] = [
   "./session/SessionTriTrackView",
   "./session/SessionProofView",
   "./session/SessionCardFlowView",
   "./session/SessionNotePreview",
   "./note/NoteCardFlowView",
+  "./note/NoteEvidenceTrackView",
 ];
 
 /** G7 的**独立**期望：注册表顶部允许出现的静态 import（全部是 `import type` ⇒ 0 运行时依赖边）。 */
@@ -101,15 +103,15 @@ describe("G3 每个 load() 都解析出真实模块（default 是组件函数）
     }
   });
 
-  it("note 侧 1 个非默认视图", async () => {
+  it("note 侧 2 个非默认视图", async () => {
     const specs = viewsFor("note").filter((s) => s.load !== undefined);
-    expect(specs.map((s) => s.key)).toEqual(["cardflow"]);
+    expect(specs.map((s) => s.key)).toEqual(["cardflow", "evidence"]);
     for (const spec of specs) {
       expect(typeof (await loadDefault(spec)), `${spec.key} 的 load() 没有解析出 default 组件`).toBe("function");
     }
   });
 
-  it("G3③ 注册表覆盖的每个 load 目标文件此刻都真实存在（5/5 ⇒ 无一是空壳）", () => {
+  it("G3③ 注册表覆盖的每个 load 目标文件此刻都真实存在（6/6 ⇒ 无一是空壳）", () => {
     const missing = EXPECTED_LOAD_TARGETS.filter((target) => {
       try {
         readFileSync(join(HERE, `${target}.tsx`), "utf8");

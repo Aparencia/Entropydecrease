@@ -1,10 +1,10 @@
 {
-  "generatedFrom": "node scripts/check-bundle-budget.mjs（**真构建**，不带 --no-build）· 源码 = c0bff722（批 7 全批收口树；T22 重冻）· 读数存档 .superpowers/sdd/2026-09-12-frontend-redesign-batch7-unwired/tmp/t22/logs/g5-bundle-budget-realbuild.txt（时点 2026-09-13T03:46Z · 懒侧 37 chunk / 637,501 B · 首屏 105.95 kB）；上一版 = 950afd5a（T12 的 7a 段收口重冻，limit 636,243）· 再上一版 = cd800d63（T9，批次中段快照 634,316）",
+  "generatedFrom": "node scripts/check-bundle-budget.mjs（**真构建**，不带 --no-build）· 源码 = 8cc627de（批 8 T8 的 O4① 落地树）+ T8 的注册表第三项（本提交）· 读数存档 .superpowers/sdd/2026-09-13-frontend-redesign-batch8/tmp/t8/b2-mine.json（受控对照 b2-control.json = base ffb7e28a 去掉 T8 的 6 件；时点 2026-09-13T06:53Z · 懒侧 39 chunk / 639,314 B · 首屏 106.20 kB）；🔴 本版 = 批 8 **8b 段**的收口重冻（归属 = T8 的视图片 + 它的注册表第三项）；上一版 = c0bff722（批 7 T22 全批收口重冻，limit 637,501）· 再上一版 = 950afd5a（批 7 T12 的 7a 段收口重冻，limit 636,243）· 再上一版 = cd800d63（批 7 T9，批次中段快照 634,316）",
   "unit": "gzip = zlib.gzipSync level 6 · 族前缀 = 去掉 8 位内容 hash 的 chunk 名 + '-'（chunk 名带内容 hash，不稳定，不能当键）",
   "scope": "🔴 必须在**新鲜构建**产物上判定（§C21.3）：旧 dist 上的 --no-build 读数含时代残渣，上界会虚高（实测 +64,497 B）⇒ 本判据的合格调用 = 不带 --no-build（本脚本自行构建）或显式 --dist 指认受判产物",
-  "semantics": "全部字段 = 实测**冻结值**，只许降（批 7 §C9.6 第 2 条 / §C10.4）；写乐观「预算值」会立刻红。★ 上一轮（rulings §C46.4「每收口一次、重冻一次」· T12 于 0a503cc8）为**一次性、可归属的重冻**：4 族按收口树**真实构建**的实测值重冻（NoteMarkdown- · NotesPage- · RefineLaunchDialog- · SessionsPage-）+ 新族 NoteCardFlowWithSeek- 登记 + chunk 数 36 → 37 + 总量 634,316 → 636,243；🔴 vendor-* 五族逐族核对为「零增长」⇒ 未触发 §C46.4 条件⑤ 的 STOP。★★ **本轮（T22 于 c0bff722，控制方 2026-09-13 逐条授权）为该授权的第 2 次、也是 §C46.4 第 5 条所指的「批 8 基线」那一次**：2 族抬到终态**真构建**实测（KnowledgePage- 27,620 → 28,466 · NotesPage- 48,087 → 48,627）+ 补登遗漏族 lowConfidence-（100 B，chunk 本就在、只是未登记族）+ 总量 636,243 → 637,501；🔴 chunk 数 **37 → 37 不变**、其余 34 族上限**一字未动**（含全部 vendor-* 五族：58,784 / 208,585 / 41,161 / 79,915 / 50,622 逐值保留，实测 Δ ≤ +2 B）。归属 = T18（NoteTagsEditor/过滤面板着色）· T19（档位通道 90bb5f6a/c6a4cb7c）· T20（六条展示面 b72d4709 + 展示面与分件）· T23（片段归组 125eec85/5d59e332）· T17 尾（08717e84/02c32baa）。**批 8 的基线 = 本条所记的终态重冻值**（此后才是真正的硬棘轮）。",
-  "lazyChunkCountMax": 37,
-  "lazyTotalGzipBytesMax": 637501,
+  "semantics": "全部字段 = 实测**冻结值**，只许降（批 7 §C9.6 第 2 条 / §C10.4）；写乐观「预算值」会立刻红。★ 重冻谱系（§C46.4「每收口一次、重冻一次」）：第 1 次 = 批 7 T12（0a503cc8）—— 4 族按收口树真构建实测重冻（NoteMarkdown- · NotesPage- · RefineLaunchDialog- · SessionsPage-）+ 新族 NoteCardFlowWithSeek- 登记 + chunk 36 → 37 + 总量 634,316 → 636,243；🔴 vendor-* 五族逐族核对为「零增长」⇒ 未触发 §C46.4 的 STOP。第 2 次 = 批 7 T22（c0bff722，控制方逐条授权）—— 2 族抬到终态真构建实测（KnowledgePage- 27,620 → 28,466 · NotesPage- 48,087 → 48,627）+ 补登遗漏族 lowConfidence-（100 B）+ 总量 636,243 → 637,501，chunk 数 37 → 37 不变；该版曾把自身写成「批 8 的基线」，🔻 该句按本条更正。★★ **本轮 = 第 3 次**，归属 = 批 8 **T8**（视图件 NoteEvidenceTrackView.tsx + 它的注册表第三项）、收口段 = **8b**、由控制方按 §C46.4 **逐次授权**（2026-09-13）：① 登记 2 个新族 —— NoteEvidenceTrackView- **1,470 B** · markdownLine- **768 B**（后者 = 本视图复用 utils/markdownLine.ts 后被抽成共享懒 chunk 的**必然结果**，非新依赖）② 重冻 2 个越界族 —— NotesPage- 48,627 → **48,693** · registry- 1,966 → **2,048** ③ chunk 上限 37 → **39** ④ 总量 637,501 → **639,314**（🔴 §C32.3 第 ③ 条「懒侧总上限不得抬高」本次经控制方逐次授权解除：**授权方 = 控制方，时点 2026-09-13，理由 = 8b 段收口重冻的一次性授权**）；🔴 vendor-* 五族**逐族零增长**（实测 Δ = 0：58,786 / 208,585 / 41,162 / 79,915 / 50,623）⇒ 未触发 §C46.4 的 STOP 条件；🔴 其余 33 族上限**一字未动**。**批 8 的基线 = 本条所记的终态重冻值**（此后才是真正的硬棘轮）。",
+  "lazyChunkCountMax": 39,
+  "lazyTotalGzipBytesMax": 639314,
   "families": [
     {
       "prefix": "ActionPage-",
@@ -47,12 +47,16 @@
       "gzipBytesMax": 391
     },
     {
+      "prefix": "NoteEvidenceTrackView-",
+      "gzipBytesMax": 1470
+    },
+    {
       "prefix": "NoteMarkdown-",
       "gzipBytesMax": 3278
     },
     {
       "prefix": "NotesPage-",
-      "gzipBytesMax": 48627
+      "gzipBytesMax": 48693
     },
     {
       "prefix": "RefineLaunchDialog-",
@@ -123,8 +127,12 @@
       "gzipBytesMax": 100
     },
     {
+      "prefix": "markdownLine-",
+      "gzipBytesMax": 768
+    },
+    {
       "prefix": "registry-",
-      "gzipBytesMax": 1966
+      "gzipBytesMax": 2048
     },
     {
       "prefix": "shift-",

@@ -26,10 +26,11 @@ import { ICON_NAMES } from "../ui/icons";
 import type { ObjectType } from "./registry";
 import { FROZEN_VIEW_KEYS, keysFor, viewsFor } from "./registry";
 
-/** G1 的**独立**冻结清单（逐字字面量；顺序 = 计划给的 spec 顺序，`[0]` = 默认视图）。 */
+/** G1 的**独立**冻结清单（逐字字面量；顺序 = 计划给的 spec 顺序，`[0]` = 默认视图）。
+ *  批 8 T8：笔记侧加第三项 `evidence`（「带证据三轨」；视图 = `views/note/NoteEvidenceTrackView.tsx`）。 */
 const EXPECTED_KEYS: Readonly<Record<ObjectType, readonly string[]>> = {
   session: ["raw", "tritrack", "proof", "cardflow", "preview"],
-  note: ["raw", "cardflow"],
+  note: ["raw", "cardflow", "evidence"],
 };
 
 const TYPES: readonly ObjectType[] = ["session", "note"];
@@ -59,7 +60,7 @@ describe("G1 冻结表的三条不变式", () => {
   it("① 阴性样本：删项 / 多项 / 读空 各必红（走同一条判据）", () => {
     const dropped = EXPECTED_KEYS.session.filter((k) => k !== "cardflow");
     expect(keyDiff(dropped, EXPECTED_KEYS.session)).toEqual(["[3] cardflow → preview", "[4] preview → <缺>"]);
-    expect(keyDiff([...EXPECTED_KEYS.note, "extra"], EXPECTED_KEYS.note)).toEqual(["[2] <缺> → extra"]);
+    expect(keyDiff([...EXPECTED_KEYS.note, "extra"], EXPECTED_KEYS.note)).toEqual(["[3] <缺> → extra"]);
     expect(keyDiff([], EXPECTED_KEYS.session)).toHaveLength(5);
   });
 
