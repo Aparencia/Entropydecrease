@@ -14,7 +14,8 @@
  *              #6b7280），不新造配色。
  */
 import type { DiffOp } from "../types";
-import { escapeHtml, renderTimestampAnchors } from "./html";
+import { escapeHtml } from "./html";
+import { COMPACT_MODE, mdLineHtml as renderMdLine } from "./markdownLine";
 
 /** 行级三态（与后端 DiffOp 标签同名——serde 小写 tag） */
 export type DiffRowKind = "unchanged" | "added" | "removed";
@@ -74,16 +75,19 @@ export function mdFallbackRows(md: string): DiffRow[] {
   return md.split("\n").map((text) => ({ kind: "unchanged" as const, text }));
 }
 
-/** 单行 markdown → 轻量 HTML（kind 染色在行内联样式末尾追加——后者覆盖前色） */
+/**
+ * 单行 markdown → 轻量 HTML（kind 染色在行内联样式末尾追加——后者覆盖前色）。
+ *
+ * @ai-context 批 7 T15（§C10.1 归一）：行级渲染的**实现已迁入 `utils/markdownLine.ts`**（两支
+ *   手写链合成一支），本函数保留为**薄转调**以保住既有 import 面（`utils/refineDiff.test.ts` 与
+ *   `components/RefineWorkbench.tsx` 的 `renderSideHtml` / `renderDiffColumnHtml` 一个字不改）。
+ *   传入 `COMPACT_MODE` + 本栏三态染色 ⇒ 输出与迁移**逐字节相同**（对拍证据见 `tmp/t15/`）。
+ *   边界：染色档的段落基底与未染色档不同（前者不含 `color`）—— 该差异由 `COMPACT_MODE.scale.pStained`
+ *   承载，不在本文件里再写一份样式字面量（避免双真源）。
+ */
 export function mdLineHtml(line: string, kind: DiffRowKind): string {
   const extra = sideStyleFor(kind);
-  const style = extra ? `font-size:12px;margin:2px 0;${extra}` : "";
-  if (line.startsWith("# ")) return `<h2 style="font-size:14px;margin:8px 0 3px${extra ? ";" + extra : ""}">${renderTimestampAnchors(escapeHtml(line.slice(2)))}</h2>`;
-  if (line.startsWith("## ")) return `<h3 style="font-size:13px;margin:6px 0 2px;color:#0f766e${extra ? ";" + extra : ""}">${renderTimestampAnchors(escapeHtml(line.slice(3)))}</h3>`;
-  if (line.startsWith("### ")) return `<h4 style="font-size:12px;margin:4px 0 2px;color:#374151${extra ? ";" + extra : ""}">${renderTimestampAnchors(escapeHtml(line.slice(4)))}</h4>`;
-  if (line.startsWith("- ")) return `<div style="font-size:12px;color:#4b5563${extra ? ";" + extra : ""}">• ${renderTimestampAnchors(escapeHtml(line.slice(2)))}</div>`;
-  if (line.trim() === "") return "";
-  return `<p style="${style || "font-size:12px;color:#374151;margin:2px 0"}">${renderTimestampAnchors(escapeHtml(line))}</p>`;
+  return renderMdLine(line, extra ? { ...COMPACT_MODE, extra } : COMPACT_MODE);
 }
 
 /** 并排双栏渲染（unchanged 行输出与旧 renderMd 字节一致——渲染回归零漂移） */
