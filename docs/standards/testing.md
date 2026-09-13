@@ -207,6 +207,17 @@ node scripts/viewport-probe.mjs --width 1024 --height 640 --dist app/dist [--por
 
 - 扩展（可选）：`--dpr 1` · `--reduced-motion no-preference|reduce` · `--mode http|file`。`--probe` 可重复；`<cssProp>` 收解算样式属性（含 `--custom-prop`，camelCase 一并收）与几何名 `rect|x|y|w|h`；输出路径按**仓库根**解析（给绝对路径最稳）。
 - 🔴 **正式入口与触发条件（何时必须跑）由 T24 追加** —— 本部分只登记仪器形态与盲区（U4 裁为 d：入库 + 按需入口 + 写死触发条件；**不接 husky、不进 CI**）。
+- 🔴 **正式入口（按需；T24 追加）**：`cd app; npm run check:visual`（= `node ../scripts/viewport-probe.mjs --width 1024 --height 640`）。🔴 **npm script 的 cwd = 包目录** ⇒ 命令里的相对路径要从 `app/` 出发（`../scripts/…`），`--dist` 走默认 `app/dist`。要别的档位就自己拼命令（`--width`/`--dpr`/`--probe`/`--json` 都只在 CLI 上），`--json` / `--screenshot` 的路径给**绝对路径**最稳（P-27）。⚠️ 本机 npm 用 pwsh 包装 stderr ⇒ 失败时**先看到的是 4 行 npm/pwsh 包装噪声**（`npm warn …` 与 `NativeCommandError` 各占两行）⇒ 🔴 **真正的具名报文在最后一行**（别把包装噪声当成报文）。
+- 🔴 **触发条件（写死；U4-d 的核心）** —— 凡命中下面任一条，**提交前必须跑一次 `cd app; npm run check:visual`**：① 改了 `app/src/ui/primitives/**`（最多见）；② 改了 token 面（`app/src/ui/tokens.css` · `tokens.ts` · **生成物 `tokens.gen.ts`** · 生成器 `app/scripts/gen-tokens.mjs`）；③ 改了**任何 `.css`**（`git ls-files app/src` 里 `.css` 后缀现为 **17** 件，含 `shell/TopBar.css` 与各视图 css）；④ 改了**顶栏结构 / 布局**（`shell/TopBar.tsx` · `views/**` 的容器布局）；⑤ 改了会**改观感的全局样式或主题绑定**。**按需入口 = 有正式形态 + 明确触发条件，不是自动门禁**。
+- 🔴 **跑前必须真构建（否则读数无效）**：`cd app; npm run build` 在前 —— **分钟级**，且**串行 / 独占窗口**（承 `第九部分` 的 **P9**：与全量测试、变异体实验都不得并发）。
+- 🔴 **不进 husky、不进 CI（用户裁决 U4-d；b/c 未选）**：`.husky/pre-commit` 与 `.github/workflows/**` 都**不接**它。**理由**：① 它要**真实构建产物** ⇒ 接进 pre-commit 等于**每次提交都付一次构建**（数十秒到数分钟），且**必须串行**（同上）；② CI 这边**没有执行者**：CI checkout **不构建** ⇒ 该仪器在 CI 上**恒红**（实测：`git archive` 导出树里 `app/dist` 不存在、`app/node_modules` 不存在 ⇒ **exit 2**，报文 `❌ 找不到产物入口 … 先跑「cd app; npm run build」`）。🔴 **代价必须写明**：本仪器**没有自动执行者** —— 全靠改动者按上面的触发条件**自觉跑**；`npm run check:visual` **绿**只说明「**本次构建产物**在该视口下全过」，**不是**「门禁已覆盖」。
+
+**盲区第 2 组 · 入口面的三条（T24 追加；引用读数时必须与上面五条一起复述）**：
+
+6. 🔴 **陈旧产物不报错（P-37 同族：`--dist` 指向陈旧产物可假绿）**：仪器只在 stdout / `--json` 里**打印** `dist mtime` + `树 HEAD`（`= 跑仪器时的 HEAD`），**不比较 `app/src` 与 `app/dist` 的 mtime，也不比较 dist 是哪个 HEAD 构建的** ⇒ dist 陈旧时它**照跑，并可能 exit 0**。⇒ 🔴 **纪律**：跑之前**必须**先 `npm run build`；跑完**必须**核 stdout 的 `dist mtime` / `树 HEAD` 是否就是本次的态（拿两次读数做差前还要走上面的 §17 受控对比：两侧 dist mtime 与 HEAD 相同）。
+7. 🔴 **无 IPC 的真产物上，两条 markdown 链读不到（具名盲区，不是缺陷）**：`preview_session_note` / `refine_workbench` / `diff_markdown_ops` **要 IPC** ⇒ 真产物里 `NotePreviewView` 停在 `<Loading>`、`RefineWorkbench` 失败退出 ⇒ 两链的 DOM **根本不可达**。T13 实测（`task-13-report.md:280`）：**两链 18 个探针 `matched` 全部 0**，而同一跑的**阳性面正常** —— 顶栏 `存在=true`（Tab `8` 个 · 自然宽 `613.53`）、`problems=[]`、`exit 0` ⇒ 🔴 **不能把「exit 0」读成「这两条链验过了」**（同一批探针在 T13 的夹具页上 16/18 `matched=1` ⇒ 「0」是**可达性**，不是选择器写错）。
+8. 🔴 **跨提交不比字节**：仪器**不做**任何产物字节 / 哈希的跨提交对比（那是 `check-bundle-budget.mjs` 的域）⇒ 观感面的「变了吗」只能靠**同 dist mtime + 同 HEAD 的两次读数**说（否则是非受控对比）。
+
 - 🔴 **解算值必须来自 `getComputedStyle`**：每条 `--probe` 读数自带 `viewport` / `dpr` / `emulatedMedia` 三项元数据（缺 ⇒ **不得当判据**），并附一条**同代码路径的 canary**（`html` 的 `font-size`，恒为 px）；canary 取不到 px ⇒ 仪器报红（防「把解算值换成读内联 `element.style`」这类假读数）。
 
 **前置（三条硬要求）**：
