@@ -32,9 +32,11 @@
  *              `<span>` 上 —— `transform` 对行内元素无效，见 `useRevealChoreography.ts` 文件头），
  *              所以两者**互不覆盖**：那条 CSS `animation` 动 `opacity`，显影的 GSAP 只动 `transform`。
  *              ④ `data-reveal-epoch` 把「持有的世代号」暴露到 DOM（R8.5：结构锚点优先于时间判据）。
- *              ⚠️ 因此本件新增一条 import 边：`components/structuredBlocks.ts`（它顶层 `import katex`
- *              + `katex.min.css`）⇒ **KaTeX 会成为会话详情惰性 chunk 的依赖**（首屏静态闭包不含本件，
- *              `check-bundle-budget` 的首屏口径不变；代价逐字登记在 `task-28-report.md` 的诚实边界）。
+ *              ⚠️ 本件当时因此新增了一条通往 `components/structuredBlocks.ts` 的依赖边（该模块顶层持有
+ *              数学排版库及其样式表两条静态边）⇒ **KaTeX 一度成为会话详情惰性 chunk 的依赖**（首屏静态
+ *              闭包不含本件，`check-bundle-budget` 的首屏口径不变；代价逐字登记在 `task-28-report.md`
+ *              的诚实边界）。**批 7 已按裁决收口**：T2 把类名函数析出到 `utils/lowConfidence.ts`
+ *              （零依赖）⇒ 依赖改道；T3 删除了 `components/structuredBlocks.ts` ⇒ 本件不再持有该边。
  * @ai-context: **逐条自审（控制方回执③）后仍保留的字面量**：`fontSize: 13`（三处 `<h3>` 标题，
  *              合法档 —— 规格 §4.2 字阶下界是 12px）· `fontSize: 12`（术语表折叠块）·
  *              `borderRadius: 8`（= `radiusScale.panel` 档）· `background: "#fafafa"`（**未迁移**：
@@ -129,7 +131,7 @@ export default function SessionRawView({
             >
               {SOURCE_LABEL[seg.source] ?? seg.source}
             </Text>
-            {/* 低置信段（`confidence < 0.5`，阈值真源 = `structuredBlocks.lowConfidenceClass`）追加
+            {/* 低置信段（`confidence < 0.5`，阈值真源 = `utils/lowConfidence.ts` 的 `lowConfidenceClass`）追加
                 `ed-text--low-confidence`（R11.3 ③ 的环境层落点；样式规则在 `ui/primitives/Text.css`）。 */}
             <Text
               as="span"
