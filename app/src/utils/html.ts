@@ -28,13 +28,21 @@ export function escapeHtml(s: string): string {
  *              （无注入面——写入的是我们自己的 HTML）。
  * @ai-context: 两种形态：章节锚点 `## 标题 [[⏱ 00:09]([[ts:9000]])]`（外带
  *              `[...]` 包裹）先匹配，段落锚点 `[⏱ 00:00]([[ts:233]])` 兜底。
+ * @ai-context: 批 7 T15（C10.2）—— 本函数是 `[[ts:ms]]` 芯片的**唯一实现**（两条手写链
+ *              `NotePreviewView` 与 `refineDiff` 都经它）⇒ 修复只需做一次：① **正则补 ms 捕获组**
+ *              （原实现把 `[[ts:ms]]` 的 ms 整个丢掉 ⇒ 芯片没有跳转目标）；② 芯片带
+ *              `data-ts-ms`（毫秒整数，与 `NoteMarkdown` 的 `onOpenSessionAt(sessionId, ms)` 同口径）
+ *              + `data-ts-chip`（定名选择器；`pages/NotesPage.test.tsx` 原按 `title*="跳转到会话"`
+ *              选元素，唯一性会被稀释）。容器侧用**事件委托** `closest("[data-ts-ms]")` 取目标 ⇒
+ *              保持串渲染、不需要 React 上下文。视觉样式与 `title` 文案**一字未改**。
+ *              边界：定位精度受音频对齐的块粒度 **±200 ms** 限制（不得声称毫秒级定位）。
  */
 export function renderTimestampAnchors(escaped: string): string {
-  const chip = (_m: string, mm: string, ss: string): string =>
-    `<span style="color:#0d9488;border-bottom:1px dashed #14b8a6;background:#f0fdfa;border-radius:3px;padding:0 4px" title="⏱ ${mm}:${ss} 跳转到会话对应片段">⏱ ${mm}:${ss}</span>`;
+  const chip = (_m: string, mm: string, ss: string, ms: string): string =>
+    `<span data-ts-ms="${ms}" data-ts-chip style="color:#0d9488;border-bottom:1px dashed #14b8a6;background:#f0fdfa;border-radius:3px;padding:0 4px" title="⏱ ${mm}:${ss} 跳转到会话对应片段">⏱ ${mm}:${ss}</span>`;
   return escaped
     // 章节形态（含包裹括号）：`[[⏱ MM:SS]([[ts:ms]])]`
-    .replace(/\[\[⏱ (\d+):(\d{2})\]\(\[\[ts:\d+\]\]\)\]/g, chip)
+    .replace(/\[\[⏱ (\d+):(\d{2})\]\(\[\[ts:(\d+)\]\]\)\]/g, chip)
     // 段落形态：`[⏱ MM:SS]([[ts:ms]])`
-    .replace(/\[⏱ (\d+):(\d{2})\]\(\[\[ts:\d+\]\]\)/g, chip);
+    .replace(/\[⏱ (\d+):(\d{2})\]\(\[\[ts:(\d+)\]\]\)/g, chip);
 }

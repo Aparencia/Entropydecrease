@@ -75,9 +75,12 @@ describe("renderTimestampAnchors", () => {
     expect(out).not.toContain("]]([[");
   });
 
-  it("无锚点文本原样返回", () => {
+  it("无锚点文本原样返回（且不产生任何芯片属性）", () => {
     const out = renderTimestampAnchors(escapeHtml(`普通文本没有锚点 123`));
     expect(out).toBe("普通文本没有锚点 123");
+    // 批 7 T15（Y8 加宽）：无芯片 ⇒ 不得出现任何芯片定名属性（反"空真"）
+    expect(out).not.toContain("data-ts-ms");
+    expect(out).not.toContain("data-ts-chip");
   });
 
   it("先转义再替换——恶意 HTML 不产生可解析标签（注入面为零）", () => {
@@ -99,5 +102,28 @@ describe("renderTimestampAnchors", () => {
     // Act：正则要求分钟为数字——仿形态不匹配，保持转义原文
     const out = renderTimestampAnchors(input);
     expect(out).toBe(input);
+    // 批 7 T15（Y8 加宽）：仿形态**不得**产出芯片属性（反"误判"）
+    expect(out).not.toContain("data-ts-ms");
+    expect(out).not.toContain("data-ts-chip");
+  });
+
+  it("芯片带 data-ts-ms 且值 = 锚点里的 ms（T15：跳转目标不再被丢弃）· 两种形态", () => {
+    // Arrange：段落锚点 + 章节锚点（外带包裹括号）——两条正则都要捕获 ms
+    // Act
+    const para = renderTimestampAnchors(escapeHtml(`[⏱ 00:05]([[ts:5000]]) 内容`));
+    const chapter = renderTimestampAnchors(escapeHtml(`标题 [[⏱ 00:09]([[ts:9000]])]`));
+    // Assert：段落形态——ms 逐字进 data-ts-ms（`5000` 而非 `00:05`），原始锚点不残留
+    expect(para).toContain('data-ts-ms="5000"');
+    expect(para).toContain("data-ts-chip");
+    expect(para).toContain("⏱ 00:05");
+    expect(para).not.toContain("[[ts:5000]]");
+    // Assert：章节形态——第二条正则同样捕获 ms（原实现两条正则都丢 ms）
+    expect(chapter).toContain('data-ts-ms="9000"');
+    expect(chapter).toContain("data-ts-chip");
+    expect(chapter).toContain("⏱ 00:09");
+    expect(chapter).not.toContain("[[ts:9000]]");
+    // Assert：视觉与 title 文案**一字未改**（C10.2 的零观感变化要求）
+    expect(para).toContain('title="⏱ 00:05 跳转到会话对应片段"');
+    expect(para).toContain("border-bottom:1px dashed #14b8a6");
   });
 });
