@@ -8,10 +8,19 @@
  *   与 `nativeButtonBaseline.ts`（本件不做棘轮断言 —— 那是棘轮判据件的职责，重复一份会造两套口径）。
  * @ai-context: 具名断言的变量体 = 「删掉 toolbar 的 `tagColors` 透传」⇒ 有色芯片回落默认灰底，
  *   两条断言（等于查色值 / 不等于无色底）同时红。
+ * @ai-context: ④ 覆盖**本任务新增的那一跳**（`NoteListView` → `NoteListToolbar` 的透传）——
+ *   只测 toolbar 本体时，把 `NoteListView` 里的 `tagColors={tagColors}` 删掉是**测不出来的**
+ *   （M3 实测：只测本体 ⇒ 变异体静默通过）⇒ 判据必须落在真实装配链上。
  */
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Note } from "../types";
 import { paletteHex } from "../utils/colorPalette";
+
+const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
+
+import NoteListView from "./NoteListView";
 import NoteListToolbar from "./NoteListToolbar";
 
 afterEach(cleanup);
@@ -67,5 +76,30 @@ describe("NoteListToolbar 过滤芯片着色（批 7 T18 · §C11.3）", () => {
     const chip = screen.getByTestId("tag-chip-化妆");
     expect(chip.style.border).toContain("rgb(13, 148, 136)");
     expect(chip.style.color).toBe("rgb(13, 148, 136)");
+  });
+});
+
+describe("NoteListView → NoteListToolbar 的查色表透传（批 7 T18 新增的那一跳）", () => {
+  it("④ 经真实装配链传 tagColors ⇒ 过滤芯片取到色（删掉这一跳的变异体在这里红）", async () => {
+    // Arrange：NoteListView 会拉序行（mock 返回空）；笔记带一个标签
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async () => []);
+    const note: Note = {
+      id: 1, title: "带标签的笔记", content: "", source: "manual", tags: JSON.stringify(["化妆"]),
+      pin: 0, group_id: null, created_at: 0, updated_at: 0,
+    };
+    const listProps = {
+      notes: [note], groups: [], groupFilter: null, keyword: "", tagFilter: null,
+      sortMode: "updated-desc" as const, allTags: ["化妆"], selectedId: null, status: "",
+      noteColors: {}, tagColors: { 化妆: "purple" },
+      onKeywordChange: () => {}, onTagFilterChange: () => {}, onSortModeChange: () => {},
+      onSelect: () => {}, onCreate: () => {}, onRefresh: () => {}, onOpenSession: () => {},
+      onBatchDelete: async () => true,
+    };
+    // Act
+    render(<NoteListView {...listProps} />);
+    // Assert
+    const chip = await screen.findByTestId("tag-chip-化妆");
+    expect(chip.style.background, "NoteListView 没把查色表透到过滤面板").toBe(asRgba(`${paletteHex("purple", "light")}22`));
   });
 });
