@@ -20,6 +20,9 @@
  *     🔴 **口径：本判据只在新鲜构建的产物上成立** —— 旧 `dist` 带着上一个时代的残渣（实测：顶层 katex 被删后旧
  *     产物仍多 **64,497 B** gzip）⇒ **`--no-build` 的读数不可用于本判据**（要判既有产物就显式 `--dist` 指认）。
  *     首屏与懒侧是**两个独立读数**：懒侧判定不得影响首屏字段。
+ *  5. **容差（批 7 §C25.4）**：逐族与**总量**判据都用「上限 + `TOLERANCE`」，取 `max(1 × 同源构建漂移, 64 B)`。
+ *     实测漂移两路并列：本单元**两棵同源树各构建一次 = 逐族与总量 0 B**（chunk 名集合逐字相同）· R-4 在 HEAD 上读 **−18 B**
+ *     ⇒ `max(1 × 18, 64)` = **64 B**。🔴 常量、不得随提交变大（改它 = 改判据）；人类输出与 `--json` 都打印它。
  *
  * 仪器陷阱（本批实测，勿改回）：
  *  - 静态边在产物里长 `from"./x-abc.js"`：**引号必须紧跟** `from` / `import`，故 `import(` 天然不匹配；
@@ -64,6 +67,9 @@ const BUDGET_SOURCE = "docs/standards/performance.md:28";
 const LAZY_BUDGET = join(dirname(SELF), "lazyBudget.json");
 // 懒侧判据的**合格口径 = 新鲜构建**（§C21.3）：① 不带 `--no-build` ⇒ 本次真构建；② 显式 `--dist` ⇒ 操作者把该产物作为受判对象交进来；两者都不满足（裸 `--no-build`）⇒ 只判首屏，懒侧**不下判定**。
 const JUDGE_LAZY = !NO_LAZY && (!NO_BUILD || has("--dist"));
+// 容差（§C25.4）：`max(1 × 同源构建漂移, 64 B)`。漂移实测 = 本单元 0 B（两棵同源树）· R-4 −18 B ⇒ 取包住两者的 18 B ⇒ 64 B 下限生效。
+// 🔴 常量、**不得**随任何提交变大（改它 = 改判据，须回报控制方）；`k = 1`，两个读数见文件头第 5 条。
+const TOLERANCE = Math.max(1 * 18, 64);
 
 /** 全部失败路径的统一出口：**必须** exit 2（1 只留给「超预算」），并给出可执行的下一条命令。 */
 function fail(msg) {
@@ -97,14 +103,13 @@ function judgeLazy(r, base) {
     f.chunks.push(c.name);
     f.gzipBytes += c.gzipBytes;
   }
-  const families = [...fams.values()];
-  const totalBytes = r.lazy.reduce((a, c) => a + c.gzipBytes, 0);
+  const families = [...fams.values()]; const totalBytes = r.lazy.reduce((a, c) => a + c.gzipBytes, 0);
   const reasons = [];
   if (unlisted.length) reasons.push(`① 族前缀清单等式：未归族 ${unlisted.length} 个（${unlisted.join(", ")}）`);
-  for (const f of families) if (f.gzipBytes > f.gzipBytesMax) reasons.push(`② 逐族上限：${f.prefix} gzip ${fmtB(f.gzipBytes)} B > 上限 ${fmtB(f.gzipBytesMax)} B`);
-  if (totalBytes > base.lazyTotalGzipBytesMax) reasons.push(`③ 懒侧总 gzip：${fmtB(totalBytes)} B > 上限 ${fmtB(base.lazyTotalGzipBytesMax)} B`);
+  for (const f of families) if (f.gzipBytes > f.gzipBytesMax + TOLERANCE) reasons.push(`② 逐族上限：${f.prefix} gzip ${fmtB(f.gzipBytes)} B > 上限 ${fmtB(f.gzipBytesMax)} B + 容差 ${TOLERANCE} B`);
+  if (totalBytes > base.lazyTotalGzipBytesMax + TOLERANCE) reasons.push(`③ 懒侧总 gzip：${fmtB(totalBytes)} B > 上限 ${fmtB(base.lazyTotalGzipBytesMax)} B + 容差 ${TOLERANCE} B`);
   if (r.lazy.length > base.lazyChunkCountMax) reasons.push(`④ 懒侧 chunk 数：${r.lazy.length} > 上限 ${base.lazyChunkCountMax}`);
-  return { families, unlisted, overFamilies: families.filter((f) => f.gzipBytes > f.gzipBytesMax), totalBytes, totalMax: base.lazyTotalGzipBytesMax, count: r.lazy.length, countMax: base.lazyChunkCountMax, reasons, pass: reasons.length === 0 };
+  return { families, unlisted, overFamilies: families.filter((f) => f.gzipBytes > f.gzipBytesMax + TOLERANCE), totalBytes, totalMax: base.lazyTotalGzipBytesMax, tolerance: TOLERANCE, count: r.lazy.length, countMax: base.lazyChunkCountMax, reasons, pass: reasons.length === 0 };
 }
 
 /** 参考项：HTML 用 modulepreload 声明但静态闭包没覆盖的 .js —— 值得人看一眼，不影响判定。 */
@@ -125,10 +130,9 @@ function printHuman(r, pass, lazy) {
   }
   console.log(`  首屏 JS 合计：原始 ${fmtB(r.rawBytes)} B · gzip ${fmtB(r.eagerBytes)} B = ${kB(r.eagerBytes)} kB`);
   console.log(`  ⇒ 首屏预算 ${pass ? "✅ 达标" : "❌ 超标"}：${pass ? "余量" : "超出"} ${kB(Math.abs(BUDGET_KB * 1000 - r.eagerBytes))} kB${pass ? "" : `（${(r.eagerBytes / 1000 / BUDGET_KB).toFixed(2)}× 预算）`}`);
-  const lazyBytes = r.lazy.reduce((a, c) => a + c.gzipBytes, 0);
-  console.log(`懒加载 chunk（仅动态可达，独立于首屏预算）：${r.lazy.length} 个 · gzip ${fmtB(lazyBytes)} B = ${kB(lazyBytes)} kB`);
+  console.log(`懒加载 chunk（仅动态可达，独立于首屏预算）：${r.lazy.length} 个 · gzip ${fmtB(r.lazy.reduce((a, c) => a + c.gzipBytes, 0))} B = ${kB(r.lazy.reduce((a, c) => a + c.gzipBytes, 0))} kB`);
   if (lazy) {
-    console.log(`  ⇒ 懒侧预算 ${lazy.pass ? "✅ 达标" : "❌ 超标"}：gzip ${kB(lazy.totalBytes)} kB / 上限 ${kB(lazy.totalMax)} kB · chunk ${lazy.count} 个 / 上限 ${lazy.countMax} 个 · 未归族 ${lazy.unlisted.length} 个 · 超上限族 ${lazy.overFamilies.length} 个（基线 ${rel(LAZY_BUDGET)}，实测冻结值只许降）`);
+    console.log(`  ⇒ 懒侧预算 ${lazy.pass ? "✅ 达标" : "❌ 超标"}：gzip ${kB(lazy.totalBytes)} kB / 上限 ${kB(lazy.totalMax)} kB + 容差 ${lazy.tolerance} B · chunk ${lazy.count} 个 / 上限 ${lazy.countMax} 个 · 未归族 ${lazy.unlisted.length} 个 · 超上限族 ${lazy.overFamilies.length} 个（基线 ${rel(LAZY_BUDGET)}，实测冻结值只许降；容差 = max(1 × 同源构建漂移, 64 B)）`);
   } else console.log(`  ⇒ 懒侧预算 ⏭ 未判（${NO_LAZY ? "--no-lazy：自检夹具" : "--no-build 的读数不可用于本判据（旧产物会多算 ~64 kB）—— 去掉 --no-build 让本脚本代跑构建，或显式 --dist 指认受判产物"}）`);
   console.log(`不计入预算但须报告（CSS / 字体）：index.html ${fmtB(r.htmlBytes)} B = ${kB(r.htmlBytes)} kB · gzip ${kB(r.htmlGzip)} kB`);
   const byExt = new Map();
@@ -158,6 +162,7 @@ const jsonOf = (r, pass, lazy) => ({
     ? {
         judged: true,
         pass: lazy.pass,
+        tolerance: lazy.tolerance,
         baseline: rel(LAZY_BUDGET),
         count: lazy.count,
         countMax: lazy.countMax,
@@ -166,9 +171,9 @@ const jsonOf = (r, pass, lazy) => ({
         totalMaxBytes: lazy.totalMax,
         unlisted: lazy.unlisted,
         fails: lazy.reasons,
-        families: lazy.families.map((f) => ({ prefix: f.prefix, chunkCount: f.chunks.length, gzipBytes: f.gzipBytes, gzipBytesMax: f.gzipBytesMax, pass: f.gzipBytes <= f.gzipBytesMax })),
+        families: lazy.families.map((f) => ({ prefix: f.prefix, chunkCount: f.chunks.length, gzipBytes: f.gzipBytes, gzipBytesMax: f.gzipBytesMax, pass: f.gzipBytes <= f.gzipBytesMax + lazy.tolerance })),
       }
-    : { judged: false, pass: null, skipped: NO_LAZY ? "--no-lazy（自检夹具）" : "--no-build 的读数不可用于懒侧判据（口径要求新鲜构建；亦可在显式 --dist 下判定）" },
+    : { judged: false, pass: null, tolerance: TOLERANCE, skipped: NO_LAZY ? "--no-lazy（自检夹具）" : "--no-build 的读数不可用于懒侧判据（口径要求新鲜构建；亦可在显式 --dist 下判定）" },
   excludedFromBudget: { indexHtml: { bytes: r.htmlBytes, gzipBytes: r.htmlGzip }, assets: r.excluded },
   pass,
 });
@@ -187,12 +192,7 @@ function finish(r) {
     const uncovered = preloadUncovered(r.dist, r.eager);
     if (uncovered.length) console.log(`ℹ️ modulepreload 声明但静态闭包未覆盖 ${uncovered.length} 个：${uncovered.join(", ")}（参考项，不影响判定）`);
   }
-  if (!pass) {
-    console.error(
-      `❌ 首屏 JS gzip ${fmtB(r.eagerBytes)} B = ${kB(r.eagerBytes)} kB ≥ 预算 ${BUDGET_KB} kB` +
-        `（${(r.eagerBytes / 1000 / BUDGET_KB).toFixed(2)}×）—— 退出码 1。降首屏只能靠 import() 切断静态边；manualChunks 只切文件、一字节不降。`,
-    );
-  }
+  if (!pass) console.error(`❌ 首屏 JS gzip ${fmtB(r.eagerBytes)} B = ${kB(r.eagerBytes)} kB ≥ 预算 ${BUDGET_KB} kB` + `（${(r.eagerBytes / 1000 / BUDGET_KB).toFixed(2)}×）—— 退出码 1。降首屏只能靠 import() 切断静态边；manualChunks 只切文件、一字节不降。`);
   if (lazy && !lazy.pass) console.error(`❌ 懒侧 gzip 预算超标（退出码 1）—— 具名断言：${lazy.reasons.join("；")}。基线 ${rel(LAZY_BUDGET)} 只许降（§C9.6 第 2 条）。`);
   process.exit(pass && (!lazy || lazy.pass) ? 0 : 1);
 }
