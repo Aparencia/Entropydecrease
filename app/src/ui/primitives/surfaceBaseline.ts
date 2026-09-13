@@ -64,6 +64,13 @@
  *   · **B1/B2 的 `NON_MIGRATED_14`**：`dialogMigration.e.test.ts` ② 的硬判据禁止这 14 个文件出现
  *     `ui/primitives` ⇒ 撞上即回退 + 登记（新类别 `b1-non-migrated`），**守卫不改窄**（控制方 B21）。
  *
+ * ★ **批 7 T13 的键随代码走**（§C9.19 第 2 条；拆 `components/NoteMarkdown.tsx` → 新件
+ *   `components/noteMarkdownComponents.tsx`，自定义 markdown 组件映射整段搬家）：
+ *   边框键 `NoteMarkdown.tsx` **1 → 删** / 新键 `noteMarkdownComponents.tsx` **1**；
+ *   圆角键 `NoteMarkdown.tsx` **2 → 删** / 新键 `noteMarkdownComponents.tsx` **2**。
+ *   ⇒ **总量（223 / 260 / 24）与条目数（107 / 108 / 24）逐字不变**，故三条 `FROZEN_*_TOTAL`
+ *   与两条锚**一字未改**（这是**搬家**不是放宽：源键减少、新键增加、两侧之和守恒）。
+ *
  * ★ 副作用：无（纯数据）。边界：`BORDER_RESIDUAL` / `RADIUS_RESIDUAL` **只登记"本单元逐处裁定过、决定不迁"
  *   的落点**（键 = `文件|类别`，`count` = 该文件该类别的处数），**不是**"所有剩余命中"的清单：剩余的大头
  *   （control-shape / separator / no-background / backlog）是**类别级**裁定，读数写在上面那一段。
@@ -100,7 +107,7 @@ export const FROZEN_BORDER_BY_FILE: Readonly<Record<string, number>> = {
   "components/ModelCardFromNoteDialog.tsx": 2, "components/ModelDiskPanel.tsx": 1,
   "components/NoteAiDialog.tsx": 1, "components/NoteEditView.tsx": 4, "components/NoteHeaderActions.tsx": 1,
   "components/NoteImage.tsx": 1, "components/NoteLinkToSystem.tsx": 2, "components/NoteListBatchMenu.tsx": 2,
-  "components/NoteListToolbar.tsx": 3, "components/NoteListView.tsx": 1, "components/NoteMarkdown.tsx": 1,
+  "components/NoteListToolbar.tsx": 3, "components/NoteListView.tsx": 1,
   "components/NoteMoveToGroupMenu.tsx": 1, "components/NotePreviewView.tsx": 4,
   "components/NoteReadingView.tsx": 2, "components/NoteRowContextMenu.tsx": 1,
   "components/OcrDeviceSetting.tsx": 2, "components/PhotoCapturePanel.tsx": 4,
@@ -121,6 +128,7 @@ export const FROZEN_BORDER_BY_FILE: Readonly<Record<string, number>> = {
   "components/WebInboxPanel.tsx": 1, "components/WeekContractCard.tsx": 2,
   "components/WindowSelectCard.tsx": 1, "components/action-center/ActionCenterPanel.tsx": 11,
   "components/chat/ChatLaunchMenu.tsx": 1, "components/note-selection/SelectionActionMenu.tsx": 1,
+  "components/noteMarkdownComponents.tsx": 1,
   "components/review/ReviewSessionPanel.tsx": 1, "components/session-detail/SessionScreenCards.tsx": 2,
   "pages/ChatPage.tsx": 1, "pages/GoalsPage.tsx": 3, "pages/KnowledgePage.tsx": 4, "pages/ReviewPage.tsx": 1,
   "pages/SettingsPage.tsx": 1,
@@ -159,7 +167,7 @@ export const FROZEN_RADIUS_OUTLIER_BY_FILE: Readonly<Record<string, number>> = {
   "components/ModelCardCreateDialog.tsx": 2, "components/ModelDiskPanel.tsx": 1,
   "components/NoteAiDialog.tsx": 4, "components/NoteEditView.tsx": 1, "components/NoteHeaderActions.tsx": 2,
   "components/NoteImage.tsx": 2, "components/NoteLinkToSystem.tsx": 2, "components/NoteListToolbar.tsx": 2,
-  "components/NoteMarkdown.tsx": 2, "components/NoteMoveToGroupMenu.tsx": 1,
+  "components/NoteMoveToGroupMenu.tsx": 1,
   "components/NotePreviewView.tsx": 5, "components/NoteRowContextMenu.tsx": 1,
   "components/OcrDeviceSetting.tsx": 3, "components/PhotoCapturePanel.tsx": 7,
   "components/PracticeQuestionsOverlays.tsx": 1, "components/PromoteCardButton.tsx": 3,
@@ -178,6 +186,7 @@ export const FROZEN_RADIUS_OUTLIER_BY_FILE: Readonly<Record<string, number>> = {
   "components/VocabManager.tsx": 4, "components/WebArticleView.tsx": 4, "components/WebImportPanel.tsx": 1,
   "components/WebInboxPanel.tsx": 1, "components/action-center/ActionCenterPanel.tsx": 7,
   "components/chat/ChatLaunchMenu.tsx": 4, "components/note-selection/SelectionActionMenu.tsx": 1,
+  "components/noteMarkdownComponents.tsx": 2,
   "components/review/ReviewSessionPanel.tsx": 1, "components/session-detail/SessionDetailHeader.tsx": 2,
   "components/session-detail/SessionRefineSection.tsx": 3,
   "components/session-detail/SessionScreenCards.tsx": 3, "pages/ChatPage.tsx": 2, "pages/GoalsPage.tsx": 3,

@@ -1,23 +1,18 @@
 /**
  * NoteMarkdown — 笔记阅读视图 Markdown 渲染（H5 自 NotesPage 拆分）。
  *
+ * @ai-context: **react-markdown 站点 #1**（全站运行时站点恰 2，另一个是 `ChatMessageMarkdown`；
+ *              判据 `views/note/noteViews.test.tsx:281-286`）。批 7 T13 拆件后本件只留
+ *              「四条 remark 插件 + rehype-katex + URL 消毒 + 组件映射装配」这四件事，
+ *              自定义渲染件与它们的闭包状态**整段**搬进 `noteMarkdownComponents.tsx`（工厂形态）——
+ *              拆件的唯一目的是给 T14 的「#2 并入 #1」腾出净增头寸（本件拆前只剩 5 行余量）。
  * @ai-context: 集中全部自定义渲染：任务清单勾选回写（H1）、标题锚点（M5）、
  *              搜索高亮（M6）、时间戳回链（L6 radix）、图片/代码/表格样式。
- * @ai-context: H1 修复——勾选 checkbox 只改目标行：渲染时按出现顺序计数，
- *              第 n 个 checkbox 对应源文本第 n 个任务行（taskLineIndices）。
- *              原实现 lines.map 匹配全部同态行 → 勾选任一即全翻转（数据损坏）；
- *              且持久化 createVersion: true 保留可回滚快照（由父组件执行）。
- * @ai-context: M6 修复——搜索高亮纯数据驱动：渲染层按关键词 split 文本输出
- *              <mark> 片段（同 SessionListPanel 模式），替代 TreeWalker 直改
- *              React 托管 DOM（surroundContents 与虚拟 DOM 协调冲突）。
- * @ai-context: M5 修复——标题行号索引渲染前 useMemo 一次预计算（Map + 出现
- *              序号消歧同名标题），替代每个标题 O(n) findIndex + as string 断言。
+ *              —— 逐条实现与修复背景见 `noteMarkdownComponents.tsx` 的同名 `@ai-context`。
  * @ai-context: 批 6 T26——`[[ts:ms]]` 的 ms 不再只进 title：新增**可选** `onOpenSessionAt` 把它逐字
  *              传出（缺省时与今天逐字相同；title 一字未改）。前置缺陷见 `noteUrlTransform`：
  *              `react-markdown@10.1.0` 的默认 URL 消毒把它清成空串 ⇒ 回链芯片此前从未渲染。
  */
-import { isValidElement, cloneElement, useMemo, useRef } from "react";
-import type { ReactElement, ReactNode } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -25,7 +20,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import type { Note } from "../types";
 import { remarkMarkHighlight } from "../utils/remarkMarkHighlight";
-import NoteImage from "./NoteImage";
+import { noteMarkdownComponents } from "./noteMarkdownComponents";
 
 /**
  * `remarkPlugins` 槽的元素类型（= `react-markdown` 的 `Options["remarkPlugins"]` 的元素）。
@@ -38,6 +33,16 @@ import NoteImage from "./NoteImage";
  *   `views/note/noteViews.test.tsx` 的赋值断言双向钉住。
  */
 export type RemarkPlugin = NonNullable<Parameters<typeof ReactMarkdown>[0]["remarkPlugins"]>[number];
+
+/**
+ * `components` 槽的类型（= `react-markdown` 的 `Components`）—— 与上一条**同手法**（取自已有的默认导入，
+ * 不新增一行模块说明符）。批 7 T13 拆件后由 `noteMarkdownComponents.tsx` 经 **type-only import** 取用。
+ *
+ * @ai-context 为什么类型要从主件「反向」取：那个新件里**不许**出现 `react-markdown` 说明符（同上，
+ *   否则运行时站点读数变 3）。`import type` 是编译期擦除的 ⇒ **无运行时循环依赖**，
+ *   先例 `components/NoteListToolbar.tsx:16` 的 `import type { SortMode } from "./NoteListView"`。
+ */
+export type MarkdownComponents = NonNullable<Parameters<typeof ReactMarkdown>[0]["components"]>;
 
 interface Props {
   note: Note;
@@ -70,132 +75,15 @@ interface Props {
  *   而 `react-markdown@10.1.0` 的 `defaultUrlTransform` 把无协议 URL 一律清空 ⇒ 回链芯片此前
  *   **根本没渲染**（落成 `<a href="">⏱ 00:52</a>`，下面的 `tsMatch` 永不命中；比 R5.5 顺带④ 记的还坏）。
  *   安全面零放松：只放行这一种形态（解码回规范形），其余全交回默认消毒器；该 href 仅用于识别，最终渲染成 `<span>`。
+ *   ⇄ 规范形的**匹配**在 `noteMarkdownComponents.tsx` 的 `TS_HREF_RE`（`a` 渲染件用）。
  */
-const TS_HREF_RE = /^\[\[ts:(\d+)\]\]$/;
 const TS_HREF_ENCODED_RE = /^%5B%5Bts:(\d+)%5D%5D$/i;
 const noteUrlTransform = (url: string): string => {
   const m = TS_HREF_ENCODED_RE.exec(url);
   return m ? `[[ts:${m[1]}]]` : defaultUrlTransform(url);
 };
 
-/** 递归展平 React 子节点为纯文本（ReactNode 收窄——替代 as string 断言） */
-function flattenText(node: ReactNode): string {
-  if (node == null || typeof node === "boolean") return "";
-  if (typeof node === "string" || typeof node === "number") return String(node);
-  if (Array.isArray(node)) return node.map(flattenText).join("");
-  if (isValidElement(node)) {
-    const children = (node.props as { children?: ReactNode }).children;
-    return flattenText(children);
-  }
-  return "";
-}
-
-/**
- * 数据驱动搜索高亮：递归遍历 children，字符串叶子按关键词（大小写不敏感）
- * split 并插入 <mark> 片段；元素节点 clone 后继续下钻。不触碰真实 DOM。
- */
-function highlightNode(node: ReactNode, query: string): ReactNode {
-  if (!query) return node;
-  const lower = query.toLowerCase();
-
-  const walk = (n: ReactNode, keyPrefix: string): ReactNode => {
-    if (typeof n === "string") {
-      const parts: ReactNode[] = [];
-      let rest = n;
-      let seq = 0;
-      let idx = rest.toLowerCase().indexOf(lower);
-      while (idx >= 0) {
-        if (idx > 0) parts.push(rest.slice(0, idx));
-        parts.push(
-          <mark
-            key={`${keyPrefix}-h${seq++}`}
-            data-note-search-hit=""
-            style={{ background: "#fde68a", borderRadius: 2, padding: "0 1px" }}
-          >
-            {rest.slice(idx, idx + query.length)}
-          </mark>,
-        );
-        rest = rest.slice(idx + query.length);
-        idx = rest.toLowerCase().indexOf(lower);
-      }
-      if (rest) parts.push(rest);
-      // 边界修复：文本整体等于关键词时 parts 仅含 1 个 <mark>（length===1），
-      // 原 `length > 1 ? <>...</> : n` 会退回原始未高亮字符串（高亮丢失+计数漏计）
-      if (parts.length === 0) return n;
-      return parts.length === 1 ? parts[0] : <>{parts}</>;
-    }
-    if (Array.isArray(n)) return n.map((c, i) => walk(c, `${keyPrefix}-${i}`));
-    if (isValidElement(n)) {
-      // 收窄为带 children 的元素类型（ReactMarkdown 产出的节点均含 children）
-      const el = n as ReactElement<{ children?: ReactNode }>;
-      return cloneElement(el, { children: walk(el.props.children, keyPrefix) });
-    }
-    return n;
-  };
-
-  return walk(node, "hl");
-}
-
 export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSession, onOpenSessionAt, onImageOpen, remarkPluginsExtra }: Props) {
-  // H1：任务行索引（源文本中每个任务行的行号，按出现顺序）
-  // 正则与 remark-gfm 清单语法对齐：-/*/+ 无序 + 有序列表（\d{1,9}[.)]），
-  // 勾选框大小写均认（[x]/[X]）——否则渲染序号与索引数组错位会写错行
-  const taskLineRegex = /^\s*(?:[-*+]|\d{1,9}[.)])\s+\[[ xX]\]/;
-  const taskLineIndices = useMemo(() => {
-    const idxs: number[] = [];
-    note.content.split("\n").forEach((line, i) => {
-      if (taskLineRegex.test(line)) idxs.push(i);
-    });
-    return idxs;
-  }, [note.content]);
-
-  // M5：标题文本→行号索引一次预计算（key=`级别:文本`，同名标题按出现序消歧）
-  const headingIndexMap = useMemo(() => {
-    const map = new Map<string, number[]>();
-    note.content.split("\n").forEach((line, i) => {
-      const m = line.match(/^(#{1,6})\s+(.+)/);
-      if (m) {
-        const key = `${m[1].length}:${m[2].trim()}`;
-        const arr = map.get(key);
-        if (arr) arr.push(i);
-        else map.set(key, [i]);
-      }
-    });
-    return map;
-  }, [note.content]);
-
-  // 渲染期计数器（每次渲染先清零——react-markdown 按源顺序同步渲染子节点）
-  const taskCounterRef = useRef(0);
-  const headingOccRef = useRef(new Map<string, number>());
-  taskCounterRef.current = 0;
-  headingOccRef.current.clear();
-
-  /** 标题锚点 id（M5：查预计算索引 + 出现序号消歧） */
-  const headingId = (level: number, children: ReactNode): string | undefined => {
-    const key = `${level}:${flattenText(children).trim()}`;
-    const occ = headingOccRef.current.get(key) ?? 0;
-    headingOccRef.current.set(key, occ + 1);
-    const idx = headingIndexMap.get(key)?.[occ];
-    return idx != null ? `heading-${idx}` : undefined;
-  };
-
-  /** checkbox 勾选回写（H1：仅替换目标行索引） */
-  const handleTaskChange = (order: number, checked: boolean) => {
-    const targetIdx = taskLineIndices[order];
-    if (targetIdx == null) return;
-    const lines = note.content.split("\n");
-    const line = lines[targetIdx];
-    // 防御：该行若已不是任务行（渲染与内容不同步），放弃而非误改
-    if (!taskLineRegex.test(line)) return;
-    // 字符级替换：只动勾选框本身，兼容 [x]/[X] 与任意清单标记（-/*+/有序）
-    lines[targetIdx] = checked
-      ? line.replace(/\[[ xX]\]/, "[x]")
-      : line.replace(/\[[xX]\]/, "[ ]");
-    onTaskToggle(lines.join("\n"));
-  };
-
-  const hl = (children: ReactNode): ReactNode => highlightNode(children, searchQuery);
-
   return (
     <ReactMarkdown
       // v0.15：remark-breaks——单换行（软换行）渲染为 <br>，与编辑态所见一致
@@ -206,88 +94,9 @@ export default function NoteMarkdown({ note, searchQuery, onTaskToggle, onOpenSe
       // 批 6 T26：放行内部 `[[ts:ms]]` 锚点（默认消毒器会清空它 ⇒ 回链芯片曾整条不可达；
       // 见 `noteUrlTransform`）。**不是**放松消毒：其余 URL 仍走 `defaultUrlTransform`。
       urlTransform={noteUrlTransform}
-      components={{
-        // v0.14 B：==文本== 荧光笔（remark 插件产出 mdast mark 节点 + hName/hProperties）
-        // v0.16.1：多色——className 由插件注入（note-mark[-{colorId}]，样式见 note-mark.css）；
-        //          原实现硬编码单色黄（且无 hName 经 defaultUnknownHandler 落 div——
-        //          组件按 hast tagName 匹配实际从未命中，现由插件 hName 修复）
-        mark: ({ node, className, children, ...props }) => (
-          <mark className={className} {...props}>{hl(children)}</mark>
-        ),
-        // 任务清单勾选（H1：渲染时记录序号 → 仅替换对应源行）
-        input: ({ node, ...props }) => {
-          const order = taskCounterRef.current++;
-          return <input {...props} onChange={(e) => handleTaskChange(order, e.target.checked)} />;
-        },
-        // 标题锚点供大纲跳转（M5：预计算索引，无 as string 断言）
-        h1: ({ node, children, ...props }) => (
-          <h1 id={headingId(1, children)} {...props} style={{ fontSize: 20, margin: "16px 0 8px", borderBottom: "1px solid #e5e7eb", paddingBottom: 4 }}>{hl(children)}</h1>
-        ),
-        h2: ({ node, children, ...props }) => (
-          <h2 id={headingId(2, children)} {...props} style={{ fontSize: 17, margin: "14px 0 6px" }}>{hl(children)}</h2>
-        ),
-        h3: ({ node, children, ...props }) => (
-          <h3 id={headingId(3, children)} {...props} style={{ fontSize: 15, margin: "12px 0 4px", color: "#374151" }}>{hl(children)}</h3>
-        ),
-        h4: ({ node, children, ...props }) => <h4 id={headingId(4, children)} {...props}>{hl(children)}</h4>,
-        h5: ({ node, children, ...props }) => <h5 id={headingId(5, children)} {...props}>{hl(children)}</h5>,
-        h6: ({ node, children, ...props }) => <h6 id={headingId(6, children)} {...props}>{hl(children)}</h6>,
-        p: ({ node, children, ...props }) => <p {...props}>{hl(children)}</p>,
-        li: ({ node, children, ...props }) => <li {...props}>{hl(children)}</li>,
-        // 时间戳回链渲染（P1/A5 预览预备；L6：parseInt 补 radix 10）
-        a: ({ node, href, children, ...props }) => {
-          const tsMatch = href?.match(TS_HREF_RE);
-          if (tsMatch) {
-            const ms = parseInt(tsMatch[1], 10);
-            const sec = Math.floor(ms / 1000);
-            const min = Math.floor(sec / 60);
-            const secStr = String(sec % 60).padStart(2, "0");
-            return (
-              <span
-                style={{ cursor: "pointer", color: "#0d9488", borderBottom: "1px dashed #14b8a6", background: "#f0fdfa", borderRadius: 3, padding: "0 4px" }}
-                onClick={() => {
-                  if (!note.session_id) return;
-                  // T26：带 ms 的分支优先（ms 逐字传出，不截断）；缺省退回既有单参回调
-                  if (onOpenSessionAt) onOpenSessionAt(note.session_id, ms);
-                  else onOpenSession?.(note.session_id);
-                }}
-                title={`⏱ 跳转到会话 ${Math.floor(ms / 60000)}:${secStr} 处 —— 点击查看视频对应片段`}
-              >
-                ⏱ {min}:{secStr}
-              </span>
-            );
-          }
-          return <a href={href} {...props} style={{ color: "#2563eb" }}>{hl(children)}</a>;
-        },
-        // 代码块（inline 高亮走字符串叶子 split）
-        code: ({ node, className, children, ...props }) => {
-          const isInline = !className;
-          if (isInline) {
-            return <code style={{ background: "#f3f4f6", padding: "1px 4px", borderRadius: 3, fontSize: 13 }} {...props}>{hl(children)}</code>;
-          }
-          return (
-            <pre style={{ background: "#1f2937", color: "#e5e7eb", borderRadius: 6, padding: 12, overflowX: "auto", fontSize: 13 }}>
-              <code className={className} {...props}>{children}</code>
-            </pre>
-          );
-        },
-        // 表格
-        table: ({ node, ...props }) => (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }} {...props} />
-          </div>
-        ),
-        th: ({ node, children, ...props }) => <th style={{ border: "1px solid #d1d5db", padding: "6px 10px", background: "#f9fafb", fontWeight: 600 }} {...props}>{hl(children)}</th>,
-        td: ({ node, children, ...props }) => <td style={{ border: "1px solid #d1d5db", padding: "6px 10px" }} {...props}>{hl(children)}</td>,
-        // 图片（v0.10.1：本地相对引用经 resolve+convertFileSrc，点击放大；外部 URL 直出）
-        img: ({ src, alt }) => (
-          <NoteImage src={src ?? ""} alt={alt ?? ""} noteId={note.id} onOpen={(url, title) => onImageOpen(url, title)} />
-        ),
-        // 引用
-        blockquote: ({ node, children, ...props }) => (
-          <blockquote style={{ borderLeft: "3px solid #0d9488", margin: "8px 0", padding: "4px 12px", color: "#6b7280", background: "#f9fafb" }} {...props}>{hl(children)}</blockquote>
-        ),
-      }}
+      // 批 7 T13：自定义渲染件整段搬到 `noteMarkdownComponents.tsx`（工厂吃同一组上下文；
+      // 工厂在渲染体内无条件调用恰一次 ⇒ 其内部 hooks 与搬迁前同序）
+      components={noteMarkdownComponents({ note, searchQuery, onTaskToggle, onOpenSession, onOpenSessionAt, onImageOpen })}
     >
       {note.content}
     </ReactMarkdown>
